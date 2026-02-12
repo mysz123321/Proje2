@@ -1,0 +1,6 @@
+@STAJ2_HostAddress = http://localhost:5267
+
+GET {{STAJ2_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,66 @@
+﻿<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>STAJ2 - Kayıt</title>
+    <link rel="stylesheet" href="/assets/css/app.css" />
+</head>
+<body>
+    <div class="page">
+        <div class="card">
+            <div class="topbar">
+                <h2>Kayıt Ol</h2>
+                <button class="secondary" onclick="ui.backOrHome()">← Geri</button>
+            </div>
+
+            <label>Kullanıcı Adı</label>
+            <input id="username" type="text" placeholder="kullaniciadi" />
+
+            <label>Gmail / Email</label>
+            <input id="email" type="email" placeholder="mail@example.com" />
+
+            <div class="space"></div>
+            <button id="btnRegister">Kayıt Ol</button>
+
+            <div id="msg" class="msg" style="display:none;"></div>
+
+            <div class="space"></div>
+            <a class="linkbtn" href="/login.html">Zaten hesabın var mı? Giriş Yap</a>
+        </div>
+    </div>
+
+    <script src="/assets/js/config.js"></script>
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/ui.js"></script>
+    <script>
+    (function () {
+      const btn = document.getElementById("btnRegister");
+      btn.addEventListener("click", async () => {
+        ui.hide("msg");
+        const username = document.getElementById("username").value.trim();
+        const email = document.getElementById("email").value.trim();
+
+        if (!username || !email) {
+          ui.show("msg"); ui.setText("msg", "❌ Kullanıcı adı ve email zorunlu.");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Gönderiliyor...";
+
+        try {
+          await api.post("/api/Registration", { username, email });
+          ui.show("msg");
+          ui.setText("msg", "✅ Kayıt isteğin alındı. Lütfen e-mail bekleyiniz.");
+        } catch (e) {
+          ui.show("msg");
+          ui.setText("msg", "❌ " + e.message);
+          btn.disabled = false;
+          btn.textContent = "Kayıt Ol";
+        }
+      });
+    })();
+    </script>
+</body>
+</html>

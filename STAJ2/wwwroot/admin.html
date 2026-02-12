@@ -1,0 +1,236 @@
+﻿<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>STAJ2 - Admin Panel</title>
+    <link rel="stylesheet" href="/assets/css/app.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="header-row">
+                <div>
+                    <h1>Staj Monitoring Sistemi</h1>
+                    <div class="subtitle">Admin Paneli</div>
+                </div>
+                <div class="actions">
+                    <button class="btn ghost small" onclick="history.back()">← Geri</button>
+                    <button class="btn ghost small" id="btnLogout">Çıkış</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main">
+            <!-- Sol: Talepler -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>Bekleyen Kayıt Talepleri</h2>
+                    <span class="pill" id="pendingCount">0</span>
+                </div>
+
+                <div id="reqMsg" class="message"></div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Kullanıcı</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reqBody"></tbody>
+                </table>
+
+                <div class="small">Onaylarken rol seçebilirsin. Reddederken sebep girmen iyi olur.</div>
+            </section>
+
+            <!-- Sağ: Kullanıcılar -->
+            <section class="card muted">
+                <div class="card-header">
+                    <h2>Sistemdeki Kullanıcılar</h2>
+                    <span class="pill" id="userCount">0</span>
+                </div>
+
+                <div id="userMsg" class="message"></div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Kullanıcı</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userBody"></tbody>
+                </table>
+
+                <div class="small">Admin kullanıcıları silme butonu çıkmaz.</div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/assets/js/config.js"></script>
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/auth.js"></script>
+    <script src="/assets/js/guards.js"></script>
+
+    <script>
+        (function () {
+            // koruma
+            if (!guards.requireRole(["Yönetici"])) return;
+
+            const endpoints = {
+                requests: "/api/Admin/requests",
+                approve: (id) => `/api/Admin/approve/${id}`,
+                reject: (id) => `/api/Admin/reject/${id}`,
+                users: "/api/Admin/users",
+                deleteUser: (id) => `/api/Admin/users/${id}`
+            };
+
+            const roles = [
+                { id: 1, name: "Yönetici" },
+                { id: 2, name: "Denetleyici" },
+                { id: 3, name: "Görüntüleyici" }
+            ];
+
+            const reqBody = document.getElementById("reqBody");
+            const userBody = document.getElementById("userBody");
+            const pendingCount = document.getElementById("pendingCount");
+            const userCount = document.getElementById("userCount");
+
+            const reqMsg = document.getElementById("reqMsg");
+            const userMsg = document.getElementById("userMsg");
+
+            function setMsg(el, text, type) {
+                el.textContent = text || "";
+                el.className = "message " + (type || "");
+            }
+
+            document.getElementById("btnLogout").addEventListener("click", () => {
+                auth.clearAuth();
+                window.location.href = "/login.html";
+            });
+
+            async function loadRequests() {
+                reqBody.innerHTML = "";
+                setMsg(reqMsg, "", "");
+
+                try {
+                    const list = await api.get(endpoints.requests);
+                    pendingCount.textContent = list.length;
+
+                    if (list.length === 0) {
+                        reqBody.innerHTML = `<tr><td colspan="5" class="muted-text">Bekleyen talep yok.</td></tr>`;
+                        return;
+                    }
+
+                    for (const r of list) {
+                        const roleOptions = roles.map(x => `<option value="${x.id}" ${x.id === 3 ? "selected" : ""}>${x.name}</option>`).join("");
+
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                  <td>${r.id}</td>
+                  <td>${r.username}</td>
+                  <td>${r.email}</td>
+                  <td>
+                    <select data-role>
+                      ${roleOptions}
+                    </select>
+                  </td>
+                  <td>
+                    <div class="actions">
+                      <button class="btn small primary" data-approve>Onayla</button>
+                      <button class="btn small danger" data-reject>Reddet</button>
+                    </div>
+                  </td>
+                `;
+
+                        tr.querySelector("[data-approve]").addEventListener("click", async () => {
+                            const roleId = parseInt(tr.querySelector("[data-role]").value, 10);
+                            try {
+                                await api.post(endpoints.approve(r.id), { roleId });
+                                setMsg(reqMsg, `✅ Talep onaylandı (ID: ${r.id}). Mail gönderildi.`, "success");
+                                await loadRequests();
+                                await loadUsers();
+                            } catch (e) {
+                                setMsg(reqMsg, "❌ " + e.message, "error");
+                            }
+                        });
+
+                        tr.querySelector("[data-reject]").addEventListener("click", async () => {
+                            const reason = prompt("Reddetme sebebi (opsiyonel):", "");
+                            try {
+                                await api.post(endpoints.reject(r.id), { reason: reason || "" });
+                                setMsg(reqMsg, `✅ Talep reddedildi (ID: ${r.id}).`, "success");
+                                await loadRequests();
+                            } catch (e) {
+                                setMsg(reqMsg, "❌ " + e.message, "error");
+                            }
+                        });
+
+                        reqBody.appendChild(tr);
+                    }
+                } catch (e) {
+                    setMsg(reqMsg, "❌ " + e.message, "error");
+                }
+            }
+
+            async function loadUsers() {
+                userBody.innerHTML = "";
+                setMsg(userMsg, "", "");
+
+                try {
+                    const list = await api.get(endpoints.users);
+                    userCount.textContent = list.length;
+
+                    if (list.length === 0) {
+                        userBody.innerHTML = `<tr><td colspan="5" class="muted-text">Kullanıcı yok.</td></tr>`;
+                        return;
+                    }
+
+                    for (const u of list) {
+                        const isAdmin = u.role === "Yönetici";
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                  <td>${u.id}</td>
+                  <td>${u.username}</td>
+                  <td>${u.email}</td>
+                  <td>${u.role}</td>
+                  <td>
+                    ${isAdmin ? `<span class="muted-text">—</span>` : `<button class="btn small danger" data-del>Sil</button>`}
+                  </td>
+                `;
+
+                        const delBtn = tr.querySelector("[data-del]");
+                        if (delBtn) {
+                            delBtn.addEventListener("click", async () => {
+                                if (!confirm(`${u.username} kullanıcısını silmek istiyor musun?`)) return;
+                                try {
+                                    await api.del(endpoints.deleteUser(u.id));
+                                    setMsg(userMsg, `✅ Kullanıcı silindi (ID: ${u.id}).`, "success");
+                                    await loadUsers();
+                                } catch (e) {
+                                    setMsg(userMsg, "❌ " + e.message, "error");
+                                }
+                            });
+                        }
+
+                        userBody.appendChild(tr);
+                    }
+                } catch (e) {
+                    setMsg(userMsg, "❌ " + e.message, "error");
+                }
+            }
+
+            // init
+            loadRequests();
+            loadUsers();
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+﻿<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>STAJ2 - Görüntüleyici</title>
+    <link rel="stylesheet" href="/assets/css/app.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="header-row">
+                <div>
+                    <h1>Staj Monitoring Sistemi</h1>
+                    <div class="subtitle">Görüntüleyici Paneli</div>
+                </div>
+                <div class="actions">
+                    <button class="btn ghost small" onclick="history.back()">← Geri</button>
+                    <button class="btn ghost small" id="btnLogout">Çıkış</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main" style="grid-template-columns: minmax(0, 1fr);">
+            <section class="card">
+                <div class="card-header">
+                    <h2>Kullanıcılar</h2>
+                    <span class="pill" id="userCount">0</span>
+                </div>
+                <div id="msg" class="message"></div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Kullanıcı</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userBody"></tbody>
+                </table>
+            </section>
+        </main>
+    </div>
+    <section style="margin:16px 0;">
+        <h2>Canlı Sistem Bilgileri</h2>
+        <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr>
+                    <th>AgentId</th>
+                    <th>Makine</th>
+                    <th>IP</th>
+                    <th>CPU %</th>
+                    <th>Boş RAM (MB)</th>
+                    <th>Diskler:Boş Alan/Toplam Alan</th>
+                    <th>Son Güncelleme</th>
+                </tr>
+            </thead>
+            <tbody id="agentRows">
+                <tr><td colspan="7">Yükleniyor...</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <script src="/assets/js/agent-ui.js"></script>
+
+    <script src="/assets/js/config.js"></script>
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/auth.js"></script>
+    <script src="/assets/js/guards.js"></script>
+
+    <script>
+        (function () {
+            if (!guards.requireRole(["Görüntüleyici"])) return;
+
+            const endpoints = { users: "/api/Users" };
+            const body = document.getElementById("userBody");
+            const msg = document.getElementById("msg");
+            const userCount = document.getElementById("userCount");
+
+            function setMsg(text, type) {
+                msg.textContent = text || "";
+                msg.className = "message " + (type || "");
+            }
+
+            document.getElementById("btnLogout").addEventListener("click", () => {
+                auth.clearAuth();
+                window.location.href = "/login.html";
+            });
+
+            async function load() {
+                body.innerHTML = "";
+                setMsg("", "");
+                try {
+                    const list = await api.get(endpoints.users);
+                    userCount.textContent = list.length;
+
+                    if (list.length === 0) {
+                        body.innerHTML = `<tr><td colspan="4" class="muted-text">Kullanıcı yok.</td></tr>`;
+                        return;
+                    }
+
+                    for (const u of list) {
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                      <td>${u.id}</td>
+                      <td>${u.username}</td>
+                      <td>${u.email}</td>
+                      <td>${u.role}</td>
+                    `;
+                        body.appendChild(tr);
+                    }
+                } catch (e) {
+                    setMsg("❌ " + e.message, "error");
+                }
+            }
+
+            load();
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+﻿<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>STAJ2 - Giriş</title>
+    <link rel="stylesheet" href="/assets/css/app.css" />
+</head>
+<body>
+    <div class="page">
+        <div class="card">
+            <div class="topbar">
+                <h2>Giriş Yap</h2>
+                <button class="secondary" onclick="ui.backOrHome()">← Geri</button>
+            </div>
+
+            <label>Gmail / Email</label>
+            <input id="email" type="email" placeholder="mail@example.com" />
+
+            <label>Şifre</label>
+            <input id="password" type="password" placeholder="Şifre" />
+
+            <div class="space"></div>
+            <button id="btnLogin">Giriş Yap</button>
+
+            <div id="msg" class="msg" style="display:none;"></div>
+
+            <div class="space"></div>
+            <a class="linkbtn" href="/register.html">Hesabın yok mu? Kayıt Ol</a>
+        </div>
+    </div>
+
+    <script src="/assets/js/config.js"></script>
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/auth.js"></script>
+    <script src="/assets/js/ui.js"></script>
+    <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get("reason");
+      if (reason === "auth") { ui.show("msg"); ui.setText("msg", "Devam etmek için giriş yapmalısın."); }
+      if (reason === "forbidden") { ui.show("msg"); ui.setText("msg", "Bu sayfaya erişim yetkin yok."); }
+
+      document.getElementById("btnLogin").addEventListener("click", async () => {
+        ui.hide("msg");
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+
+        try {
+          const res = await api.post("/api/Auth/login", { email, password });
+          auth.saveAuth(res.token, res.role);
+          auth.redirectByRole(res.role);
+        } catch (e) {
+          ui.show("msg");
+          ui.setText("msg", "❌ " + e.message);
+        }
+      });
+    })();
+    </script>
+</body>
+</html>
