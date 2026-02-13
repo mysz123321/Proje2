@@ -1,7 +1,7 @@
 ﻿using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
-
+using Staj2.Agent;
 
 
 public sealed class TelemetryWorker : BackgroundService

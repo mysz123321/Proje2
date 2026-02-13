@@ -12,8 +12,8 @@ using Staj2.Infrastructure.Data;
 namespace Staj2.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260213084321_AddAgentTelemetry")]
-    partial class AddAgentTelemetry
+    [Migration("20260213133411_ChangeDiskFieldsToString")]
+    partial class ChangeDiskFieldsToString
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,79 @@ namespace Staj2.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("Staj2.Domain.Entities.Computer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CpuModel")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("LastSeen")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MacAddress")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TotalDiskGb")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double>("TotalRamMb")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MacAddress")
+                        .IsUnique();
+
+                    b.ToTable("Computers");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.ComputerMetric", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("ComputerId")
+                        .HasColumnType("int");
+
+                    b.Property<double>("CpuUsage")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DiskUsage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double>("RamUsage")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComputerId");
+
+                    b.ToTable("ComputerMetrics");
+                });
 
             modelBuilder.Entity("Staj2.Domain.Entities.PasswordSetupToken", b =>
                 {
@@ -210,6 +283,17 @@ namespace Staj2.Infrastructure.Migrations
                     b.ToTable("UserRegistrationRequests");
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.ComputerMetric", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.Computer", "Computer")
+                        .WithMany("Metrics")
+                        .HasForeignKey("ComputerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Computer");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.PasswordSetupToken", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.UserRegistrationRequest", "RegistrationRequest")
@@ -248,6 +332,11 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("ApprovedByUser");
 
                     b.Navigation("RequestedRole");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.Computer", b =>
+                {
+                    b.Navigation("Metrics");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.Role", b =>

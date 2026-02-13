@@ -2,24 +2,18 @@
 
 public class AgentTelemetryDto
 {
-    public string MachineName { get; set; }
-    public string? AgentId { get; set; }
+    // 'required' anahtar kelimesi ile uyarıları siliyoruz
+    public required string MacAddress { get; set; }
+    public required string MachineName { get; set; }
     public string? Ip { get; set; }
 
-    public double CpuPercent { get; set; } // Anlık Yük
+    public string? CpuModel { get; set; }
+    public double TotalRamMb { get; set; }
+    public required string TotalDiskGb { get; set; }
 
-    // RAM Oranını bulmak için: (Total - Available) / Total
-    public double AvailableRamMb { get; set; } // Boş RAM
-    public double TotalRamMb { get; set; }     // EKLENDİ: Toplam RAM
+    public double CpuUsage { get; set; }
+    public double RamUsage { get; set; }
+    public required string DiskUsage { get; set; }
 
     public DateTime Ts { get; set; }
-
-    public List<DiskDto> Disks { get; set; } = new();
-
-    public class DiskDto
-    {
-        public string Name { get; set; }       // C:\
-        public long TotalBytes { get; set; }   // EKLENDİ (Zaten kodunda vardı ama DTO'da emin olalım)
-        public long FreeBytes { get; set; }    // Boş alan
-    }
 }

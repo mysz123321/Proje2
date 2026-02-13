@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
+using Staj2.Agent;
 
 IHost host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>

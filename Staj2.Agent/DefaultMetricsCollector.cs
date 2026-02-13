@@ -1,7 +1,12 @@
-﻿using System.Diagnostics;
+﻿using System.Management;
+using Microsoft.Win32;
+using STAJ2.Models.Agent;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+
+namespace Staj2.Agent;
 
 public sealed class DefaultMetricsCollector : IMetricsCollector
 {
@@ -20,9 +25,8 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
                 _cpuTotal = new PerformanceCounter("Processor", "% Processor Time", "_Total");
                 _availableRamMb = new PerformanceCounter("Memory", "Available MBytes");
 
-                // warm-up: ilk ölçüm 0 dönebiliyor
+                // Isınma turu
                 _cpuTotal.NextValue();
-
                 _perfReady = true;
             }
             catch
@@ -34,155 +38,162 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
 
     public async Task<AgentTelemetryDto> CollectAsync(CancellationToken ct)
     {
-        var agentId = GetOrCreateAgentId();
-        var machineName = Environment.MachineName;
-        var ip = GetLocalIPv4() ?? "-";
+        var drives = DriveInfo.GetDrives().Where(d => d.IsReady && d.DriveType == DriveType.Fixed).ToList();
 
-        double? cpu = null;
-        double? availableRamMb = null;
-
-        // Windows: gerçek CPU/RAM
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && _perfReady)
+        // MB olan disklerde 0.19xxx görünmesi için virgülden sonra 4 basamak (F4) kullanıyoruz
+        var totalDiskParts = drives.Select(d =>
         {
-            try { cpu = Math.Round(_cpuTotal!.NextValue(), 2); } catch { /* ignore */ }
-            try { availableRamMb = Math.Round(_availableRamMb!.NextValue(), 2); } catch { /* ignore */ }
-        }
-        else
-        {
-            // Linux: CPU /proc/stat
-            cpu = await _linuxCpu.GetCpuPercentAsync(ct);
-            availableRamMb = null; // Linux RAM'i sonra ekleriz
-        }
+            double gbSize = d.TotalSize / 1073741824.0;
+            return $"{d.Name.Replace("\\", "")} {gbSize.ToString("F4")}";
+        });
+        string totalDiskStr = string.Join(" ", totalDiskParts);
 
-        var disks = DriveInfo.GetDrives()
-            .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
-            .Select(d => new AgentTelemetryDto.DiskDto
-            {
-                Name = d.Name,
-                TotalBytes = d.TotalSize,
-                FreeBytes = d.TotalFreeSpace
-            })
-            .ToList();
+        var usageDiskParts = drives.Select(d => {
+            double used = d.TotalSize - d.TotalFreeSpace;
+            double percent = Math.Round((used / d.TotalSize) * 100, 1);
+            return $"{d.Name.Replace("\\", "")} %{percent}";
+        });
+        string usageDiskStr = string.Join(" ", usageDiskParts);
 
         return new AgentTelemetryDto
         {
-            Ts = DateTimeOffset.UtcNow,
-            AgentId = agentId,
-            MachineName = machineName,
-            Ip = ip,
-            CpuPercent = cpu,
-            AvailableRamMb = availableRamMb,
-            Disks = disks
+            MacAddress = GetMacAddress(),
+            MachineName = Environment.MachineName,
+            Ip = GetLocalIPv4() ?? "-",
+            CpuModel = GetCpuModelName(), // Yeni garanti yöntem
+            TotalRamMb = GetTotalRamInfo(),
+            TotalDiskGb = totalDiskStr,    // "C: 465.1234 D: 0.1955"
+            DiskUsage = usageDiskStr,
+            CpuUsage = GetCpuUsageValue(),
+            RamUsage = GetRamUsagePercent(),
+            Ts = DateTime.UtcNow
         };
     }
 
-    private static string GetOrCreateAgentId()
+    // --- YARDIMCI HESAPLAMA METOTLARI ---
+
+    private double GetTotalRamInfo()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "Staj2", "agent");
+        // Toplam RAM (MB cinsinden)
+        var gcInfo = GC.GetGCMemoryInfo();
+        return Math.Round(gcInfo.TotalAvailableMemoryBytes / 1024.0 / 1024.0, 0);
+    }
 
-        Directory.CreateDirectory(dir);
+    private double GetCpuUsageValue()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && _perfReady)
+        {
+            try { return Math.Round(_cpuTotal!.NextValue(), 1); } catch { return 0; }
+        }
+        return 0; // Linux için CpuSampler kullanılıyor
+    }
 
-        var file = Path.Combine(dir, "agent-id.txt");
+    private double GetRamUsagePercent()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && _perfReady)
+        {
+            try
+            {
+                double total = GetTotalRamInfo();
+                double available = _availableRamMb!.NextValue();
+                double used = total - available;
+                return Math.Round((used / total) * 100, 1);
+            }
+            catch { return 0; }
+        }
+        return 0;
+    }
 
+    private string GetCpuModelName()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try
+            {
+                // WMI ile işlemci bilgilerini sorguluyoruz
+                using var searcher = new ManagementObjectSearcher("SELECT Name, MaxClockSpeed FROM Win32_Processor");
+                foreach (var obj in searcher.Get())
+                {
+                    string name = obj["Name"]?.ToString() ?? "";
+                    // MaxClockSpeed MHz cinsinden gelir (Örn: 2700)
+                    uint speedMhz = (uint)(obj["MaxClockSpeed"] ?? 0);
+                    double ghz = speedMhz / 1000.0;
+
+                    // Eğer isim zaten GHz içeriyorsa direkt döndür, içermiyorsa biz ekleyelim
+                    if (name.Contains("@") || name.ToLower().Contains("ghz"))
+                    {
+                        return name.Trim();
+                    }
+
+                    return $"{name.Trim()} @ {ghz:F2} GHz";
+                }
+            }
+            catch
+            {
+                // WMI hata verirse Registry'ye geri düş (Fallback)
+                using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+                return key?.GetValue("ProcessorNameString")?.ToString()?.Trim() ?? "Unknown CPU";
+            }
+        }
+        return RuntimeInformation.OSDescription;
+    }
+
+    private string GetMacAddress()
+    {
         try
         {
-            if (File.Exists(file))
+            // Tüm ağ kartlarını tara, aktif olanı ve en hızlısını al
+            var mac = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .OrderByDescending(n => n.Speed)
+                .Select(n => n.GetPhysicalAddress().ToString())
+                .FirstOrDefault();
+
+            // Formatsız gelirse (AABBCCDDEEFF), aralara tire koyarak daha okunaklı yapabilirsin:
+            if (!string.IsNullOrEmpty(mac) && mac.Length == 12)
             {
-                var existing = File.ReadAllText(file).Trim();
-                if (!string.IsNullOrWhiteSpace(existing))
-                    return existing;
+                return string.Join(":", Enumerable.Range(0, 6).Select(i => mac.Substring(i * 2, 2)));
             }
 
-            var id = Guid.NewGuid().ToString("N");
-            File.WriteAllText(file, id);
-            return id;
+            return mac ?? "00:00:00:00:00:00";
         }
-        catch
-        {
-            // Dosyaya yazamazsa en azından runtime id üretelim
-            return Guid.NewGuid().ToString("N");
-        }
+        catch { return "00:00:00:00:00:00"; }
     }
 
     private static string? GetLocalIPv4()
     {
         foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
         {
-            if (ni.OperationalStatus != OperationalStatus.Up)
-                continue;
-
+            if (ni.OperationalStatus != OperationalStatus.Up) continue;
             var ipProps = ni.GetIPProperties();
             foreach (var ua in ipProps.UnicastAddresses)
             {
-                if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    var ip = ua.Address.ToString();
-                    if (ip != "127.0.0.1")
-                        return ip;
-                }
+                if (ua.Address.AddressFamily == AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ua.Address))
+                    return ua.Address.ToString();
             }
         }
         return null;
     }
 
-    // Linux CPU sampler: /proc/stat
     private sealed class CpuSampler
     {
-        private long? _prevIdle;
-        private long? _prevTotal;
-
+        private long? _prevIdle, _prevTotal;
         public async Task<double?> GetCpuPercentAsync(CancellationToken ct)
         {
-            if (!File.Exists("/proc/stat"))
-                return null;
-
+            if (!File.Exists("/proc/stat")) return null;
             try
             {
                 var lines = await File.ReadAllLinesAsync("/proc/stat", ct);
-                var first = lines.FirstOrDefault(x => x.StartsWith("cpu "));
-                if (first is null) return null;
-
-                var parts = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var parts = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 5) return null;
-
-                // cpu user nice system idle iowait irq softirq steal ...
-                long user = long.Parse(parts[1]);
-                long nice = long.Parse(parts[2]);
-                long system = long.Parse(parts[3]);
-                long idle = long.Parse(parts[4]);
-                long iowait = parts.Length > 5 ? long.Parse(parts[5]) : 0;
-
-                var idleAll = idle + iowait;
-
-                long total = 0;
-                // user..steal genelde ilk 8 alan
-                for (int i = 1; i < Math.Min(parts.Length, 9); i++)
-                    total += long.Parse(parts[i]);
-
-                if (_prevTotal is null || _prevIdle is null)
-                {
-                    _prevTotal = total;
-                    _prevIdle = idleAll;
-                    return null; // ilk ölçümde yüzde yok
-                }
-
-                var totald = total - _prevTotal.Value;
-                var idled = idleAll - _prevIdle.Value;
-
-                _prevTotal = total;
-                _prevIdle = idleAll;
-
-                if (totald <= 0) return null;
-
-                var usage = (double)(totald - idled) / totald * 100.0;
-                return Math.Round(usage, 2);
+                long idle = long.Parse(parts[4]), total = 0;
+                for (int i = 1; i < Math.Min(parts.Length, 9); i++) total += long.Parse(parts[i]);
+                if (_prevTotal == null) { _prevTotal = total; _prevIdle = idle; return null; }
+                long dTotal = total - _prevTotal.Value, dIdle = idle - _prevIdle.Value;
+                _prevTotal = total; _prevIdle = idle;
+                return dTotal > 0 ? Math.Round((double)(dTotal - dIdle) / dTotal * 100.0, 2) : 0;
             }
-            catch
-            {
-                return null;
-            }
+            catch { return null; }
         }
     }
 }
