@@ -66,7 +66,7 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
             DiskUsage = usageDiskStr,
             CpuUsage = GetCpuUsageValue(),
             RamUsage = GetRamUsagePercent(),
-            Ts = DateTime.UtcNow
+            Ts = DateTime.Now
         };
     }
 
@@ -186,11 +186,25 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
                 var lines = await File.ReadAllLinesAsync("/proc/stat", ct);
                 var parts = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 5) return null;
-                long idle = long.Parse(parts[4]), total = 0;
+
+                long idle = long.Parse(parts[4]);
+                long total = 0;
                 for (int i = 1; i < Math.Min(parts.Length, 9); i++) total += long.Parse(parts[i]);
-                if (_prevTotal == null) { _prevTotal = total; _prevIdle = idle; return null; }
-                long dTotal = total - _prevTotal.Value, dIdle = idle - _prevIdle.Value;
-                _prevTotal = total; _prevIdle = idle;
+
+                // Pattern Matching kullanarak değerleri 'prevTotal' ve 'prevIdle' değişkenlerine güvenle alıyoruz
+                if (_prevTotal is not long prevTotal || _prevIdle is not long prevIdle)
+                {
+                    _prevTotal = total;
+                    _prevIdle = idle;
+                    return null;
+                }
+
+                long dTotal = total - prevTotal;
+                long dIdle = idle - prevIdle;
+
+                _prevTotal = total;
+                _prevIdle = idle;
+
                 return dTotal > 0 ? Math.Round((double)(dTotal - dIdle) / dTotal * 100.0, 2) : 0;
             }
             catch { return null; }

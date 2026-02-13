@@ -60,14 +60,14 @@ public sealed class AgentTelemetryController : ControllerBase
                     CpuModel = dto.CpuModel,
                     TotalRamMb = dto.TotalRamMb,
                     TotalDiskGb = dto.TotalDiskGb,
-                    LastSeen = DateTime.UtcNow
+                    LastSeen = DateTime.Now
                 };
                 _context.Computers.Add(computer);
             }
             else
             {
                 // B) Mevcut Bilgisayar Güncelleme
-                computer.LastSeen = DateTime.UtcNow;
+                computer.LastSeen = DateTime.Now;
                 computer.MachineName = dto.MachineName;
                 computer.IpAddress = dto.Ip;
                 computer.CpuModel = dto.CpuModel;
@@ -87,7 +87,7 @@ public sealed class AgentTelemetryController : ControllerBase
                 CpuUsage = dto.CpuUsage,
                 RamUsage = dto.RamUsage,
                 DiskUsage = dto.DiskUsage,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
 
             _context.ComputerMetrics.Add(metric);
