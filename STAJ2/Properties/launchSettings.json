@@ -5,11 +5,12 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
-      "applicationUrl": "http://localhost:5267",
+      "applicationUrl": "http://0.0.0.0:5267", // <-- ÖNEMLİ: localhost yerine 0.0.0.0
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
-    },
+    }
+  },
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,

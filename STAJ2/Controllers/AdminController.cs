@@ -8,7 +8,6 @@ using System.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using System.Security.Claims;
 
 namespace STAJ2.Controllers;
 
