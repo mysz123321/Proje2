@@ -11,7 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRegistrationRequest> UserRegistrationRequests => Set<UserRegistrationRequest>();
     public DbSet<PasswordSetupToken> PasswordSetupTokens => Set<PasswordSetupToken>();
-
+    public DbSet<AgentMetric> AgentMetrics { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
