@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using STAJ2.Services;
-using System.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,7 +17,6 @@ public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IMailSender _mail;
-
     private readonly IConfiguration _config;
 
     public AdminController(AppDbContext db, IMailSender mail, IConfiguration config)
@@ -28,14 +26,14 @@ public class AdminController : ControllerBase
         _config = config;
     }
 
-
     [HttpGet("ping")]
     public IActionResult Ping() => Ok(new { message = "Admin endpoint çalışıyor ✅" });
 
     [HttpGet("requests")]
     public async Task<IActionResult> PendingRequests()
     {
-        var list = await _db.UserRegistrationRequests
+        // DÜZELTME 1: _db.UserRegistrationRequests -> _db.RegistrationRequests
+        var list = await _db.RegistrationRequests
             .Where(x => x.Status == RegistrationStatus.Pending)
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new
@@ -53,7 +51,8 @@ public class AdminController : ControllerBase
     [HttpPost("approve/{id:int}")]
     public async Task<IActionResult> Approve(int id, [FromBody] ApproveRequest body)
     {
-        var rr = await _db.UserRegistrationRequests
+        // DÜZELTME 2: _db.UserRegistrationRequests -> _db.RegistrationRequests
+        var rr = await _db.RegistrationRequests
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (rr == null) return NotFound("İstek bulunamadı.");
@@ -72,7 +71,6 @@ public class AdminController : ControllerBase
         if (int.TryParse(adminIdStr, out var adminId))
             rr.ApprovedByUserId = adminId;
 
-
         // Token üret (raw) + hash sakla
         var rawToken = GenerateToken();
         var tokenHash = Sha256(rawToken);
@@ -87,10 +85,9 @@ public class AdminController : ControllerBase
 
         _db.PasswordSetupTokens.Add(tokenRow);
         await _db.SaveChangesAsync();
-            
-        var baseUrl = _config.GetSection("App")["FrontendBaseUrl"] ?? "https://localhost:7265";
-        var link = $"{baseUrl}/set-password.html?token={rawToken}";
 
+        var baseUrl = _config.GetSection("App")["FrontendBaseUrl"] ?? "http://localhost:5267";
+        var link = $"{baseUrl}/set-password.html?token={rawToken}";
 
         await _mail.SendAsync(
             rr.Email,
@@ -104,7 +101,8 @@ public class AdminController : ControllerBase
     [HttpPost("reject/{id:int}")]
     public async Task<IActionResult> Reject(int id, [FromBody] RejectRequest body)
     {
-        var rr = await _db.UserRegistrationRequests.FirstOrDefaultAsync(x => x.Id == id);
+        // DÜZELTME 3: _db.UserRegistrationRequests -> _db.RegistrationRequests
+        var rr = await _db.RegistrationRequests.FirstOrDefaultAsync(x => x.Id == id);
 
         if (rr == null) return NotFound("İstek bulunamadı.");
         if (rr.Status != RegistrationStatus.Pending) return BadRequest("Bu istek zaten işlenmiş.");
@@ -116,6 +114,7 @@ public class AdminController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(new { message = "İstek reddedildi." });
     }
+
     [HttpGet("users")]
     public async Task<IActionResult> GetAllUsers()
     {
@@ -137,19 +136,20 @@ public class AdminController : ControllerBase
     [HttpDelete("users/{id:int}")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var user = await _db.Users
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
         if (user == null) return NotFound("Kullanıcı bulunamadı.");
 
-        if (user.Role.Name == "Yönetici")
-            return BadRequest("Admin kullanıcıları silinemez.");
+        // Kullanıcının kayıt isteğini de bul ve sil
+        var regRequest = await _db.RegistrationRequests.FirstOrDefaultAsync(x => x.Email == user.Email);
+        if (regRequest != null)
+        {
+            _db.RegistrationRequests.Remove(regRequest);
+        }
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = "Kullanıcı silindi." });
+        return Ok(new { message = "Kullanıcı ve kayıt geçmişi silindi." });
     }
 
     private static string GenerateToken()
@@ -173,14 +173,7 @@ public class AdminController : ControllerBase
             .Replace("=", "");
     }
 }
-//public class ComputerController
-//{
-//    [Authorize(Roles = "Yönetici")]
-//    public Task<IActionResult> AddComputer()
-//    {
 
-//    }
-//}
 public class ApproveRequest
 {
     public int RoleId { get; set; } // 1/2/3

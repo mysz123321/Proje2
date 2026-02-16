@@ -5,6 +5,10 @@ using Staj2.Infrastructure.Data;
 using STAJ2.Models.Agent;
 using STAJ2.Services;
 using System.Globalization;
+// --- EKSİK OLAN SATIRLAR EKLENDİ ---
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+// -----------------------------------
 
 namespace STAJ2.Controllers;
 
@@ -111,7 +115,7 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
-    // Bu metod "private async Task CheckAndSendAlerts" yerine geçecek
+    // Bu metod arka planda mail gönderip DB günceller
     private async Task HandleBackgroundAlert(int computerId, AgentTelemetryDto dto)
     {
         // YENİ BİR SCOPE (BAĞLANTI) AÇIYORUZ

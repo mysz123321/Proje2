@@ -83,7 +83,7 @@ app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
-
+await STAJ2.Seed.DbSeeder.SeedAsync(app);
 app.MapControllers();
 
 app.Run();

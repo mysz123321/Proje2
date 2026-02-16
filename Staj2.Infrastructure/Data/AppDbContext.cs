@@ -1,80 +1,62 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 
-namespace Staj2.Infrastructure.Data;
-
-public class AppDbContext : DbContext
+namespace Staj2.Infrastructure.Data
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    // Auth Tabloları
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<UserRegistrationRequest> UserRegistrationRequests => Set<UserRegistrationRequest>();
-    public DbSet<PasswordSetupToken> PasswordSetupTokens => Set<PasswordSetupToken>();
-
-    // --- YENİ EKLENENLER ---
-    public DbSet<Computer> Computers { get; set; }
-    public DbSet<ComputerMetric> ComputerMetrics { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public class AppDbContext : DbContext
     {
-        base.OnModelCreating(modelBuilder);
-
-        // Computer & Metric İlişkisi
-        modelBuilder.Entity<ComputerMetric>()
-            .HasOne(m => m.Computer)
-            .WithMany(c => c.Metrics)
-            .HasForeignKey(m => m.ComputerId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // PasswordSetupToken
-        modelBuilder.Entity<PasswordSetupToken>(e =>
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
-            e.Property(x => x.TokenHash).HasMaxLength(64);
-            e.HasIndex(x => x.TokenHash).IsUnique();
-            e.HasOne(x => x.RegistrationRequest)
-             .WithMany(r => r.PasswordSetupTokens)
-             .HasForeignKey(x => x.RegistrationRequestId)
-             .OnDelete(DeleteBehavior.Cascade);
-        });
+        }
 
-        // Role
-        modelBuilder.Entity<Role>(e =>
+        // TABLOLAR
+        public DbSet<User> Users { get; set; }
+        public DbSet<Role> Roles { get; set; } // <--- EKSİK OLAN SATIR buydu
+        public DbSet<UserRegistrationRequest> RegistrationRequests { get; set; }
+        public DbSet<Computer> Computers { get; set; }
+        public DbSet<ComputerMetric> ComputerMetrics { get; set; }
+        public DbSet<PasswordSetupToken> PasswordSetupTokens { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            e.HasIndex(x => x.Name).IsUnique();
-            e.Property(x => x.Name).HasMaxLength(50);
-        });
+            base.OnModelCreating(modelBuilder);
 
-        // User
-        modelBuilder.Entity<User>(e =>
-        {
-            e.HasIndex(x => x.Username).IsUnique();
-            e.HasIndex(x => x.Email).IsUnique();
-            e.Property(x => x.Username).HasMaxLength(50);
-            e.Property(x => x.Email).HasMaxLength(255);
-            e.Property(x => x.PasswordHash).HasMaxLength(255);
-            e.HasOne(x => x.Role).WithMany(r => r.Users).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
-        });
+            // --- 1. USER (Kullanıcı) ---
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Username).IsUnique();
+            });
 
-        // RegistrationRequest
-        modelBuilder.Entity<UserRegistrationRequest>(e =>
-        {
-            e.Property(x => x.Username).HasMaxLength(50);
-            e.Property(x => x.Email).HasMaxLength(255);
-            e.HasIndex(x => x.Email).IsUnique().HasFilter("[Status] = 0");
-            e.HasIndex(x => x.Username).IsUnique().HasFilter("[Status] = 0");
-            e.HasIndex(x => x.Status);
-            e.HasOne(x => x.RequestedRole).WithMany().HasForeignKey(x => x.RequestedRoleId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.ApprovedByUser).WithMany().HasForeignKey(x => x.ApprovedByUserId).OnDelete(DeleteBehavior.Restrict);
-        });
+            // --- 2. COMPUTER (Bilgisayar) ---
+            modelBuilder.Entity<Computer>(entity =>
+            {
+                entity.HasKey(e => e.Id);
 
-        // Seed Roles
-        var seedCreatedAt = new DateTime(2026, 2, 11, 0, 0, 0, DateTimeKind.Utc);
-        modelBuilder.Entity<Role>().HasData(
-            new Role { Id = 1, Name = "Yönetici", CreatedAt = seedCreatedAt },
-            new Role { Id = 2, Name = "Denetleyici", CreatedAt = seedCreatedAt },
-            new Role { Id = 3, Name = "Görüntüleyici", CreatedAt = seedCreatedAt }
-        );
+                // MacAddress Eşsiz ve Zorunlu
+                entity.HasIndex(e => e.MacAddress).IsUnique();
+                entity.Property(e => e.MacAddress).IsRequired().HasMaxLength(50);
+
+                // Cascade Delete: Bilgisayar silinirse metrikleri de silinsin
+                entity.HasMany(c => c.Metrics)
+                      .WithOne(m => m.Computer)
+                      .HasForeignKey(m => m.ComputerId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // --- 3. COMPUTER METRIC ---
+            modelBuilder.Entity<ComputerMetric>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.CreatedAt); // Tarih sorguları için hızlandırıcı
+            });
+
+            // --- 4. REGISTRATION REQUEST ---
+            modelBuilder.Entity<UserRegistrationRequest>(entity =>
+            {
+                entity.HasIndex(e => e.Email).IsUnique();
+                entity.HasIndex(e => e.Username).IsUnique();
+            });
+        }
     }
 }
