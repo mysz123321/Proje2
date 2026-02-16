@@ -14,15 +14,15 @@ public sealed class AgentTelemetryController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
-    private readonly IMailSender _mailSender;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     private static readonly Dictionary<string, AgentTelemetryDto> _latestData = new();
 
-    public AgentTelemetryController(AppDbContext context, IConfiguration config, IMailSender mailSender)
+    public AgentTelemetryController(AppDbContext context, IConfiguration config, IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _config = config;
-        _mailSender = mailSender;
+        _scopeFactory = scopeFactory;
     }
 
     [HttpPost]
@@ -92,11 +92,10 @@ public sealed class AgentTelemetryController : ControllerBase
 
             _context.ComputerMetrics.Add(metric);
             await _context.SaveChangesAsync(ct);
+            var computerId = computer.Id;
 
-            // --- 5. ALERTING (UYARI SİSTEMİ) ---
-            // Mail gönderimi yavaş olabilir, bu yüzden Task.Run ile arka planda 
-            // veya Cancellation'dan bağımsız bir şekilde işlemek daha güvenlidir.
-            await CheckAndSendAlerts(computer, dto, ct);
+            // Task.Run ile işlemi arka plana atıyoruz, böylece Agent beklemek zorunda kalmıyor.
+            _ = Task.Run(() => HandleBackgroundAlert(computerId, dto));
 
             return Ok();
         }
@@ -112,68 +111,92 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
-    private async Task CheckAndSendAlerts(Computer computer, AgentTelemetryDto dto, CancellationToken ct)
+    // Bu metod "private async Task CheckAndSendAlerts" yerine geçecek
+    private async Task HandleBackgroundAlert(int computerId, AgentTelemetryDto dto)
     {
-        var alertingConfig = _config.GetSection("Alerting");
-        double cpuLimit = alertingConfig.GetValue<double>("CpuThreshold");
-        double ramLimit = alertingConfig.GetValue<double>("RamThreshold");
-        double diskLimit = alertingConfig.GetValue<double>("DiskThreshold");
-        int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours");
-
-        // Adminin belirlediği ismi (DisplayName) kullanıyoruz
-        string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
-
-        if (computer.LastNotifyTime == null || computer.LastNotifyTime.Value.AddHours(intervalHours) < DateTime.Now)
+        // YENİ BİR SCOPE (BAĞLANTI) AÇIYORUZ
+        using (var scope = _scopeFactory.CreateScope())
         {
-            string alertReasons = "";
+            // Taze servisleri çağırıyoruz
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var mailSender = scope.ServiceProvider.GetRequiredService<IMailSender>();
+            var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-            if (dto.CpuUsage >= cpuLimit)
-                alertReasons += $"* CPU: %{dto.CpuUsage:F1} (Eşik: %{cpuLimit}) [Hız: {computer.CpuModel}]\n";
-
-            if (dto.RamUsage >= ramLimit)
-                alertReasons += $"* RAM: %{dto.RamUsage:F1} (Eşik: %{ramLimit})\n";
-
-            // Disk Parse ve Noktalama Düzeltmesi (972.3 sorununu çözer)
-            var diskParts = dto.DiskUsage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < diskParts.Length; i += 2)
+            try
             {
-                if (i + 1 < diskParts.Length)
-                {
-                    string diskName = diskParts[i].Replace(":", "");
-                    // Virgülü noktaya çevirip InvariantCulture ile parse ederek ondalık hatasını önlüyoruz
-                    string percentStr = diskParts[i + 1].Replace("%", "").Replace(",", ".");
+                // Bilgisayarı taze context ile tekrar çekiyoruz
+                var computer = await dbContext.Computers.FindAsync(computerId);
+                if (computer == null) return;
 
-                    if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                var alertingConfig = config.GetSection("Alerting");
+                double cpuLimit = alertingConfig.GetValue<double>("CpuThreshold");
+                double ramLimit = alertingConfig.GetValue<double>("RamThreshold");
+                double diskLimit = alertingConfig.GetValue<double>("DiskThreshold");
+                int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours");
+
+                string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
+
+                // Süre kontrolü
+                if (computer.LastNotifyTime == null || computer.LastNotifyTime.Value.AddHours(intervalHours) < DateTime.Now)
+                {
+                    string alertReasons = "";
+
+                    // CPU Kontrol
+                    if (dto.CpuUsage >= cpuLimit)
+                        alertReasons += $"* CPU: %{dto.CpuUsage:F1} (Eşik: %{cpuLimit}) [Hız: {computer.CpuModel}]\n";
+
+                    // RAM Kontrol
+                    if (dto.RamUsage >= ramLimit)
+                        alertReasons += $"* RAM: %{dto.RamUsage:F1} (Eşik: %{ramLimit})\n";
+
+                    // Disk Kontrol
+                    var diskParts = dto.DiskUsage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    for (int i = 0; i < diskParts.Length; i += 2)
                     {
-                        if (val >= diskLimit)
-                            alertReasons += $"* Disk ({diskName}): %{val:F1} (Eşik: %{diskLimit})\n";
+                        if (i + 1 < diskParts.Length)
+                        {
+                            string diskName = diskParts[i].Replace(":", "");
+                            string percentStr = diskParts[i + 1].Replace("%", "").Replace(",", ".");
+                            if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                            {
+                                if (val >= diskLimit)
+                                    alertReasons += $"* Disk ({diskName}): %{val:F1} (Eşik: %{diskLimit})\n";
+                            }
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(alertReasons))
+                    {
+                        var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
+                        if (recipients != null && recipients.Count > 0)
+                        {
+                            string subject = $"⚠️ KRİTİK UYARI: {deviceName}";
+                            string body = $"Merhaba,\n\n{deviceName} isimli cihazda limit aşımları tespit edildi:\n\n" +
+                                          $"{alertReasons}\n" +
+                                          $"Zaman: {DateTime.Now}\n" +
+                                          $"IP: {computer.IpAddress}\n" +
+                                          $"MAC: {computer.MacAddress}\n\n" +
+                                          $"Bu cihaz için bir sonraki uyarı en erken {intervalHours} saat sonra gönderilecektir.";
+
+                            foreach (var email in recipients)
+                            {
+                                await mailSender.SendAsync(email, subject, body);
+                            }
+
+                            // --- GÜNCELLEME İŞLEMİ ---
+                            // Artık kendi context'imiz olduğu için sorunsuz çalışacak
+                            computer.LastNotifyTime = DateTime.Now;
+                            await dbContext.SaveChangesAsync();
+                        }
                     }
                 }
             }
-
-            if (!string.IsNullOrEmpty(alertReasons))
+            catch (Exception ex)
             {
-                var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
-                if (recipients != null && recipients.Count > 0)
-                {
-                    string subject = $"⚠️ KRİTİK UYARI: {deviceName}";
-                    string body = $"Merhaba,\n\n{deviceName} isimli cihazda limit aşımları tespit edildi:\n\n" +
-                                  $"{alertReasons}\n" +
-                                  $"Zaman: {DateTime.Now}\n" +
-                                  $"IP: {computer.IpAddress}\n" +
-                                  $"MAC: {computer.MacAddress}\n\n" +
-                                  $"Bu cihaz için bir sonraki uyarı en erken {intervalHours} saat sonra gönderilecektir.";
-
-                    foreach (var email in recipients)
-                    {
-                        await _mailSender.SendAsync(email, subject, body);
-                    }
-
-                    computer.LastNotifyTime = DateTime.Now;
-                    await _context.SaveChangesAsync(ct);
-                }
+                // Arka planda olduğu için console'a yazdırıyoruz
+                Console.WriteLine($"[Background Alert Error] {ex.Message}");
             }
-        }
+        } // Scope burada biter, dbContext otomatik olarak dispose edilir.
     }
 
     [HttpGet("latest")]

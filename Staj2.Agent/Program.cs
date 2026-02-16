@@ -15,7 +15,7 @@ IHost host = Host.CreateDefaultBuilder(args)
             var baseUrl = ctx.Configuration["Agent:BackendBaseUrl"];
             if (!string.IsNullOrWhiteSpace(baseUrl))
                 http.BaseAddress = new Uri(baseUrl);
-            http.Timeout = TimeSpan.FromSeconds(10);
+            http.Timeout = TimeSpan.FromSeconds(60);
         });
 
         services.AddSingleton<IMetricsCollector, DefaultMetricsCollector>();
