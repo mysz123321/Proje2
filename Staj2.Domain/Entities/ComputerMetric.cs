@@ -11,8 +11,5 @@ public class ComputerMetric
     public double CpuUsage { get; set; }
     public double RamUsage { get; set; }
 
-    // Yeni Hali: "C: %40, D: %10" gibi her diskin anlık doluluk oranı
-    public string DiskUsage { get; set; }
-
     public DateTime CreatedAt { get; set; }
 }

@@ -43,12 +43,11 @@ public sealed class AgentTelemetryController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.MacAddress))
             return BadRequest("MacAddress is required.");
 
-        // !!! HATALI OLAN Computers.Id SATIRLARINI BURADAN SİLDİK !!!
-
         try
         {
             // 2. Bilgisayar Kaydı veya Güncelleme
             var computer = await _context.Computers
+                .Include(c => c.Disks) // Diskleri de dahil ediyoruz
                 .FirstOrDefaultAsync(c => c.MacAddress == dto.MacAddress, ct);
 
             if (computer == null)
@@ -61,8 +60,8 @@ public sealed class AgentTelemetryController : ControllerBase
                     IpAddress = dto.Ip,
                     CpuModel = dto.CpuModel,
                     TotalRamMb = dto.TotalRamMb,
-                    TotalDiskGb = dto.TotalDiskGb,
                     LastSeen = DateTime.Now
+                    // TotalDiskGb SİLİNDİ
                 };
                 _context.Computers.Add(computer);
             }
@@ -72,45 +71,84 @@ public sealed class AgentTelemetryController : ControllerBase
                 computer.MachineName = dto.MachineName;
                 computer.IpAddress = dto.Ip;
                 computer.CpuModel = dto.CpuModel;
-                computer.TotalDiskGb = dto.TotalDiskGb;
-
                 if (Math.Abs(computer.TotalRamMb - dto.TotalRamMb) > 1)
                     computer.TotalRamMb = dto.TotalRamMb;
             }
 
-            // Veritabanına kaydediyoruz ki yeni bir bilgisayarsa 'Id' oluşsun
+            // Bilgisayarı kaydediyoruz (Id oluşması için)
             await _context.SaveChangesAsync(ct);
 
-            // --- BURASI KRİTİK: DTO'yu veritabanından gelen verilerle zenginleştiriyoruz ---
-            dto.ComputerId = computer.Id;
-            dto.DisplayName = computer.DisplayName;
-
-            // 3. Cache Güncelleme (Zenginleşmiş DTO ile)
-            lock (_latestData)
+            // --- YENİ DİSK MANTIĞI ---
+            // dto.TotalDiskGb formatı: "C: 465.1234 D: 0.1955"
+            var diskTotalParts = dto.TotalDiskGb.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < diskTotalParts.Length; i += 2)
             {
-                _latestData[dto.MacAddress] = dto;
-            }
+                if (i + 1 < diskTotalParts.Length)
+                {
+                    string dName = diskTotalParts[i].Replace(":", "");
+                    double.TryParse(diskTotalParts[i + 1].Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double dSize);
 
-            // 4. Metrik Kaydı
+                    // Eğer bu disk tabloda yoksa ekle
+                    if (!computer.Disks.Any(d => d.DiskName == dName))
+                    {
+                        _context.ComputerDisks.Add(new ComputerDisk
+                        {
+                            ComputerId = computer.Id,
+                            DiskName = dName,
+                            TotalSizeGb = dSize,
+                            ThresholdPercent = 90.0 // Varsayılan eşik
+                        });
+                    }
+                }
+            }
+            await _context.SaveChangesAsync(ct);
+
+            // 3. Metrik Kaydı
             var metric = new ComputerMetric
             {
                 ComputerId = computer.Id,
                 CpuUsage = dto.CpuUsage,
-                RamUsage = dto.RamUsage,
-                DiskUsage = dto.DiskUsage,
+                RamUsage = dto.RamUsage,// Eski raporlar için string olarak kalsın veya silebilirsin
                 CreatedAt = DateTime.Now
             };
-
             _context.ComputerMetrics.Add(metric);
             await _context.SaveChangesAsync(ct);
 
+            // --- YENİ DİSK METRİK KAYDI ---
+            // dto.DiskUsage formatı: "C: %40.5 D: %10.2"
+            var currentDisks = await _context.ComputerDisks.Where(d => d.ComputerId == computer.Id).ToListAsync(ct);
+            var diskUsageParts = dto.DiskUsage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < diskUsageParts.Length; i += 2)
+            {
+                if (i + 1 < diskUsageParts.Length)
+                {
+                    string dName = diskUsageParts[i].Replace(":", "");
+                    string usageStr = diskUsageParts[i + 1].Replace("%", "").Replace(",", ".");
+                    double.TryParse(usageStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double dUsage);
+
+                    var diskEntity = currentDisks.FirstOrDefault(d => d.DiskName == dName);
+                    if (diskEntity != null)
+                    {
+                        _context.DiskMetrics.Add(new DiskMetric
+                        {
+                            ComputerDiskId = diskEntity.Id,
+                            UsedPercent = dUsage,
+                            CreatedAt = DateTime.Now
+                        });
+                    }
+                }
+            }
+            await _context.SaveChangesAsync(ct);
+
+            // Cache ve Alert işlemleri...
+            dto.ComputerId = computer.Id;
+            lock (_latestData) { _latestData[dto.MacAddress] = dto; }
             _ = Task.Run(() => HandleBackgroundAlert(computer.Id, dto));
 
             return Ok();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Ingest: {ex}");
             return StatusCode(500, ex.Message);
         }
     }

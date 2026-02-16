@@ -7,6 +7,7 @@ using STAJ2.Services;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using STAJ2.Models.Agent;
 
 namespace STAJ2.Controllers;
 
@@ -47,7 +48,76 @@ public class AdminController : ControllerBase
 
         return Ok(list);
     }
+    [HttpPut("update-thresholds/{computerId}")]
+    public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
+    {
+        if (request.CpuThreshold < 0 || request.CpuThreshold > 100 ||
+        request.RamThreshold < 0 || request.RamThreshold > 100)
+        {
+            return BadRequest("Eşik değerleri 0 ile 100 arasında olmalıdır.");
+        }
+        if (request.DiskThresholds != null && request.DiskThresholds.Any(d => d.ThresholdPercent < 0 || d.ThresholdPercent > 100))
+        {
+            return BadRequest("Disk eşik değerleri 0 ile 100 arasında olmalıdır.");
+        }
+        var computer = await _db.Computers
+            .Include(c => c.Disks)
+            .FirstOrDefaultAsync(c => c.Id == computerId);
 
+        if (computer == null) return NotFound("Cihaz bulunamadı.");
+
+        // CPU ve RAM genel eşikleri
+        computer.CpuThreshold = request.CpuThreshold;
+        computer.RamThreshold = request.RamThreshold;
+
+        // Disk bazlı özel eşikler
+        if (request.DiskThresholds != null)
+        {
+            foreach (var diskReq in request.DiskThresholds)
+            {
+                var disk = computer.Disks.FirstOrDefault(d => d.DiskName == diskReq.DiskName);
+                if (disk != null)
+                {
+                    disk.ThresholdPercent = diskReq.ThresholdPercent;
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Eşik değerleri başarıyla güncellendi." });
+    }
+
+    // --- YENİ: KULLANICI ROLÜNÜ DEĞİŞTİRME ---
+    [HttpPut("users/{userId}/change-role")]
+    public async Task<IActionResult> ChangeUserRole(int userId, [FromBody] ChangeRoleRequest request)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+        var roleExists = await _db.Roles.AnyAsync(r => r.Id == request.NewRoleId);
+        if (!roleExists) return BadRequest("Geçersiz rol seçimi.");
+
+        user.RoleId = request.NewRoleId;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Kullanıcı rolü başarıyla güncellendi." });
+    }
+
+    // --- YENİ: BİR BİLGİSAYARIN TÜM DİSKLERİNİ VE EŞİKLERİNİ GETİRME (Frontend için) ---
+    [HttpGet("computers/{computerId}/disks")]
+    public async Task<IActionResult> GetComputerDisks(int computerId)
+    {
+        var disks = await _db.ComputerDisks
+            .Where(d => d.ComputerId == computerId)
+            .Select(d => new {
+                d.DiskName,
+                d.TotalSizeGb,
+                d.ThresholdPercent
+            })
+            .ToListAsync();
+
+        return Ok(disks);
+    }
     [HttpPost("approve/{id:int}")]
     public async Task<IActionResult> Approve(int id, [FromBody] ApproveRequest body)
     {
@@ -202,7 +272,23 @@ public class ApproveRequest
 {
     public int RoleId { get; set; } // 1/2/3
 }
+public class UpdateThresholdsRequest
+{
+    public double CpuThreshold { get; set; }
+    public double RamThreshold { get; set; }
+    public List<DiskThresholdItem>? DiskThresholds { get; set; }
+}
 
+public class DiskThresholdItem
+{
+    public string DiskName { get; set; } = null!;
+    public double ThresholdPercent { get; set; }
+}
+
+public class ChangeRoleRequest
+{
+    public int NewRoleId { get; set; }
+}
 public class RejectRequest
 {
     public string? Reason { get; set; }

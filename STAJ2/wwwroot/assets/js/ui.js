@@ -1,28 +1,35 @@
-﻿(function () {
-    function setText(id, text) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = text;
-    }
+﻿// Kullanıcıları listelerken rol sütununa bunu ekle:
+function renderUserRow(user) {
+    return `
+        <tr>
+            <td>${user.username}</td>
+            <td>
+                <select id="roleSelect_${user.id}" class="role-select">
+                    <option value="1" ${user.role === 'Yönetici' ? 'selected' : ''}>Yönetici</option>
+                    <option value="2" ${user.role === 'İzleyici' ? 'selected' : ''}>İzleyici</option>
+                    <option value="3" ${user.role === 'Denetçi' ? 'selected' : ''}>Denetçi</option>
+                </select>
+            </td>
+            <td>
+                <button onclick="changeRole(${user.id})" class="btn-primary">Rolü Güncelle</button>
+            </td>
+        </tr>
+    `;
+}
 
-    function setHtml(id, html) {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = html;
-    }
+async function changeRole(userId) {
+    const newRoleId = document.getElementById(`roleSelect_${userId}`).value;
 
-    function show(id) {
-        const el = document.getElementById(id);
-        if (el) el.style.display = "block";
-    }
+    const response = await fetch(`/api/Admin/users/${userId}/change-role`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ newRoleId: parseInt(newRoleId) })
+    });
 
-    function hide(id) {
-        const el = document.getElementById(id);
-        if (el) el.style.display = "none";
+    if (response.ok) {
+        alert("Kullanıcı rolü güncellendi!");
     }
-
-    function backOrHome() {
-        if (window.history.length > 1) window.history.back();
-        else window.location.href = "/index.html";
-    }
-
-    window.ui = { setText, setHtml, show, hide, backOrHome };
-})();
+}

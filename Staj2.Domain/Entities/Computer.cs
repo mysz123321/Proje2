@@ -1,23 +1,23 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.EntityFrameworkCore;
+﻿using Staj2.Domain.Entities;
 
-namespace Staj2.Domain.Entities;
-
-[Index(nameof(MacAddress), IsUnique = true)] // MAC adresi benzersiz olacak
-// ... diğer usingler
 public class Computer
 {
     public int Id { get; set; }
-    public string MacAddress { get; set; }
-    public string MachineName { get; set; }
+    public string MacAddress { get; set; } = null!;
+    public string MachineName { get; set; } = null!;
     public string? DisplayName { get; set; }
     public string? IpAddress { get; set; }
-    public string? CpuModel { get; set; } // Örn: Intel i7 @ 2.70 GHz
+    public string? CpuModel { get; set; }
     public double TotalRamMb { get; set; }
-    public DateTime? LastNotifyTime { get; set; } // En son uyarı ne zaman atıldı?
-    // Yeni Hali: "C: 465, D: 931" gibi tüm disklerin toplam boyutları
-    public string? TotalDiskGb { get; set; }
 
+    // --- YENİ EKLENEN EŞİK DEĞERLERİ ---
+    public double CpuThreshold { get; set; } = 90.0; // Varsayılan %90
+    public double RamThreshold { get; set; } = 90.0; // Varsayılan %90
+
+    public DateTime? LastNotifyTime { get; set; }
     public DateTime LastSeen { get; set; }
+
+    // İlişkiler
+    public List<ComputerDisk> Disks { get; set; } = new();
     public List<ComputerMetric> Metrics { get; set; } = new();
 }

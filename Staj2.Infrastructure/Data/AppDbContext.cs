@@ -16,7 +16,10 @@ namespace Staj2.Infrastructure.Data
         public DbSet<Computer> Computers { get; set; }
         public DbSet<ComputerMetric> ComputerMetrics { get; set; }
         public DbSet<PasswordSetupToken> PasswordSetupTokens { get; set; }
+        public DbSet<ComputerDisk> ComputerDisks { get; set; }
+        public DbSet<DiskMetric> DiskMetrics { get; set; }
 
+        
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -50,7 +53,17 @@ namespace Staj2.Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.CreatedAt); // Tarih sorguları için hızlandırıcı
             });
+            // Computer -> ComputerDisk (Bire-Çok)
+            modelBuilder.Entity<ComputerDisk>()
+                .HasOne(d => d.Computer)
+                .WithMany(c => c.Disks)
+                .HasForeignKey(d => d.ComputerId);
 
+            // ComputerDisk -> DiskMetric (Bire-Çok)
+            modelBuilder.Entity<DiskMetric>()
+                .HasOne(m => m.ComputerDisk)
+                .WithMany(d => d.DiskMetrics)
+                .HasForeignKey(m => m.ComputerDiskId);
             // --- 4. REGISTRATION REQUEST ---
             modelBuilder.Entity<UserRegistrationRequest>(entity =>
             {
