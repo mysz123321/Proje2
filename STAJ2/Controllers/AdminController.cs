@@ -151,7 +151,26 @@ public class AdminController : ControllerBase
 
         return Ok(new { message = "Kullanıcı ve kayıt geçmişi silindi." });
     }
+    [HttpPut("update-display-name")]
+    public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
+    {
+        // _context olan yerleri _db ile değiştiriyoruz
+        var computer = await _db.Computers.FindAsync(request.Id);
 
+        if (computer == null) return NotFound("Bilgisayar bulunamadı.");
+
+        computer.DisplayName = request.NewDisplayName;
+
+        try
+        {
+            await _db.SaveChangesAsync(); // _context -> _db
+            return Ok(new { message = "Bilgisayar adı başarıyla güncellendi.", id = computer.Id });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Hata: {ex.Message}");
+        }
+    }
     private static string GenerateToken()
     {
         // 32 byte -> URL-safe token
@@ -173,7 +192,12 @@ public class AdminController : ControllerBase
             .Replace("=", "");
     }
 }
-
+// AdminController.cs dosyasının sonuna ekleyin
+public class UpdateComputerNameRequest
+{
+    public int Id { get; set; }
+    public string NewDisplayName { get; set; }
+}
 public class ApproveRequest
 {
     public int RoleId { get; set; } // 1/2/3

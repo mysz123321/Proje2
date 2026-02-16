@@ -43,15 +43,11 @@ public sealed class AgentTelemetryController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.MacAddress))
             return BadRequest("MacAddress is required.");
 
-        // 2. Cache Güncelleme
-        lock (_latestData)
-        {
-            _latestData[dto.MacAddress] = dto;
-        }
+        // !!! HATALI OLAN Computers.Id SATIRLARINI BURADAN SİLDİK !!!
 
         try
         {
-            // 3. Bilgisayar Kaydı/Güncelleme
+            // 2. Bilgisayar Kaydı veya Güncelleme
             var computer = await _context.Computers
                 .FirstOrDefaultAsync(c => c.MacAddress == dto.MacAddress, ct);
 
@@ -82,7 +78,18 @@ public sealed class AgentTelemetryController : ControllerBase
                     computer.TotalRamMb = dto.TotalRamMb;
             }
 
+            // Veritabanına kaydediyoruz ki yeni bir bilgisayarsa 'Id' oluşsun
             await _context.SaveChangesAsync(ct);
+
+            // --- BURASI KRİTİK: DTO'yu veritabanından gelen verilerle zenginleştiriyoruz ---
+            dto.ComputerId = computer.Id;
+            dto.DisplayName = computer.DisplayName;
+
+            // 3. Cache Güncelleme (Zenginleşmiş DTO ile)
+            lock (_latestData)
+            {
+                _latestData[dto.MacAddress] = dto;
+            }
 
             // 4. Metrik Kaydı
             var metric = new ComputerMetric
@@ -96,17 +103,10 @@ public sealed class AgentTelemetryController : ControllerBase
 
             _context.ComputerMetrics.Add(metric);
             await _context.SaveChangesAsync(ct);
-            var computerId = computer.Id;
 
-            // Task.Run ile işlemi arka plana atıyoruz, böylece Agent beklemek zorunda kalmıyor.
-            _ = Task.Run(() => HandleBackgroundAlert(computerId, dto));
+            _ = Task.Run(() => HandleBackgroundAlert(computer.Id, dto));
 
             return Ok();
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine("[INFO] Ingest: İstek istemci tarafından iptal edildi.");
-            return StatusCode(499); // Client Closed Request
         }
         catch (Exception ex)
         {
@@ -153,18 +153,28 @@ public sealed class AgentTelemetryController : ControllerBase
                     if (dto.RamUsage >= ramLimit)
                         alertReasons += $"* RAM: %{dto.RamUsage:F1} (Eşik: %{ramLimit})\n";
 
-                    // Disk Kontrol
+                    // AgentTelemetryController.cs içindeki HandleBackgroundAlert metodunun ilgili kısmı
+
+                    // Disk Kontrolü
                     var diskParts = dto.DiskUsage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     for (int i = 0; i < diskParts.Length; i += 2)
                     {
                         if (i + 1 < diskParts.Length)
                         {
-                            string diskName = diskParts[i].Replace(":", "");
+                            string diskNameWithColon = diskParts[i]; // Örn: "C:"
+                            string diskName = diskNameWithColon.Replace(":", "").Trim(); // Örn: "C"
                             string percentStr = diskParts[i + 1].Replace("%", "").Replace(",", ".");
-                            if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+
+                            if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double currentUsage))
                             {
-                                if (val >= diskLimit)
-                                    alertReasons += $"* Disk ({diskName}): %{val:F1} (Eşik: %{diskLimit})\n";
+                                // Diske özel eşik kontrolü: DiskThreshold_C gibi bir anahtar var mı?
+                                // Yoksa genel DiskThreshold değerini kullan.
+                                double specificLimit = alertingConfig.GetValue<double>($"DiskThreshold_{diskName}", diskLimit);
+
+                                if (currentUsage >= specificLimit)
+                                {
+                                    alertReasons += $"* Disk ({diskName}): %{currentUsage:F1} (Eşik: %{specificLimit})\n";
+                                }
                             }
                         }
                     }

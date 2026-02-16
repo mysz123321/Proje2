@@ -1,6 +1,7 @@
-﻿// Basit fetch wrapper: otomatik JSON, hata mesajı, auth header
+﻿// STAJ2/wwwroot/assets/js/api.js
 (function () {
     function getToken() {
+        // Auth.js veya Login.js ile tutarlı olduğundan emin olun
         return localStorage.getItem("staj2_token");
     }
 
@@ -18,7 +19,6 @@
 
         const contentType = res.headers.get("content-type") || "";
         const isJson = contentType.includes("application/json");
-
         const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => "");
 
         if (!res.ok) {
@@ -27,13 +27,14 @@
                     : `HTTP ${res.status}`;
             throw new Error(msg);
         }
-
         return data;
     }
 
+    // Bu nesnenin içinde 'put' anahtarı MUTLAKA olmalı
     window.api = {
         get: (path) => request(path),
         post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
+        put: (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) }),
         del: (path) => request(path, { method: "DELETE" })
     };
 })();

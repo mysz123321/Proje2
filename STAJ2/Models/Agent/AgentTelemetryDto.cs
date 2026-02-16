@@ -2,6 +2,8 @@
 
 public class AgentTelemetryDto
 {
+    public int ComputerId { get; set; } // Veritabanı ID'sini taşımak için eklendi
+    public string? DisplayName { get; set; }
     // 'required' anahtar kelimesi ile uyarıları siliyoruz
     public required string MacAddress { get; set; }
     public required string MachineName { get; set; }
