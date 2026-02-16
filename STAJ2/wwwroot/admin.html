@@ -226,11 +226,23 @@
                                 </td>
                             `;
 
+                        // admin.html içindeki ilgili kısım
                         tr.querySelector("[data-rename]").addEventListener("click", async () => {
-                            const newName = prompt("Yeni görünen ad:", a.displayName || "");
-                            if (newName !== null) {
-                                await api.put(endpoints.updateName, { id: a.computerId, newDisplayName: newName.trim() });
+                            // Mevcut displayName değerini (a.displayName) input'un içine varsayılan olarak yaz
+                            const currentDisplayName = a.displayName || a.machineName;
+                            const newName = prompt(`"${currentDisplayName}" için yeni bir takma ad girin:`, a.displayName || "");
+
+                            if (newName === null) return;
+
+                            try {
+                                await api.put(endpoints.updateName, {
+                                    id: a.computerId,
+                                    newDisplayName: newName.trim()
+                                });
+                                setMsg(agentMsg, "✅ Görünen ad güncellendi.", "success");
                                 loadAgents();
+                            } catch (e) {
+                                setMsg(agentMsg, "❌ Hata: " + e.message, "error");
                             }
                         });
 

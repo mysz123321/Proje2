@@ -6,7 +6,7 @@
 
     public string DiskName { get; set; } = null!; // Örn: "C:"
     public double TotalSizeGb { get; set; }
-    public double ThresholdPercent { get; set; } = 90.0; // Adminin belirlediği eşik
+    public double? ThresholdPercent { get; set; } // null olabilir
 
     public List<DiskMetric> DiskMetrics { get; set; } = new();
 }

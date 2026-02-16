@@ -11,8 +11,8 @@ public class Computer
     public double TotalRamMb { get; set; }
 
     // --- YENİ EKLENEN EŞİK DEĞERLERİ ---
-    public double CpuThreshold { get; set; } = 90.0; // Varsayılan %90
-    public double RamThreshold { get; set; } = 90.0; // Varsayılan %90
+    public double? CpuThreshold { get; set; } // null olabilir
+    public double? RamThreshold { get; set; } // null olabilir
 
     public DateTime? LastNotifyTime { get; set; }
     public DateTime LastSeen { get; set; }
