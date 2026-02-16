@@ -13,7 +13,7 @@ namespace STAJ2.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Yönetici")]
+[Authorize(Roles = "Yönetici")] // Yetki sorunu yaşarsan burayı geçici olarak yorum yap
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -27,269 +27,128 @@ public class AdminController : ControllerBase
         _config = config;
     }
 
-    [HttpGet("ping")]
-    public IActionResult Ping() => Ok(new { message = "Admin endpoint çalışıyor ✅" });
-
-    [HttpGet("requests")]
-    public async Task<IActionResult> PendingRequests()
+    // --- 1. BİLGİSAYAR DETAYI (Ayarlar Modal'ı İçin) ---
+    [HttpGet("computers/{id:int}")]
+    public async Task<IActionResult> GetComputer(int id)
     {
-        // DÜZELTME 1: _db.UserRegistrationRequests -> _db.RegistrationRequests
-        var list = await _db.RegistrationRequests
-            .Where(x => x.Status == RegistrationStatus.Pending)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new
-            {
-                x.Id,
-                x.Username,
-                x.Email,
-                x.CreatedAt
-            })
-            .ToListAsync();
+        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
+        if (computer == null) return NotFound("Bilgisayar bulunamadı.");
 
-        return Ok(list);
+        return Ok(new
+        {
+            computer.Id,
+            computer.CpuThreshold,
+            computer.RamThreshold,
+            Tags = computer.Tags.Select(t => new { t.Id, t.Name })
+        });
     }
-    [HttpPut("update-thresholds/{computerId}")]
+
+    // --- 2. DİSKLERİ GETİRME ---
+    [HttpGet("computers/{computerId:int}/disks")]
+    public async Task<IActionResult> GetComputerDisks(int computerId)
+    {
+        var disks = await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync();
+        return Ok(disks);
+    }
+
+    // --- 3. EŞİKLERİ GÜNCELLEME ---
+    [HttpPut("update-thresholds/{computerId:int}")]
     public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
     {
-        if (request.CpuThreshold < 0 || request.CpuThreshold > 100 ||
-        request.RamThreshold < 0 || request.RamThreshold > 100)
-        {
-            return BadRequest("Eşik değerleri 0 ile 100 arasında olmalıdır.");
-        }
-        if (request.DiskThresholds != null && request.DiskThresholds.Any(d => d.ThresholdPercent < 0 || d.ThresholdPercent > 100))
-        {
-            return BadRequest("Disk eşik değerleri 0 ile 100 arasında olmalıdır.");
-        }
-        var computer = await _db.Computers
-            .Include(c => c.Disks)
-            .FirstOrDefaultAsync(c => c.Id == computerId);
-
+        var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
         if (computer == null) return NotFound("Cihaz bulunamadı.");
 
-        // CPU ve RAM genel eşikleri
         computer.CpuThreshold = request.CpuThreshold;
         computer.RamThreshold = request.RamThreshold;
 
-        // Disk bazlı özel eşikler
         if (request.DiskThresholds != null)
         {
             foreach (var diskReq in request.DiskThresholds)
             {
                 var disk = computer.Disks.FirstOrDefault(d => d.DiskName == diskReq.DiskName);
-                if (disk != null)
-                {
-                    disk.ThresholdPercent = diskReq.ThresholdPercent;
-                }
+                if (disk != null) disk.ThresholdPercent = diskReq.ThresholdPercent;
             }
         }
-
         await _db.SaveChangesAsync();
-        return Ok(new { message = "Eşik değerleri başarıyla güncellendi." });
+        return Ok(new { message = "Güncellendi." });
     }
 
-    // --- YENİ: KULLANICI ROLÜNÜ DEĞİŞTİRME ---
-    [HttpPut("users/{userId}/change-role")]
-    public async Task<IActionResult> ChangeUserRole(int userId, [FromBody] ChangeRoleRequest request)
+    // --- 4. ETİKET YÖNETİMİ ---
+    [HttpGet("tags")]
+    public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
+
+    [HttpPost("tags")]
+    public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user == null) return NotFound("Kullanıcı bulunamadı.");
-
-        var roleExists = await _db.Roles.AnyAsync(r => r.Id == request.NewRoleId);
-        if (!roleExists) return BadRequest("Geçersiz rol seçimi.");
-
-        user.RoleId = request.NewRoleId;
+        if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("İsim boş olamaz.");
+        if (await _db.Tags.AnyAsync(t => t.Name == request.Name)) return BadRequest("Bu etiket zaten var.");
+        var tag = new Tag { Name = request.Name.Trim() };
+        _db.Tags.Add(tag);
         await _db.SaveChangesAsync();
-
-        return Ok(new { message = "Kullanıcı rolü başarıyla güncellendi." });
+        return Ok(tag);
     }
 
-    // --- YENİ: BİR BİLGİSAYARIN TÜM DİSKLERİNİ VE EŞİKLERİNİ GETİRME (Frontend için) ---
-    [HttpGet("computers/{computerId}/disks")]
-    public async Task<IActionResult> GetComputerDisks(int computerId)
+    [HttpDelete("tags/{id:int}")]
+    public async Task<IActionResult> DeleteTag(int id)
     {
-        var disks = await _db.ComputerDisks
-            .Where(d => d.ComputerId == computerId)
-            .Select(d => new {
-                d.DiskName,
-                d.TotalSizeGb,
-                d.ThresholdPercent
-            })
-            .ToListAsync();
-
-        return Ok(disks);
-    }
-    [HttpPost("approve/{id:int}")]
-    public async Task<IActionResult> Approve(int id, [FromBody] ApproveRequest body)
-    {
-        // DÜZELTME 2: _db.UserRegistrationRequests -> _db.RegistrationRequests
-        var rr = await _db.RegistrationRequests
-            .FirstOrDefaultAsync(x => x.Id == id);
-
-        if (rr == null) return NotFound("İstek bulunamadı.");
-        if (rr.Status != RegistrationStatus.Pending) return BadRequest("Bu istek zaten işlenmiş.");
-
-        // Rol doğrula (1/2/3)
-        var roleExists = await _db.Roles.AnyAsync(r => r.Id == body.RoleId);
-        if (!roleExists) return BadRequest("Geçersiz rol.");
-
-        rr.RequestedRoleId = body.RoleId;
-        rr.Status = RegistrationStatus.Approved;
-        rr.ApprovedAt = DateTime.UtcNow;
-
-        // Admin kim? (sub claim)
-        var adminIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(adminIdStr, out var adminId))
-            rr.ApprovedByUserId = adminId;
-
-        // Token üret (raw) + hash sakla
-        var rawToken = GenerateToken();
-        var tokenHash = Sha256(rawToken);
-
-        var tokenRow = new PasswordSetupToken
-        {
-            RegistrationRequestId = rr.Id,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddHours(24),
-            IsUsed = false
-        };
-
-        _db.PasswordSetupTokens.Add(tokenRow);
+        var tag = await _db.Tags.FindAsync(id);
+        if (tag == null) return NotFound();
+        _db.Tags.Remove(tag);
         await _db.SaveChangesAsync();
-
-        var baseUrl = _config.GetSection("App")["FrontendBaseUrl"] ?? "http://localhost:5267";
-        var link = $"{baseUrl}/set-password.html?token={rawToken}";
-
-        await _mail.SendAsync(
-            rr.Email,
-            "Hesabınız onaylandı - Şifre belirleme",
-            $"Merhaba ,\n\nŞifrenizi belirlemek için link:\n{link}\n\nNot: Link 24 saat geçerlidir."
-        );
-
-        return Ok(new { message = "Onaylandı ve şifre belirleme linki gönderildi (console).", expiresAt = tokenRow.ExpiresAt });
+        return Ok();
     }
 
-    [HttpPost("reject/{id:int}")]
-    public async Task<IActionResult> Reject(int id, [FromBody] RejectRequest body)
+    [HttpPut("computers/{computerId:int}/tags")]
+    public async Task<IActionResult> UpdateComputerTags(int computerId, [FromBody] List<int> tagIds)
     {
-        // DÜZELTME 3: _db.UserRegistrationRequests -> _db.RegistrationRequests
-        var rr = await _db.RegistrationRequests.FirstOrDefaultAsync(x => x.Id == id);
-
-        if (rr == null) return NotFound("İstek bulunamadı.");
-        if (rr.Status != RegistrationStatus.Pending) return BadRequest("Bu istek zaten işlenmiş.");
-
-        rr.Status = RegistrationStatus.Rejected;
-        rr.RejectedAt = DateTime.UtcNow;
-        rr.RejectionReason = string.IsNullOrWhiteSpace(body.Reason) ? null : body.Reason.Trim();
-
+        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == computerId);
+        if (computer == null) return NotFound();
+        computer.Tags = await _db.Tags.Where(t => tagIds.Contains(t.Id)).ToListAsync();
         await _db.SaveChangesAsync();
-        return Ok(new { message = "İstek reddedildi." });
+        return Ok();
     }
+
+    // --- DİĞER STANDART İŞLEMLER ---
+    [HttpGet("requests")]
+    public async Task<IActionResult> PendingRequests() => Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
 
     [HttpGet("users")]
-    public async Task<IActionResult> GetAllUsers()
-    {
-        var list = await _db.Users
-            .Include(u => u.Role)
-            .OrderBy(u => u.Username)
-            .Select(u => new
-            {
-                u.Id,
-                u.Username,
-                u.Email,
-                Role = u.Role.Name
-            })
-            .ToListAsync();
-
-        return Ok(list);
-    }
+    public async Task<IActionResult> GetAllUsers() => Ok(await _db.Users.Include(u => u.Role).Select(u => new { u.Id, u.Username, Role = u.Role.Name }).ToListAsync());
 
     [HttpDelete("users/{id:int}")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
-        if (user == null) return NotFound("Kullanıcı bulunamadı.");
-
-        // Kullanıcının kayıt isteğini de bul ve sil
-        var regRequest = await _db.RegistrationRequests.FirstOrDefaultAsync(x => x.Email == user.Email);
-        if (regRequest != null)
-        {
-            _db.RegistrationRequests.Remove(regRequest);
-        }
-
-        _db.Users.Remove(user);
-        await _db.SaveChangesAsync();
-
-        return Ok(new { message = "Kullanıcı ve kayıt geçmişi silindi." });
+        var user = await _db.Users.FindAsync(id);
+        if (user != null) { _db.Users.Remove(user); await _db.SaveChangesAsync(); }
+        return Ok();
     }
+
+    [HttpPut("users/{userId:int}/change-role")]
+    public async Task<IActionResult> ChangeUserRole(int userId, [FromBody] ChangeRoleRequest request)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user != null) { user.RoleId = request.NewRoleId; await _db.SaveChangesAsync(); }
+        return Ok();
+    }
+
     [HttpPut("update-display-name")]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
     {
-        // _context olan yerleri _db ile değiştiriyoruz
         var computer = await _db.Computers.FindAsync(request.Id);
-
-        if (computer == null) return NotFound("Bilgisayar bulunamadı.");
-
-        computer.DisplayName = request.NewDisplayName;
-
-        try
-        {
-            await _db.SaveChangesAsync(); // _context -> _db
-            return Ok(new { message = "Bilgisayar adı başarıyla güncellendi.", id = computer.Id });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"Hata: {ex.Message}");
-        }
-    }
-    private static string GenerateToken()
-    {
-        // 32 byte -> URL-safe token
-        var bytes = RandomNumberGenerator.GetBytes(32);
-        return Base64UrlEncode(bytes);
-    }
-
-    private static string Sha256(string input)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes); // 64 hex
-    }
-
-    private static string Base64UrlEncode(byte[] input)
-    {
-        return Convert.ToBase64String(input)
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .Replace("=", "");
+        if (computer != null) { computer.DisplayName = request.NewDisplayName; await _db.SaveChangesAsync(); }
+        return Ok();
     }
 }
-// AdminController.cs dosyasının sonuna ekleyin
-public class UpdateComputerNameRequest
-{
-    public int Id { get; set; }
-    public string NewDisplayName { get; set; }
-}
-public class ApproveRequest
-{
-    public int RoleId { get; set; } // 1/2/3
-}
+
+// --- TÜM DTO MODELLERİ ---
+public class TagCreateRequest { public string Name { get; set; } = null!; }
+public class UpdateComputerNameRequest { public int Id { get; set; } public string NewDisplayName { get; set; } = null!; }
+public class ApproveRequest { public int RoleId { get; set; } }
+public class ChangeRoleRequest { public int NewRoleId { get; set; } }
 public class UpdateThresholdsRequest
 {
-    public double CpuThreshold { get; set; }
-    public double RamThreshold { get; set; }
+    public double? CpuThreshold { get; set; }
+    public double? RamThreshold { get; set; }
     public List<DiskThresholdItem>? DiskThresholds { get; set; }
 }
-
-public class DiskThresholdItem
-{
-    public string DiskName { get; set; } = null!;
-    public double ThresholdPercent { get; set; }
-}
-
-public class ChangeRoleRequest
-{
-    public int NewRoleId { get; set; }
-}
-public class RejectRequest
-{
-    public string? Reason { get; set; }
-}
+public class DiskThresholdItem { public string DiskName { get; set; } = null!; public double? ThresholdPercent { get; set; } }

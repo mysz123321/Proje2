@@ -9,7 +9,7 @@ public class Computer
     public string? IpAddress { get; set; }
     public string? CpuModel { get; set; }
     public double TotalRamMb { get; set; }
-
+    public List<Tag> Tags { get; set; } = new();
     // --- YENİ EKLENEN EŞİK DEĞERLERİ ---
     public double? CpuThreshold { get; set; } // null olabilir
     public double? RamThreshold { get; set; } // null olabilir

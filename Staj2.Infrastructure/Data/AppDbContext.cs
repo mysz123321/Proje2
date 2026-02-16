@@ -18,12 +18,16 @@ namespace Staj2.Infrastructure.Data
         public DbSet<PasswordSetupToken> PasswordSetupTokens { get; set; }
         public DbSet<ComputerDisk> ComputerDisks { get; set; }
         public DbSet<DiskMetric> DiskMetrics { get; set; }
+        public DbSet<Tag> Tags { get; set; }
 
-        
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
+            //TAG
+            modelBuilder.Entity<Computer>()
+        .HasMany(c => c.Tags)
+        .WithMany(t => t.Computers)
+        .UsingEntity(j => j.ToTable("ComputerTags"));
             // --- 1. USER (Kullanıcı) ---
             modelBuilder.Entity<User>(entity =>
             {

@@ -1,45 +1,5 @@
-﻿// 1. API İsteği Fonksiyonu (İsim Güncelleme)
-async function updateComputerDisplayName(id, newName) {
-    const response = await fetch('/api/Admin/update-display-name', {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}` // Admin yetkisi için
-        },
-        body: JSON.stringify({
-            id: id,
-            newDisplayName: newName
-        })
-    });
+﻿// STAJ2/wwwroot/assets/js/agent-ui.js
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Güncelleme başarısız oldu.');
-    }
-
-    return await response.json();
-}
-
-// 2. Butona Tıklandığında Çalışacak İşlem
-async function handleRename(id, currentName) {
-    const newName = prompt(`"${currentName}" cihazı için yeni bir takma ad giriniz:`, currentName);
-
-    if (newName === null) return; // İptal edildi
-    if (newName.trim() === "") {
-        alert("İsim boş olamaz!");
-        return;
-    }
-
-    try {
-        await updateComputerDisplayName(id, newName.trim());
-        alert("Cihaz ismi başarıyla güncellendi.");
-        loadAgents(); // Tabloyu yenile
-    } catch (err) {
-        alert("Hata: " + err.message);
-    }
-}
-
-// 3. Tabloyu Yükleme Fonksiyonu
 async function loadAgents() {
     const tbody = document.getElementById("agentRows");
     if (!tbody) return;
@@ -51,43 +11,49 @@ async function loadAgents() {
         const agents = await res.json();
 
         if (!Array.isArray(agents) || agents.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center">Kayıtlı cihaz bulunamadı</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center">Kayıtlı cihaz bulunamadı</td></tr>`;
             return;
         }
 
         tbody.innerHTML = agents.map(a => {
-            // Backend'den gelen veriye göre (DiskUsage string formatındaydı)
-            const diskInfo = a.diskUsage || "-";
             const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
+            const deviceDisplayName = a.displayName || a.machineName || "-";
+            const ramInfo = `%${a.ramUsage?.toFixed(1) ?? "0"} (${a.totalRamMb?.toFixed(0) ?? "0"} MB)`;
 
-            // DisplayName varsa onu göster, yoksa MachineName kullan
-            const currentDisplayName = a.displayName || a.machineName || "-";
+            let diskCombined = "-";
+            if (a.diskUsage && a.totalDiskGb) {
+                const usageParts = a.diskUsage.split(' ').filter(x => x.length > 0);
+                const sizeParts = a.totalDiskGb.split(' ').filter(x => x.length > 0);
+
+                let disks = [];
+                for (let i = 0; i < usageParts.length; i += 2) {
+                    const label = usageParts[i]; // "C:"
+                    const usage = usageParts[i + 1]; // "%40.5"
+                    const sizeIdx = sizeParts.indexOf(label);
+                    const size = sizeIdx !== -1 ? sizeParts[sizeIdx + 1] : "?";
+
+                    // BURASI DEĞİŞTİ: Her diski bir div içine alıyoruz ki alt alta düzgün dursun
+                    disks.push(`<div style="margin-bottom: 2px;">${label} ${usage} (${parseFloat(size).toFixed(0)} GB)</div>`);
+                }
+                diskCombined = disks.join(''); // Artık div'ler kullandığımız için join boş kalabilir
+            }
 
             return `
                 <tr>
-                    <td>${a.macAddress ?? "-"}</td>
-                    <td>
-                        <strong>${currentDisplayName}</strong>
-                        <br/><small class="text-muted">${a.machineName ?? "-"}</small>
-                    </td>
-                    <td>${a.ip ?? "-"}</td>
-                    <td>%${a.cpuUsage ?? "0"}</td>
-                    <td>%${a.ramUsage ?? "0"}</td>
-                    <td><small>${diskInfo}</small></td>
-                    <td>${ts}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="handleRename(${a.computerId}, '${currentDisplayName}')">
-                            ✏️ İsim Değiştir
-                        </button>
-                    </td>
+                    <td style="vertical-align: middle;"><strong>${deviceDisplayName}</strong></td>
+                    <td style="vertical-align: middle;">${a.ip ?? "-"}</td>
+                    <td style="vertical-align: middle;">%${a.cpuUsage?.toFixed(1) ?? "0"}</td>
+                    <td style="vertical-align: middle;">${ramInfo}</td>
+                    <td style="vertical-align: middle; padding-top: 8px; padding-bottom: 8px;">${diskCombined}</td>
+                    <td style="vertical-align: middle;">${ts}</td>
                 </tr>
             `;
         }).join("");
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-danger">Hata: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-danger">Hata: ${e.message}</td></tr>`;
     }
 }
 
-// İlk yükleme ve periyodik yenileme
+// Periyodik yenileme
 loadAgents();
-setInterval(loadAgents, 5000);
+setInterval(loadAgents, 10000);

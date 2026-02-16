@@ -26,28 +26,34 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.6);
+            background: rgba(2, 6, 23, 0.85);
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 2000;
+            backdrop-filter: blur(8px);
         }
 
         .modal-content {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            width: 100%;
+            background: #0f172a !important;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 1.25rem;
+            padding: 2rem;
+            width: 95%;
             max-width: 500px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            color: #f8fafc !important;
         }
 
         .disk-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
+            background: rgba(30, 41, 59, 0.7) !important;
+            padding: 0.8rem;
+            border-radius: 0.75rem;
+            margin-bottom: 0.6rem;
+            border: 1px solid rgba(148, 163, 184, 0.1);
         }
 
         .form-group {
@@ -58,12 +64,15 @@
                 display: block;
                 margin-bottom: 5px;
                 font-weight: bold;
+                color: #9ca3af;
             }
 
         .small-select {
+            background: #1e293b;
+            color: white;
+            border: 1px solid #334155;
             padding: 4px;
             border-radius: 4px;
-            border: 1px solid #ccc;
         }
     </style>
 </head>
@@ -76,7 +85,6 @@
                     <div class="subtitle">Admin Paneli</div>
                 </div>
                 <div class="actions">
-                    <button class="btn ghost small" onclick="location.href='index.html'">← Dashboard</button>
                     <button class="btn ghost small" id="btnLogout">Çıkış</button>
                 </div>
             </div>
@@ -121,6 +129,17 @@
                     </table>
                 </section>
 
+                <section class="card">
+                    <div class="card-header">
+                        <h2>Etiket Yönetimi</h2>
+                    </div>
+                    <div class="form-group" style="display:flex; gap:10px;">
+                        <input type="text" id="newTagName" placeholder="Yeni etiket adı..." class="form-control" style="flex:1">
+                        <button onclick="createTag()" class="btn primary small">Ekle</button>
+                    </div>
+                    <div id="tagList" style="margin-top:15px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+                </section>
+
                 <section class="card muted">
                     <div class="card-header">
                         <h2>Sistemdeki Kullanıcılar</h2>
@@ -142,23 +161,27 @@
         </main>
     </div>
 
-    <div id="thresholdModal" class="modal" style="display:none;">
+    <div id="thresholdModal" class="modal">
         <div class="modal-content">
-            <h3 style="color: #38bdf8; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 10px;">⚙️ Cihaz Uyarı Sınırları</h3>
+            <h3 style="color: #38bdf8; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 10px;">⚙️ Cihaz Ayarları</h3>
             <input type="hidden" id="modalComputerId">
 
-            <div class="form-group" style="margin-top: 15px;">
-                <label style="color: #9ca3af;">CPU Eşik Değeri (%)</label>
-                <input type="number" id="cpuThresholdInput" class="form-control" min="0" max="100" style="background: #1e293b; color: white; border: 1px solid #334155;">
+            <div class="form-group">
+                <label>CPU Eşik Değeri (%)</label>
+                <input type="number" id="cpuThresholdInput" class="form-control" min="0" max="100">
             </div>
 
             <div class="form-group">
-                <label style="color: #9ca3af;">RAM Eşik Değeri (%)</label>
-                <input type="number" id="ramThresholdInput" class="form-control" min="0" max="100" style="background: #1e293b; color: white; border: 1px solid #334155;">
+                <label>RAM Eşik Değeri (%)</label>
+                <input type="number" id="ramThresholdInput" class="form-control" min="0" max="100">
             </div>
 
-            <div id="diskThresholdsContainer">
+            <div class="form-group">
+                <label>Cihaz Etiketleri</label>
+                <div id="computerTagsContainer" style="display:flex; flex-wrap:wrap; gap:8px; background:#1e293b; padding:10px; border-radius:8px;"></div>
             </div>
+
+            <div id="diskThresholdsContainer"></div>
 
             <div class="modal-buttons" style="margin-top: 20px; display: flex; gap: 10px;">
                 <button onclick="saveThresholds()" class="btn primary" style="flex: 1;">💾 Kaydet</button>
@@ -186,32 +209,28 @@
                 agents: "/api/agent-telemetry/latest",
                 updateName: "/api/Admin/update-display-name",
                 getDisks: (id) => `/api/Admin/computers/${id}/disks`,
-                updateThresholds: (id) => `/api/Admin/update-thresholds/${id}`
+                updateThresholds: (id) => `/api/Admin/update-thresholds/${id}`,
+                tags: "/api/Admin/tags",
+                updateComputerTags: (id) => `/api/Admin/computers/${id}/tags`,
+                getComputer: (id) => `/api/Admin/computers/${id}`
             };
 
-            const roles = [
-                { id: 1, name: "Yönetici" },
-                { id: 2, name: "Denetleyici" },
-                { id: 3, name: "Görüntüleyici" }
-            ];
-
-            // DOM Elements
-            const reqBody = document.getElementById("reqBody");
-            const userBody = document.getElementById("userBody");
+            const roles = [{ id: 1, name: "Yönetici" }, { id: 2, name: "Denetleyici" }, { id: 3, name: "Görüntüleyici" }];
             const agentBody = document.getElementById("agentBody");
+            const userBody = document.getElementById("userBody");
+            const reqBody = document.getElementById("reqBody");
 
             document.getElementById("btnLogout").addEventListener("click", () => {
                 auth.clearAuth();
                 window.location.href = "/login.html";
             });
 
-            // --- 1. CİHAZ LİSTESİ VE AYARLAR ---
+            // --- 1. CİHAZ LİSTESİ ---
             async function loadAgents() {
                 agentBody.innerHTML = "";
                 try {
                     const list = await api.get(endpoints.agents);
                     document.getElementById("agentCount").textContent = list.length;
-
                     list.forEach(a => {
                         const tr = document.createElement("tr");
                         tr.innerHTML = `
@@ -220,156 +239,166 @@
                                 <td><strong>${a.displayName || "-"}</strong></td>
                                 <td>
                                     <div class="actions">
-                                        <button class="btn small primary" data-rename>✏️ İsim</button>
-                                        <button class="btn small warning" data-settings>⚙️ Ayarlar</button>
+                                        <button class="btn small primary" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')">✏️</button>
+                                        <button class="btn small warning" onclick="openThresholdSettings(${a.computerId || 0})">⚙️</button>
                                     </div>
                                 </td>
                             `;
-
-                        // admin.html içindeki ilgili kısım
-                        tr.querySelector("[data-rename]").addEventListener("click", async () => {
-                            // Mevcut displayName değerini (a.displayName) input'un içine varsayılan olarak yaz
-                            const currentDisplayName = a.displayName || a.machineName;
-                            const newName = prompt(`"${currentDisplayName}" için yeni bir takma ad girin:`, a.displayName || "");
-
-                            if (newName === null) return;
-
-                            try {
-                                await api.put(endpoints.updateName, {
-                                    id: a.computerId,
-                                    newDisplayName: newName.trim()
-                                });
-                                setMsg(agentMsg, "✅ Görünen ad güncellendi.", "success");
-                                loadAgents();
-                            } catch (e) {
-                                setMsg(agentMsg, "❌ Hata: " + e.message, "error");
-                            }
-                        });
-
-                        tr.querySelector("[data-settings]").addEventListener("click", () => {
-                            openThresholdSettings(a.computerId);
-                        });
-
                         agentBody.appendChild(tr);
                     });
                 } catch (e) { console.error(e); }
             }
 
-            // Global Modal Fonksiyonları
+            window.handleRename = async (id, currentName) => {
+                const newName = prompt(`"${currentName}" için yeni takma ad:`, currentName);
+                if (newName) {
+                    await api.put(endpoints.updateName, { id: id, newDisplayName: newName.trim() });
+                    loadAgents();
+                }
+            };
+
+            // --- 2. MODAL & ETİKETLEME ---
             window.openThresholdSettings = async function (computerId) {
                 document.getElementById('modalComputerId').value = computerId;
                 try {
-                    const disks = await api.get(endpoints.getDisks(computerId));
-                    const container = document.getElementById('diskThresholdsContainer');
-                    container.innerHTML = '<h4 style="margin-top:15px">Disk Sınırları</h4>';
+                    // Verileri çek
+                    const [disks, allTags, computer] = await Promise.all([
+                        api.get(endpoints.getDisks(computerId)),
+                        api.get(endpoints.tags),
+                        api.get(endpoints.getComputer(computerId))
+                    ]);
 
+                    // Eşikleri doldur
+                    document.getElementById('cpuThresholdInput').value = computer.cpuThreshold;
+                    document.getElementById('ramThresholdInput').value = computer.ramThreshold;
+
+                    // Diskleri listele
+                    const dContainer = document.getElementById('diskThresholdsContainer');
+                    dContainer.innerHTML = '<h4 style="margin:15px 0 10px">Disk Sınırları</h4>';
                     disks.forEach(d => {
-                        container.innerHTML += `
-                                <div class="disk-row">
-                                    <span>${d.diskName} (${d.totalSizeGb.toFixed(1)} GB)</span>
-                                    <input type="number" class="disk-threshold-input small-select"
-                                           style="width:60px" data-name="${d.diskName}" value="${d.thresholdPercent}">
-                                </div>
-                            `;
+                        dContainer.innerHTML += `<div class="disk-row"><span>${d.diskName} (${d.totalSizeGb.toFixed(1)} GB)</span>
+                                <input type="number" class="disk-threshold-input small-select" style="width:60px" data-name="${d.diskName}" value="${d.thresholdPercent}"></div>`;
                     });
+
+                    // Etiketleri listele
+                    const tContainer = document.getElementById('computerTagsContainer');
+                    tContainer.innerHTML = allTags.map(t => {
+                        const isChecked = computer.tags && computer.tags.some(ct => ct.id === t.id);
+                        return `<label style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer">
+                                <input type="checkbox" class="tag-checkbox" value="${t.id}" ${isChecked ? 'checked' : ''}> ${t.name}</label>`;
+                    }).join("");
+
                     document.getElementById('thresholdModal').style.display = 'flex';
-                } catch (e) { alert("Diskler yüklenemedi."); }
+                } catch (e) { alert("Veriler yüklenemedi: " + e.message); }
+            };
+
+            window.saveThresholds = async function () {
+                const id = document.getElementById('modalComputerId').value;
+                const cpuVal = document.getElementById('cpuThresholdInput').value;
+                const ramVal = document.getElementById('ramThresholdInput').value;
+
+                const body = {
+                    cpuThreshold: cpuVal === "" ? null : parseFloat(cpuVal),
+                    ramThreshold: ramVal === "" ? null : parseFloat(ramVal),
+                    diskThresholds: Array.from(document.querySelectorAll('.disk-threshold-input')).map(i => ({
+                        diskName: i.dataset.name,
+                        thresholdPercent: i.value === "" ? null : parseFloat(i.value)
+                    }))
+                };
+
+                const selectedTagIds = Array.from(document.querySelectorAll('.tag-checkbox:checked')).map(cb => parseInt(cb.value));
+
+                try {
+                    await Promise.all([
+                        api.put(endpoints.updateThresholds(id), body),
+                        api.put(endpoints.updateComputerTags(id), selectedTagIds)
+                    ]);
+                    alert("Başarıyla kaydedildi.");
+                    closeModal();
+                    loadAgents();
+                } catch (e) { alert("Hata: " + e.message); }
             };
 
             window.closeModal = () => document.getElementById('thresholdModal').style.display = 'none';
 
-            window.saveThresholds = async function () {
-                const cpuVal = parseFloat(document.getElementById('cpuThresholdInput').value);
-                const ramVal = parseFloat(document.getElementById('ramThresholdInput').value);
+            // admin.html içindeki createTag fonksiyonunu bul ve değiştir:
+            // admin.html içindeki createTag fonksiyonu
+            window.createTag = async () => {
+                const nameInput = document.getElementById("newTagName");
+                const name = nameInput.value.trim();
+                if (!name) return;
 
-                if (cpuVal < 0 || cpuVal > 100) {
-                    alert("Lütfen 0-100 arası bir CPU değeri giriniz.");
-                    return;
-                }
-                if (ramVal < 0 || ramVal > 100) {
-                    alert("Lütfen 0-100 arası bir RAM değeri giriniz.");
-                    return;
-                }
-                const id = document.getElementById('modalComputerId').value;
-                const body = {
-                    cpuThreshold: parseFloat(document.getElementById('cpuThresholdInput').value) || 90,
-                    ramThreshold: parseFloat(document.getElementById('ramThresholdInput').value) || 90,
-                    diskThresholds: Array.from(document.querySelectorAll('.disk-threshold-input')).map(i => ({
-                        diskName: i.dataset.name,
-                        thresholdPercent: parseFloat(i.value)
-                    }))
-                };
                 try {
-                    await api.put(endpoints.updateThresholds(id), body);
-                    alert("Başarıyla kaydedildi.");
-                    closeModal();
-                } catch (e) { alert("Hata: " + e.message); }
+                    // ARTIK NESNE OLARAK GÖNDERİYORUZ: { name: "..." }
+                    await api.post(endpoints.tags, { name: name });
+                    nameInput.value = "";
+                    loadTags();
+                    alert("Etiket başarıyla eklendi.");
+                } catch (e) {
+                    alert("Hata: " + e.message);
+                }
             };
 
-            // --- 2. KULLANICI ROL YÖNETİMİ ---
-            async function loadUsers() {
-                userBody.innerHTML = "";
-                try {
-                    const list = await api.get(endpoints.users);
-                    document.getElementById("userCount").textContent = list.length;
+            window.deleteTag = async (id) => {
+                if (confirm("Bu etiketi silmek istediğine emin misin?")) {
+                    await api.del(`${endpoints.tags}/${id}`);
+                    loadTags();
+                }
+            };
 
-                    list.forEach(u => {
-                        const tr = document.createElement("tr");
-                        const roleOptions = roles.map(r => `<option value="${r.id}" ${u.role === r.name ? 'selected' : ''}>${r.name}</option>`).join("");
-
-                        tr.innerHTML = `
-                                <td>${u.username}</td>
-                                <td><select class="small-select" data-role-select>${roleOptions}</select></td>
-                                <td>
-                                    <div class="actions">
-                                        <button class="btn small primary" data-save-role>💾</button>
-                                        ${u.role !== "Yönetici" ? `<button class="btn small danger" data-del>🗑️</button>` : ""}
-                                    </div>
-                                </td>
-                            `;
-
-                        tr.querySelector("[data-save-role]").addEventListener("click", async () => {
-                            const newRoleId = tr.querySelector("[data-role-select]").value;
-                            await api.put(endpoints.changeRole(u.id), { newRoleId: parseInt(newRoleId) });
-                            alert("Rol güncellendi.");
-                            loadUsers();
-                        });
-
-                        const delBtn = tr.querySelector("[data-del]");
-                        if (delBtn) delBtn.addEventListener("click", async () => {
-                            if (confirm("Silinsin mi?")) { await api.del(endpoints.deleteUser(u.id)); loadUsers(); }
-                        });
-
-                        userBody.appendChild(tr);
-                    });
-                } catch (e) { console.error(e); }
+            async function loadTags() {
+                const tags = await api.get(endpoints.tags);
+                document.getElementById("tagList").innerHTML = tags.map(t =>
+                    `<span class="pill">${t.name} <small onclick="deleteTag(${t.id})" style="cursor:pointer; margin-left:5px; color:#f87171;">×</small></span>`
+                ).join("");
             }
 
-            // --- 3. KAYIT TALEPLERİ ---
+            // --- 4. KULLANICI & TALEP YÖNETİMİ ---
+            async function loadUsers() {
+                userBody.innerHTML = "";
+                const list = await api.get(endpoints.users);
+                document.getElementById("userCount").textContent = list.length;
+                list.forEach(u => {
+                    const tr = document.createElement("tr");
+                    const roleOptions = roles.map(r => `<option value="${r.id}" ${u.role === r.name ? 'selected' : ''}>${r.name}</option>`).join("");
+                    tr.innerHTML = `<td>${u.username}</td><td><select class="small-select" data-role-select>${roleOptions}</select></td>
+                            <td><div class="actions"><button class="btn small primary" onclick="updateUserRole(${u.id}, this)">💾</button>
+                            ${u.role !== "Yönetici" ? `<button class="btn small danger" onclick="deleteUser(${u.id})">🗑️</button>` : ""}</div></td>`;
+                    userBody.appendChild(tr);
+                });
+            }
+
+            window.updateUserRole = async (id, btn) => {
+                const roleId = btn.closest('tr').querySelector('[data-role-select]').value;
+                await api.put(endpoints.changeRole(id), { newRoleId: parseInt(roleId) });
+                alert("Rol güncellendi.");
+                loadUsers();
+            };
+
+            window.deleteUser = async (id) => {
+                if (confirm("Silinsin mi?")) { await api.del(endpoints.deleteUser(id)); loadUsers(); }
+            };
+
             async function loadRequests() {
                 reqBody.innerHTML = "";
                 const list = await api.get(endpoints.requests);
                 document.getElementById("pendingCount").textContent = list.length;
                 list.forEach(r => {
                     const tr = document.createElement("tr");
-                    tr.innerHTML = `
-                            <td>${r.username}</td>
-                            <td><select class="small-select" data-role>${roles.map(x => `<option value="${x.id}" ${x.id === 3 ? "selected" : ""}>${x.name}</option>`).join("")}</select></td>
-                            <td>
-                                <button class="btn small primary" data-approve>Onayla</button>
-                            </td>
-                        `;
-                    tr.querySelector("[data-approve]").addEventListener("click", async () => {
-                        const roleId = parseInt(tr.querySelector("[data-role]").value);
-                        await api.post(endpoints.approve(r.id), { roleId });
-                        loadRequests(); loadUsers();
-                    });
+                    tr.innerHTML = `<td>${r.username}</td><td><select class="small-select" data-role>${roles.map(x => `<option value="${x.id}" ${x.id === 3 ? "selected" : ""}>${x.name}</option>`).join("")}</select></td>
+                            <td><button class="btn small primary" onclick="approveReq(${r.id}, this)">Onayla</button></td>`;
                     reqBody.appendChild(tr);
                 });
             }
 
+            window.approveReq = async (id, btn) => {
+                const roleId = btn.closest('tr').querySelector('[data-role]').value;
+                await api.post(endpoints.approve(id), { roleId: parseInt(roleId) });
+                loadRequests(); loadUsers();
+            };
+
             // Init
-            loadRequests(); loadUsers(); loadAgents();
+            loadRequests(); loadUsers(); loadAgents(); loadTags();
         })();
     </script>
 </body>

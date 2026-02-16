@@ -142,10 +142,11 @@ public sealed class AgentTelemetryController : ControllerBase
             await _context.SaveChangesAsync(ct);
 
             // Cache ve Alert işlemleri...
-            dto.ComputerId = computer.Id;
+            dto.ComputerId = computer.Id; // ÖNEMLİ: ID'yi DTO'ya geri yaz
+            dto.DisplayName = computer.DisplayName;
+
             lock (_latestData) { _latestData[dto.MacAddress] = dto; }
             _ = Task.Run(() => HandleBackgroundAlert(computer.Id, dto));
-
             return Ok();
         }
         catch (Exception ex)
