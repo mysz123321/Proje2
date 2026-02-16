@@ -96,7 +96,7 @@ public sealed class AgentTelemetryController : ControllerBase
                             ComputerId = computer.Id,
                             DiskName = dName,
                             TotalSizeGb = dSize,
-                            ThresholdPercent = 90.0 // Varsayılan eşik
+                            ThresholdPercent = null // Varsayılan eşik
                         });
                     }
                 }

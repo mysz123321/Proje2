@@ -1,18 +1,18 @@
 {
   "runtimeTarget": {
-    "name": ".NETCoreApp,Version=v9.0/win-x64",
+    "name": ".NETCoreApp,Version=v9.0",
     "signature": ""
   },
   "compilationOptions": {},
   "targets": {
-    ".NETCoreApp,Version=v9.0": {},
-    ".NETCoreApp,Version=v9.0/win-x64": {
+    ".NETCoreApp,Version=v9.0": {
       "Staj2.Agent/1.0.0": {
         "dependencies": {
           "Microsoft.Extensions.Hosting": "9.0.12",
           "Microsoft.Extensions.Hosting.WindowsServices": "9.0.12",
           "Microsoft.Extensions.Http": "9.0.12",
-          "System.Diagnostics.PerformanceCounter": "10.0.3"
+          "System.Diagnostics.PerformanceCounter": "10.0.3",
+          "System.Management": "10.0.3"
         },
         "runtime": {
           "Staj2.Agent.dll": {}
@@ -406,6 +406,14 @@
           }
         }
       },
+      "System.CodeDom/10.0.3": {
+        "runtime": {
+          "lib/net9.0/System.CodeDom.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
       "System.Configuration.ConfigurationManager/10.0.3": {
         "dependencies": {
           "System.Diagnostics.EventLog": "10.0.3",
@@ -420,11 +428,21 @@
       },
       "System.Diagnostics.EventLog/10.0.3": {
         "runtime": {
+          "lib/net9.0/System.Diagnostics.EventLog.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        },
+        "runtimeTargets": {
           "runtimes/win/lib/net9.0/System.Diagnostics.EventLog.Messages.dll": {
+            "rid": "win",
+            "assetType": "runtime",
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "0.0.0.0"
           },
           "runtimes/win/lib/net9.0/System.Diagnostics.EventLog.dll": {
+            "rid": "win",
+            "assetType": "runtime",
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.326.7603"
           }
@@ -436,8 +454,35 @@
           "System.Threading.AccessControl": "10.0.3"
         },
         "runtime": {
-          "runtimes/win/lib/net9.0/System.Diagnostics.PerformanceCounter.dll": {
+          "lib/net9.0/System.Diagnostics.PerformanceCounter.dll": {
             "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net9.0/System.Diagnostics.PerformanceCounter.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
+      "System.Management/10.0.3": {
+        "dependencies": {
+          "System.CodeDom": "10.0.3"
+        },
+        "runtime": {
+          "lib/net9.0/System.Management.dll": {
+            "assemblyVersion": "10.0.0.3",
+            "fileVersion": "10.0.326.7603"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net9.0/System.Management.dll": {
+            "rid": "win",
+            "assetType": "runtime",
+            "assemblyVersion": "10.0.0.3",
             "fileVersion": "10.0.326.7603"
           }
         }
@@ -455,7 +500,15 @@
           "System.Diagnostics.EventLog": "10.0.3"
         },
         "runtime": {
+          "lib/net9.0/System.ServiceProcess.ServiceController.dll": {
+            "assemblyVersion": "9.0.0.12",
+            "fileVersion": "9.0.1225.60609"
+          }
+        },
+        "runtimeTargets": {
           "runtimes/win/lib/net9.0/System.ServiceProcess.ServiceController.dll": {
+            "rid": "win",
+            "assetType": "runtime",
             "assemblyVersion": "9.0.0.12",
             "fileVersion": "9.0.1225.60609"
           }
@@ -463,7 +516,15 @@
       },
       "System.Threading.AccessControl/10.0.3": {
         "runtime": {
+          "lib/net9.0/System.Threading.AccessControl.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        },
+        "runtimeTargets": {
           "runtimes/win/lib/net9.0/System.Threading.AccessControl.dll": {
+            "rid": "win",
+            "assetType": "runtime",
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.326.7603"
           }
@@ -680,6 +741,13 @@
       "path": "microsoft.extensions.primitives/9.0.12",
       "hashPath": "microsoft.extensions.primitives.9.0.12.nupkg.sha512"
     },
+    "System.CodeDom/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-+G1mBhHJp8taiDcHK1gmckOZ884n9JeIrS1dzFYZhSa8oTiIF+EagIyAyCOQzdBbbES7eb9AkjGBlUZqqoCaeg==",
+      "path": "system.codedom/10.0.3",
+      "hashPath": "system.codedom.10.0.3.nupkg.sha512"
+    },
     "System.Configuration.ConfigurationManager/10.0.3": {
       "type": "package",
       "serviceable": true,
@@ -700,6 +768,13 @@
       "sha512": "sha512-pQHdkk3QNDYRsNzWVUIamlTiHb3/I50PxGXMRaEqiLmUe+FkInuMj92lCOhvTT6KbLlnMWGRgZq1rDaMJdQixw==",
       "path": "system.diagnostics.performancecounter/10.0.3",
       "hashPath": "system.diagnostics.performancecounter.10.0.3.nupkg.sha512"
+    },
+    "System.Management/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-VyK/nnG1ZgwP/wY8HGrNrdha7kenyI+bkfE0miywiRaWVwqtenuYshA6pmP6Xm7lPsTE2ZRZ+BkzmUVg/VZtTg==",
+      "path": "system.management/10.0.3",
+      "hashPath": "system.management.10.0.3.nupkg.sha512"
     },
     "System.Security.Cryptography.ProtectedData/10.0.3": {
       "type": "package",
