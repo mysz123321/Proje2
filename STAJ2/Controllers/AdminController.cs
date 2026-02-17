@@ -3,51 +3,70 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
-using STAJ2.Services;
-using STAJ2.Models.Agent;
+using STAJ2.Models; // Modelleri görmek için bunu ekledik
 
 namespace STAJ2.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Yönetici")]
+[Authorize(Roles = "Yönetici")] // Sadece Yönetici
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     public AdminController(AppDbContext db) { _db = db; }
 
-    [HttpGet("computers/{id:int}")]
-    public async Task<IActionResult> GetComputer(int id)
+    // --- KULLANICI YÖNETİMİ ---
+
+    [HttpGet("users")]
+    public async Task<IActionResult> GetAllUsers() =>
+        Ok(await _db.Users.Include(u => u.Roles)
+                          .OrderBy(u => u.Username)
+                          .Select(u => new { u.Id, u.Username, u.Email, Roles = u.Roles.Select(r => r.Name).ToList() })
+                          .ToListAsync());
+
+    [HttpDelete("users/{id:int}")]
+    public async Task<IActionResult> DeleteUser(int id)
     {
-        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
-        if (computer == null) return NotFound();
-        return Ok(new { computer.Id, computer.CpuThreshold, computer.RamThreshold, Tags = computer.Tags.Select(t => t.Name) });
+        var user = await _db.Users.FindAsync(id);
+        if (user != null) { _db.Users.Remove(user); await _db.SaveChangesAsync(); }
+        return Ok();
     }
 
-    [HttpGet("computers/{computerId:int}/disks")]
-    public async Task<IActionResult> GetComputerDisks(int computerId) => Ok(await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync());
-
-    [HttpPut("update-thresholds/{computerId:int}")]
-    public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
+    [HttpPut("users/{userId}/change-roles")]
+    public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
-        var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
-        if (computer == null) return NotFound();
-        computer.CpuThreshold = request.CpuThreshold;
-        computer.RamThreshold = request.RamThreshold;
-        if (request.DiskThresholds != null)
-        {
-            foreach (var dReq in request.DiskThresholds)
-            {
-                var disk = computer.Disks.FirstOrDefault(d => d.DiskName == dReq.DiskName);
-                if (disk != null) disk.ThresholdPercent = dReq.ThresholdPercent;
-            }
-        }
+        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
+        if (user == null) return NotFound();
+
+        var newRoles = await _db.Roles.Where(r => request.NewRoleIds.Contains(r.Id)).ToListAsync();
+        if (newRoles.Count == 0) return BadRequest("En az bir geçerli rol seçilmelidir.");
+
+        user.Roles.Clear();
+        foreach (var role in newRoles) user.Roles.Add(role);
+
         await _db.SaveChangesAsync();
         return Ok();
     }
 
+    // --- KAYIT İSTEKLERİ ---
+
+    [HttpGet("requests")]
+    public async Task<IActionResult> PendingRequests() =>
+        Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
+
+    // Onaylama (Approve) metodu buraya eklenebilir.
+    [HttpPost("approve/{id}")]
+    public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest req)
+    {
+        // Buraya onaylama mantığı (User oluşturma vb.) gelecek.
+        // Eğer RegistrationController'da varsa buraya gerek yok, ama admin panelinden çağrılıyorsa burada olmalı.
+        return Ok();
+    }
+
+    // --- ETİKET YÖNETİMİ (Sadece Oluşturma ve Silme) ---
+
     [HttpGet("tags")]
-    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")]
+    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")] // Herkes etiketleri görebilir
     public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
 
     [HttpPost("tags")]
@@ -55,6 +74,7 @@ public class AdminController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("İsim boş olamaz.");
         if (await _db.Tags.AnyAsync(t => t.Name == request.Name)) return BadRequest("Bu etiket zaten var.");
+
         var tag = new Tag { Name = request.Name.Trim() };
         _db.Tags.Add(tag);
         await _db.SaveChangesAsync();
@@ -70,67 +90,4 @@ public class AdminController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok();
     }
-
-    // --- CİHAZ ETİKETLERİNİ GÜNCELLEME ---
-    [HttpPut("computers/{id}/tags")]
-    public async Task<IActionResult> UpdateComputerTags(int id, [FromBody] UpdateComputerTagsRequest request)
-    {
-        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
-        if (computer == null) return NotFound();
-        var newTags = await _db.Tags.Where(t => request.Tags.Contains(t.Name)).ToListAsync();
-        computer.Tags.Clear();
-        foreach (var tag in newTags) computer.Tags.Add(tag);
-        await _db.SaveChangesAsync();
-        return Ok();
-    }
-
-    [HttpGet("requests")]
-    public async Task<IActionResult> PendingRequests() => Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
-
-    [HttpGet("users")]
-    public async Task<IActionResult> GetAllUsers() => Ok(await _db.Users.Include(u => u.Roles).OrderBy(u => u.Username).Select(u => new { u.Id, u.Username, u.Email, Roles = u.Roles.Select(r => r.Name).ToList() }).ToListAsync());
-
-    [HttpDelete("users/{id:int}")]
-    public async Task<IActionResult> DeleteUser(int id)
-    {
-        var user = await _db.Users.FindAsync(id);
-        if (user != null) { _db.Users.Remove(user); await _db.SaveChangesAsync(); }
-        return Ok();
-    }
-
-    [HttpPut("users/{userId}/change-roles")] // İsim çoğul yapıldı
-    public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
-    {
-        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
-        if (user == null) return NotFound();
-
-        // Veritabanındaki geçerli rolleri çekiyoruz
-        var newRoles = await _db.Roles.Where(r => request.NewRoleIds.Contains(r.Id)).ToListAsync();
-
-        if (newRoles.Count == 0) return BadRequest("En az bir geçerli rol seçilmelidir.");
-
-        user.Roles.Clear(); // Mevcut tüm rolleri sil
-        foreach (var role in newRoles)
-        {
-            user.Roles.Add(role); // Yeni seçilen tüm rolleri ekle
-        }
-
-        await _db.SaveChangesAsync();
-        return Ok();
-    }
-
-    [HttpPut("update-display-name")]
-    public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
-    {
-        var computer = await _db.Computers.FindAsync(request.Id);
-        if (computer != null) { computer.DisplayName = request.NewDisplayName; await _db.SaveChangesAsync(); }
-        return Ok();
-    }
 }
-public class ChangeRolesRequest { public List<int> NewRoleIds { get; set; } = new(); }
-public class TagCreateRequest { public string Name { get; set; } = null!; }
-public class UpdateComputerNameRequest { public int Id { get; set; } public string NewDisplayName { get; set; } = null!; }
-public class ChangeRoleRequest { public int NewRoleId { get; set; } }
-public class UpdateThresholdsRequest { public double? CpuThreshold { get; set; } public double? RamThreshold { get; set; } public List<DiskThresholdItem>? DiskThresholds { get; set; } }
-public class DiskThresholdItem { public string DiskName { get; set; } = null!; public double? ThresholdPercent { get; set; } }
-public class UpdateComputerTagsRequest { public List<string> Tags { get; set; } = new(); }

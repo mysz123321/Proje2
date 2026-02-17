@@ -12,6 +12,9 @@ let tagsModalInstance = null;
 
 window.loadAgents = async function () {
     try {
+        // Tablo yoksa işlem yapma (Başka bir sayfada olabiliriz)
+        if (!document.getElementById("agentRows")) return;
+
         const res = await fetch("/api/agent-telemetry/latest?_=" + new Date().getTime(), {
             cache: "no-store",
             headers: auth.getAuthHeaders()
@@ -38,7 +41,7 @@ window.loadFilterTags = async function () {
         const $select = $('#tagSelect');
         $select.empty();
         tags.forEach(t => { $select.append(new Option(t.name, t.name, false, false)); });
-        $select.trigger('change');
+        $select.trigger('change'); // Select2 güncellensin
     } catch (e) { console.error("Filtreler yüklenemedi", e); }
 };
 
@@ -48,7 +51,8 @@ function renderTable() {
     const tbody = document.getElementById("agentRows");
     if (!tbody) return;
 
-    const isAdmin = auth.hasRole("Yönetici");
+    // YETKİ KONTROLÜ: Yönetici VEYA Denetleyici düzenleme yapabilir
+    const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
 
     // Filtreleme
     const filtered = selectedTags.length === 0
@@ -70,8 +74,8 @@ function renderTable() {
 
         const safeName = (a.displayName || a.machineName || "").replace(/'/g, "\\'");
 
-        // YÖNETİCİ BUTONLARI (3'lü Grup)
-        const actionButtons = isAdmin ? `
+        // BUTONLAR (canEdit true ise görünür)
+        const actionButtons = canEdit ? `
             <div class="btn-group btn-group-sm" role="group">
                 <button class="btn btn-outline-warning text-white" onclick="openRenameModal(${a.computerId}, '${safeName}')" title="İsim Değiştir">
                     <i class="bi bi-pencil"></i>
@@ -135,7 +139,8 @@ window.saveComputerName = async function () {
     if (!newName) return alert("İsim boş olamaz.");
 
     try {
-        await api.put("/api/Admin/update-display-name", { id: parseInt(id), newDisplayName: newName });
+        // GÜNCEL ENDPOINT: ComputerController
+        await api.put("/api/Computer/update-display-name", { id: parseInt(id), newDisplayName: newName });
         renameModalInstance.hide();
         loadAgents();
     } catch (e) { alert(e.message); }
@@ -150,9 +155,9 @@ window.openTagsModal = async function (computerId) {
         if (tagsModalInstance) tagsModalInstance.dispose();
         tagsModalInstance = new bootstrap.Modal(el);
 
-        // Verileri Çek
+        // GÜNCEL ENDPOINT: ComputerController
         const [details, allTags] = await Promise.all([
-            api.get(`/api/Admin/computers/${computerId}`),
+            api.get(`/api/Computer/${computerId}`), // /api/Computer/{id} -> Detay
             api.get("/api/Users/tags")
         ]);
 
@@ -164,7 +169,6 @@ window.openTagsModal = async function (computerId) {
             $select.append(new Option(t.name, t.name, isSelected, isSelected));
         });
 
-        // Select2 Başlat (Dropdown Parent ÖNEMLİ)
         $select.select2({
             dropdownParent: $('#tagsModal'),
             width: '100%',
@@ -180,7 +184,8 @@ window.saveTags = async function () {
     const tags = $('#modalTagSelect').val() || [];
 
     try {
-        await api.put(`/api/Admin/computers/${id}/tags`, { tags: tags });
+        // GÜNCEL ENDPOINT: ComputerController
+        await api.put(`/api/Computer/${id}/tags`, { tags: tags });
         tagsModalInstance.hide();
         loadAgents();
         alert("✅ Etiketler güncellendi.");
@@ -196,9 +201,10 @@ window.openThresholdSettings = async function (computerId) {
         if (thresholdModalInstance) thresholdModalInstance.dispose();
         thresholdModalInstance = new bootstrap.Modal(el);
 
+        // GÜNCEL ENDPOINTLER: ComputerController
         const [disks, details] = await Promise.all([
-            api.get(`/api/Admin/computers/${computerId}/disks`),
-            api.get(`/api/Admin/computers/${computerId}`)
+            api.get(`/api/Computer/${computerId}/disks`), // /api/Computer/{id}/disks
+            api.get(`/api/Computer/${computerId}`)        // /api/Computer/{id}
         ]);
 
         document.getElementById('cpuThresholdInput').value = details.cpuThreshold || "";
@@ -245,7 +251,8 @@ window.saveThresholdsWithValidation = async function () {
     });
 
     try {
-        await api.put(`/api/Admin/update-thresholds/${id}`, {
+        // GÜNCEL ENDPOINT: ComputerController
+        await api.put(`/api/Computer/update-thresholds/${id}`, {
             cpuThreshold: cpu ? parseFloat(cpu) : null,
             ramThreshold: ram ? parseFloat(ram) : null,
             diskThresholds: disks
@@ -258,9 +265,11 @@ window.saveThresholdsWithValidation = async function () {
 
 // --- BAŞLAT ---
 $(document).ready(function () {
-    if (document.getElementById('agentRows')) {
+    if (document.getElementById('tagSelect')) {
         loadFilterTags();
-        loadAgents();
-        setInterval(loadAgents, 10000);
     }
+
+    // agentRows elementinin varlığı loadAgents içinde kontrol edildiği için
+    // interval'i güvenle başlatabiliriz.
+    setInterval(loadAgents, 10000);
 });

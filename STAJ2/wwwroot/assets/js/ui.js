@@ -60,6 +60,9 @@
 
         content.innerHTML = `<div class="d-flex justify-content-center p-5"><div class="spinner-border text-info" role="status"></div></div>`;
 
+        // DÜZELTME BURADA: Denetleyici de düzenleme yapabildiği için başlığı görmeli
+        const canEdit = auth.hasRole('Yönetici') || auth.hasRole('Denetleyici');
+
         switch (view) {
             case 'computers':
                 title.innerText = "Bilgisayarlar";
@@ -76,13 +79,14 @@
                                         <th>RAM</th>
                                         <th>Diskler</th>
                                         <th>Güncelleme</th>
-                                        ${auth.hasRole('Yönetici') ? '<th>İşlemler</th>' : ''}
+                                        ${canEdit ? '<th>İşlemler</th>' : ''} 
                                     </tr>
                                 </thead>
                                 <tbody id="agentRows" class="text-light"></tbody>
                             </table>
                         </div>
                     </div>`;
+                // Not: loadAgents fonksiyonu agent-ui.js içindedir, yüklü olduğundan emin olunur.
                 if (window.loadAgents) loadAgents();
                 break;
             case 'requests':
@@ -103,7 +107,7 @@
         }
     }
 
-    // --- Alt Görünümler (Renk düzeltmeleri yapıldı) ---
+    // --- Alt Görünümler ---
 
     async function loadRequestsView(container) {
         try {
@@ -194,7 +198,6 @@
             ui.switchView('requests');
         },
         updateUserRoles: async (userId) => {
-            // Checkbox toplama mantığını düzeltiyoruz: name veya class kullanmak yerine container içinden bulalım
             const container = document.querySelector(`.user-role-group-${userId}`);
             const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
             const roleIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
