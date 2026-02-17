@@ -260,10 +260,7 @@ public sealed class AgentTelemetryController : ControllerBase
     public async Task<IActionResult> Latest()
     {
         List<AgentTelemetryDto> list;
-        lock (_latestData)
-        {
-            list = _latestData.Values.OrderByDescending(x => x.Ts).ToList();
-        }
+        lock (_latestData) { list = _latestData.Values.OrderByDescending(x => x.Ts).ToList(); }
 
         var macs = list.Select(x => x.MacAddress).ToList();
         var computers = await _context.Computers.Include(c => c.Tags).Where(c => macs.Contains(c.MacAddress)).ToListAsync();
@@ -275,8 +272,7 @@ public sealed class AgentTelemetryController : ControllerBase
             {
                 dto.ComputerId = comp.Id;
                 dto.DisplayName = comp.DisplayName;
-                // ETİKETLERİ DTO'YA AKTAR
-                dto.Tags = comp.Tags.Select(t => t.Name).ToList();
+                dto.Tags = comp.Tags.Select(t => t.Name).ToList(); // Etiketleri aktar
             }
         }
         return Ok(list);

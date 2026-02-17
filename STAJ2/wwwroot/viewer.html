@@ -5,6 +5,32 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>STAJ2 - Görüntüleyici</title>
     <link rel="stylesheet" href="/assets/css/app.css" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        /* Dark mode için Select2 stil düzenlemesi */
+        .select2-container--default .select2-selection--multiple {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+        }
+
+        .select2-dropdown {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #38bdf8;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #38bdf8;
+            border: none;
+            color: #0f172a;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
     <div class="app-shell">
@@ -14,15 +40,10 @@
                     <h1>Staj Monitoring Sistemi</h1>
                     <div class="subtitle">Görüntüleyici Paneli</div>
                 </div>
-                <div class="actions">
-                    <div id="filterWrapper" style="position: relative; margin-right: 10px;">
-                        <button class="btn ghost small" onclick="toggleFilter()">🔍 Etiketle Filtrele</button>
-                        <div id="tagFilterDropdown" class="card" style="display:none; position:absolute; right:0; top:40px; z-index:100; min-width:200px; padding:15px; max-height:300px; overflow-y:auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-                            <div id="tagCheckboxes">
-                                <small class="muted-text">Etiketler yükleniyor...</small>
-                            </div>
-                        </div>
-                    </div>
+                <div class="actions" style="display: flex; align-items: center; gap: 10px;">
+                    <select id="tagSelect" multiple="multiple" style="width: 300px;">
+                    </select>
+                    <button class="btn primary small" onclick="applyFilter()">Filtrele</button>
                     <button class="btn ghost small" id="btnLogout">Çıkış</button>
                 </div>
             </div>
@@ -33,7 +54,6 @@
                 <div class="card-header">
                     <h2>Canlı Sistem Bilgileri</h2>
                 </div>
-
                 <table>
                     <thead>
                         <tr>
@@ -53,6 +73,9 @@
         </main>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
     <script src="/assets/js/config.js"></script>
     <script src="/assets/js/api.js"></script>
     <script src="/assets/js/auth.js"></script>
@@ -65,6 +88,14 @@
             document.getElementById("btnLogout").addEventListener("click", () => {
                 auth.clearAuth();
                 window.location.href = "/login.html";
+            });
+
+            // Select2 Başlatma
+            $(document).ready(function () {
+                $('#tagSelect').select2({
+                    placeholder: "Etiket seçin veya arayın...",
+                    allowClear: true
+                });
             });
         })();
     </script>

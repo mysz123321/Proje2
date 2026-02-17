@@ -27,7 +27,6 @@ public class UsersController : ControllerBase
     [HttpGet("tags")]
     public async Task<IActionResult> GetTags()
     {
-        var tags = await _db.Tags.OrderBy(t => t.Name).Select(t => new { t.Id, t.Name }).ToListAsync();
-        return Ok(tags);
+        return Ok(await _db.Tags.OrderBy(t => t.Name).Select(t => new { t.Id, t.Name }).ToListAsync());
     }
 }

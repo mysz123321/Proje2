@@ -3,55 +3,38 @@
 let selectedTags = [];
 let allAgents = [];
 
-// Filtre menüsünü aç/kapat
-window.toggleFilter = () => {
-    const dropdown = document.getElementById("tagFilterDropdown");
-    if (dropdown) {
-        dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
-    }
+// Filtrele butonuna basınca çalışacak fonksiyon
+window.applyFilter = () => {
+    // Select2'deki seçili değerleri alıyoruz
+    selectedTags = $('#tagSelect').val() || [];
+    renderTable(); // Tabloyu "VE" mantığıyla yeniden çiz
 };
 
-// Etiketleri UsersController üzerinden çek ve checkboxları oluştur
+// Etiketleri Select2 içine doldurma
 async function loadFilterTags() {
     try {
         const tags = await api.get("/api/Users/tags");
-        const container = document.getElementById("tagCheckboxes");
-        if (!container) return;
+        const select = document.getElementById("tagSelect");
+        if (!select) return;
 
-        if (!tags || tags.length === 0) {
-            container.innerHTML = '<small class="muted-text">Etiket bulunamadı.</small>';
-            return;
-        }
+        tags.forEach(t => {
+            const option = document.createElement("option");
+            option.value = t.name;
+            option.textContent = t.name;
+            select.appendChild(option);
+        });
 
-        container.innerHTML = tags.map(t => `
-            <label style="display:flex; align-items:center; gap:10px; margin-bottom:8px; cursor:pointer; font-size:0.9rem; color:#e5e7eb;">
-                <input type="checkbox" value="${t.name}" onchange="handleTagFilter(this)" style="width:16px; height:16px;">
-                ${t.name}
-            </label>
-        `).join("");
-    } catch (e) {
-        console.error("Etiketler yüklenemedi", e);
-        const container = document.getElementById("tagCheckboxes");
-        if (container) container.innerHTML = '<small class="text-danger">Etiketler yüklenemedi.</small>';
-    }
+        // Veriler dolduktan sonra Select2'yi tazele
+        $('#tagSelect').trigger('change');
+    } catch (e) { console.error("Etiket yükleme hatası", e); }
 }
-
-// Seçili etiketleri güncelle ve tabloyu yeniden çiz
-window.handleTagFilter = (cb) => {
-    if (cb.checked) {
-        selectedTags.push(cb.value);
-    } else {
-        selectedTags = selectedTags.filter(t => t !== cb.value);
-    }
-    renderTable();
-};
 
 async function loadAgents() {
     try {
         const res = await fetch("/api/agent-telemetry/latest", { cache: "no-store" });
         if (!res.ok) throw new Error("HTTP " + res.status);
         allAgents = await res.json();
-        renderTable();
+        renderTable(); // Tabloyu çiz (Filtre varsa ona göre çizer)
     } catch (e) {
         const tbody = document.getElementById("agentRows");
         if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-danger">Hata: ${e.message}</td></tr>`;
@@ -62,25 +45,21 @@ function renderTable() {
     const tbody = document.getElementById("agentRows");
     if (!tbody) return;
 
-    // 1. Filtreleme Mantığı
+    // --- "VE" (AND) MANTIĞI: Seçilen tüm etiketlerin cihazda olması lazım ---
     const filteredAgents = selectedTags.length === 0
         ? allAgents
-        : allAgents.filter(a => a.tags && a.tags.some(t => selectedTags.includes(t)));
+        : allAgents.filter(a => selectedTags.every(t => a.tags && a.tags.includes(t)));
 
     if (filteredAgents.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center muted-text" style="padding:20px;">Filtreye uygun cihaz bulunamadı.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center muted-text" style="padding:20px;">Seçilen tüm kriterlere uyan cihaz bulunamadı.</td></tr>`;
         return;
     }
 
-    // 2. Tabloyu Doldurma (Özel formatların korunduğu kısım)
     tbody.innerHTML = filteredAgents.map(a => {
         const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
         const deviceDisplayName = a.displayName || a.machineName || "-";
-
-        // RAM Formatı: %Usage (Total MB)
         const ramInfo = `%${a.ramUsage?.toFixed(1) ?? "0"} (${a.totalRamMb?.toFixed(0) ?? "0"} MB)`;
 
-        // Disk Formatı: Alt alta divler
         let diskCombined = "-";
         if (a.diskUsage && a.totalDiskGb) {
             const usageParts = a.diskUsage.split(' ').filter(x => x.length > 0);
@@ -96,10 +75,7 @@ function renderTable() {
             diskCombined = disks.join('');
         }
 
-        // Cihazın altındaki etiket pilleri
-        const tagBadges = (a.tags || []).map(t =>
-            `<span class="pill" style="font-size:0.65rem; padding:2px 6px; margin-right:4px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:#38bdf8; border-radius:4px;">${t}</span>`
-        ).join("");
+        const tagBadges = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; padding:2px 6px; margin-right:4px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:#38bdf8; border-radius:4px;">${t}</span>`).join("");
 
         return `
             <tr>
@@ -117,7 +93,7 @@ function renderTable() {
     }).join("");
 }
 
-// Başlangıç komutları
+// Init
 loadFilterTags();
 loadAgents();
-setInterval(loadAgents, 10000);
+setInterval(loadAgents, 10000); // Otomatik yenileme devam ediyor ama filtreyi bozmuyor
