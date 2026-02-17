@@ -3,59 +3,99 @@
 let selectedTags = [];
 let allAgents = [];
 
-// --- 1. ANA TABLO VE FİLTRELEME ---
+// Modal Instance'ları (Global)
+let thresholdModalInstance = null;
+let renameModalInstance = null;
+let tagsModalInstance = null;
 
-window.applyFilter = () => {
+// --- 1. VERİ YÜKLEME ---
+
+window.loadAgents = async function () {
+    try {
+        const res = await fetch("/api/agent-telemetry/latest?_=" + new Date().getTime(), {
+            cache: "no-store",
+            headers: auth.getAuthHeaders()
+        });
+
+        if (!res.ok) throw new Error("Veri çekilemedi");
+        allAgents = await res.json();
+        renderTable();
+    } catch (e) {
+        console.error(e);
+        const tbody = document.getElementById("agentRows");
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Bağlantı hatası: ${e.message}</td></tr>`;
+    }
+};
+
+window.applyFilter = function () {
     selectedTags = $('#tagSelect').val() || [];
     renderTable();
 };
 
-async function loadFilterTags() {
+window.loadFilterTags = async function () {
     try {
-        // Not: Etiketleri herkes çekebilsin diye UsersController'a yönlendirdik
         const tags = await api.get("/api/Users/tags");
         const $select = $('#tagSelect');
         $select.empty();
         tags.forEach(t => { $select.append(new Option(t.name, t.name, false, false)); });
         $select.trigger('change');
-    } catch (e) { console.error("Filtre etiketleri yüklenemedi", e); }
-}
+    } catch (e) { console.error("Filtreler yüklenemedi", e); }
+};
 
-async function loadAgents() {
-    try {
-        const res = await fetch("/api/agent-telemetry/latest", { cache: "no-store" });
-        allAgents = await res.json();
-        renderTable();
-    } catch (e) { console.error(e); }
-}
+// --- 2. TABLO VE BUTONLAR ---
 
 function renderTable() {
     const tbody = document.getElementById("agentRows");
     if (!tbody) return;
+
     const isAdmin = auth.hasRole("Yönetici");
 
+    // Filtreleme
     const filtered = selectedTags.length === 0
         ? allAgents
         : allAgents.filter(a => selectedTags.every(t => a.tags && a.tags.includes(t)));
 
-    tbody.innerHTML = filtered.map(a => {
-        const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
-        const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem;">${t}</span>`).join("");
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Gösterilecek cihaz bulunamadı.</td></tr>`;
+        return;
+    }
 
+    tbody.innerHTML = filtered.map(a => {
+        const ts = a.ts ? new Date(a.ts).toLocaleTimeString() : "-";
+
+        // Etiket Rozetleri
+        const tagsHtml = (a.tags || []).map(t =>
+            `<span class="badge bg-primary text-white me-1" style="font-size:0.7rem;">${t}</span>`
+        ).join("");
+
+        const safeName = (a.displayName || a.machineName || "").replace(/'/g, "\\'");
+
+        // YÖNETİCİ BUTONLARI (3'lü Grup)
         const actionButtons = isAdmin ? `
-            <div style="display:flex; gap:5px;">
-                <button class="btn primary border small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>
-                <button class="btn warning border small" onclick="openThresholdSettings(${a.computerId})" title="Ayarlar">⚙️</button>
+            <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-warning text-white" onclick="openRenameModal(${a.computerId}, '${safeName}')" title="İsim Değiştir">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-outline-primary text-white" onclick="openTagsModal(${a.computerId})" title="Etiketle">
+                    <i class="bi bi-tags-fill"></i>
+                </button>
+                <button class="btn btn-outline-info text-white" onclick="openThresholdSettings(${a.computerId})" title="Eşik Ayarları">
+                    <i class="bi bi-gear-fill"></i>
+                </button>
             </div>` : "";
 
-        return `<tr>
-            <td style="vertical-align:middle;"><strong>${a.displayName || a.machineName}</strong><br/>${tags}</td>
-            <td style="vertical-align:middle;">${a.ip || "-"}</td>
-            <td style="vertical-align:middle;">%${a.cpuUsage?.toFixed(1) ?? "0"}</td>
-            <td style="vertical-align:middle;">%${a.ramUsage?.toFixed(1) ?? "0"}</td>
-            <td style="vertical-align:middle;">${formatDisks(a)}</td>
-            <td style="vertical-align:middle; font-size:0.8rem; color:#9ca3af;">${ts}</td>
-            ${isAdmin ? `<td style="vertical-align:middle;">${actionButtons}</td>` : ""}
+        return `
+        <tr>
+            <td>
+                <div class="fw-bold text-white">${a.displayName || a.machineName}</div>
+                <div class="mt-1">${tagsHtml}</div>
+            </td>
+            <td class="align-middle">${a.ip || "-"}</td>
+            <td class="align-middle"><span class="badge ${a.cpuUsage > 80 ? 'bg-danger' : 'bg-success'}">%${a.cpuUsage?.toFixed(1) ?? "0"}</span></td>
+            <td class="align-middle"><span class="badge ${a.ramUsage > 80 ? 'bg-danger' : 'bg-success'}">%${a.ramUsage?.toFixed(1) ?? "0"}</span></td>
+            <td class="align-middle small text-muted">${formatDisks(a)}</td>
+            <td class="align-middle small text-muted">${ts}</td>
+            <td class="align-middle text-end">${actionButtons}</td>
         </tr>`;
     }).join("");
 }
@@ -67,169 +107,160 @@ function formatDisks(a) {
     let ds = [];
     for (let i = 0; i < u.length; i += 2) {
         const label = u[i];
+        const usage = u[i + 1];
         const szIdx = s.indexOf(label);
         const sz = szIdx !== -1 ? parseFloat(s[szIdx + 1]).toFixed(0) : "?";
-        ds.push(`<div style="font-size:0.75rem;">${label} ${u[i + 1]} (${sz}GB)</div>`);
+        ds.push(`<div style="white-space:nowrap;"><span class="text-info fw-bold">${label}</span> <span class="text-white">${usage}</span> <span class="text-secondary">(${sz}GB)</span></div>`);
     }
     return ds.join('');
 }
 
-// --- 2. ADMIN YÖNETİM ---
+// --- 3. İŞLEVSEL FONKSİYONLAR (MODALLAR) ---
 
-async function loadAdminData() {
-    loadRequests();
-    loadUsers();
-    loadManagerTags();
-}
+// A. İSİM DEĞİŞTİRME
+window.openRenameModal = function (id, currentName) {
+    document.getElementById('renameComputerId').value = id;
+    document.getElementById('currentComputerName').value = currentName;
+    document.getElementById('newComputerName').value = "";
 
-async function loadRequests() {
-    try {
-        const reqs = await api.get("/api/Admin/requests");
-        const tbody = document.getElementById("requestRows");
-        if (reqs.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="text-center muted-text">Bekleyen talep yok.</td></tr>'; return; }
-        tbody.innerHTML = reqs.map(r => `
-            <tr><td>${r.username}</td><td>${r.requestedRoleName || 'Bilinmiyor'}</td>
-            <td><button class="btn primary small" onclick="approveUser(${r.id})">Onayla</button></td></tr>`).join("");
-    } catch (e) { }
-}
-
-async function loadUsers() {
-    try {
-        const users = await api.get("/api/Admin/users");
-        document.getElementById("userRows").innerHTML = users.map(u => `
-            <tr><td><strong>${u.username}</strong></td>
-                <td><select id="role_${u.id}" class="small-select">
-                    <option value="1" ${u.roles.includes('Yönetici') ? 'selected' : ''}>Yönetici</option>
-                    <option value="2" ${u.roles.includes('Denetleyici') ? 'selected' : ''}>Denetleyici</option>
-                    <option value="3" ${u.roles.includes('Görüntüleyici') ? 'selected' : ''}>Görüntüleyici</option>
-                </select></td>
-                <td><div style="display:flex; gap:5px;">
-                    <button class="btn primary small" onclick="changeUserRole(${u.id})" title="Kaydet">💾</button>
-                    <button class="btn danger small" onclick="deleteUser(${u.id}, '${u.username}')" title="Sil">🗑️</button>
-                </div></td></tr>`).join("");
-    } catch (e) { }
-}
-
-window.deleteUser = async (id, name) => { if (confirm(`"${name}" tamamen silinecek. Emin misin?`)) { await api.del(`/api/Admin/users/${id}`); loadUsers(); } };
-
-async function loadManagerTags() {
-    try {
-        const tags = await api.get("/api/Users/tags");
-        document.getElementById("tagManagerList").innerHTML = tags.map(t => `
-            <div class="pill" style="display:flex; align-items:center; gap:8px;">${t.name} <span onclick="deleteTag(${t.id})" style="cursor:pointer; color:#ef4444; font-weight:bold;">×</span></div>`).join("");
-    } catch (e) { }
-}
-
-window.createNewTag = async () => {
-    const n = document.getElementById("newTagName").value.trim();
-    if (n) {
-        try {
-            await api.post("/api/Admin/tags", { name: n });
-            document.getElementById("newTagName").value = "";
-            loadManagerTags();
-            loadFilterTags();
-        } catch (e) { alert(e.message); }
-    }
+    const el = document.getElementById('renameModal');
+    if (renameModalInstance) renameModalInstance.dispose();
+    renameModalInstance = new bootstrap.Modal(el);
+    renameModalInstance.show();
 };
 
-window.deleteTag = async (id) => { if (confirm("Etiket silinsin mi?")) { try { await api.del(`/api/Admin/tags/${id}`); loadManagerTags(); loadFilterTags(); } catch (e) { alert(e.message); } } };
-
-window.approveUser = async (id) => { try { await api.post(`/api/Registration/approve/${id}`); loadAdminData(); } catch (e) { } };
-
-window.changeUserRole = async (id) => {
-    const rId = document.getElementById(`role_${id}`).value;
-    try { await api.put(`/api/Admin/users/${id}/change-role`, { newRoleId: parseInt(rId) }); alert("Rol güncellendi."); } catch (e) { alert(e.message); }
-};
-
-window.handleRename = async (id, current) => {
-    const n = prompt(`"${current}" için yeni takma ad:`, current);
-    if (n && n.trim() !== "") { try { await api.put("/api/Admin/update-display-name", { id: id, newDisplayName: n.trim() }); loadAgents(); } catch (e) { alert(e.message); } }
-};
-
-// --- 3. AYARLAR MODAL (EŞİKLER VE ETİKET ATAMA) ---
-
-window.openThresholdSettings = async (computerId) => {
-    document.getElementById('modalComputerId').value = computerId;
+window.saveComputerName = async function () {
+    const id = document.getElementById('renameComputerId').value;
+    const newName = document.getElementById('newComputerName').value.trim();
+    if (!newName) return alert("İsim boş olamaz.");
 
     try {
-        // Cihaz detaylarını ve diskleri çek
-        const disks = await api.get(`/api/Admin/computers/${computerId}/disks`);
-        const details = await api.get(`/api/Admin/computers/${computerId}`);
+        await api.put("/api/Admin/update-display-name", { id: parseInt(id), newDisplayName: newName });
+        renameModalInstance.hide();
+        loadAgents();
+    } catch (e) { alert(e.message); }
+};
 
-        // Eşikleri doldur
-        document.getElementById('cpuThresholdInput').value = details.cpuThreshold || "";
-        document.getElementById('ramThresholdInput').value = details.ramThreshold || "";
+// B. ETİKETLEME (AYRI PENCERE)
+window.openTagsModal = async function (computerId) {
+    document.getElementById('tagModalComputerId').value = computerId;
 
-        // Diskleri Geniş Alan Olarak Doldur
-        const container = document.getElementById('diskThresholdsContainer');
-        container.innerHTML = '';
-        disks.forEach(d => {
-            container.innerHTML += `
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding:10px; background:rgba(255,255,255,0.02); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
-                <span style="font-weight:bold; font-size:0.95rem;">${d.diskName} Sürücüsü (${d.totalSizeGb.toFixed(0)} GB)</span>
-                <div style="display:flex; align-items:center; gap:5px;">
-                    <input type="number" class="disk-threshold-input" data-name="${d.diskName}" value="${d.thresholdPercent || ""}" style="width:75px; text-align:right; padding:5px; border-radius:4px;" min="0" max="100">
-                    <span style="color:#94a3b8; font-weight:bold;">%</span>
-                </div>
-            </div>`;
-        });
+    try {
+        const el = document.getElementById('tagsModal');
+        if (tagsModalInstance) tagsModalInstance.dispose();
+        tagsModalInstance = new bootstrap.Modal(el);
 
-        // BİLGİSAYARA ETİKET ATAMA KISMI
-        const allTags = await api.get("/api/Users/tags");
-        const $mTags = $('#modalTagSelect');
-        $mTags.empty();
+        // Verileri Çek
+        const [details, allTags] = await Promise.all([
+            api.get(`/api/Admin/computers/${computerId}`),
+            api.get("/api/Users/tags")
+        ]);
+
+        const $select = $('#modalTagSelect');
+        $select.empty();
+
         allTags.forEach(t => {
             const isSelected = details.tags && details.tags.includes(t.name);
-            $mTags.append(new Option(t.name, t.name, isSelected, isSelected));
+            $select.append(new Option(t.name, t.name, isSelected, isSelected));
         });
 
-        // Select2'yi modal içinde başlat (dropdownParent modal olmalı yoksa arkada kalır)
-        $mTags.select2({
-            dropdownParent: $('#thresholdModal'),
+        // Select2 Başlat (Dropdown Parent ÖNEMLİ)
+        $select.select2({
+            dropdownParent: $('#tagsModal'),
             width: '100%',
             placeholder: "Etiket seçin..."
         }).trigger('change');
 
-        document.getElementById('thresholdModal').style.display = 'flex';
-    } catch (e) { alert("Cihaz bilgileri yüklenemedi: " + e.message); }
+        tagsModalInstance.show();
+    } catch (e) { alert("Etiketler yüklenemedi: " + e.message); }
 };
 
-window.saveThresholds = async () => {
+window.saveTags = async function () {
+    const id = document.getElementById('tagModalComputerId').value;
+    const tags = $('#modalTagSelect').val() || [];
+
+    try {
+        await api.put(`/api/Admin/computers/${id}/tags`, { tags: tags });
+        tagsModalInstance.hide();
+        loadAgents();
+        alert("✅ Etiketler güncellendi.");
+    } catch (e) { alert(e.message); }
+};
+
+// C. EŞİK AYARLARI
+window.openThresholdSettings = async function (computerId) {
+    document.getElementById('modalComputerId').value = computerId;
+
+    try {
+        const el = document.getElementById('thresholdModal');
+        if (thresholdModalInstance) thresholdModalInstance.dispose();
+        thresholdModalInstance = new bootstrap.Modal(el);
+
+        const [disks, details] = await Promise.all([
+            api.get(`/api/Admin/computers/${computerId}/disks`),
+            api.get(`/api/Admin/computers/${computerId}`)
+        ]);
+
+        document.getElementById('cpuThresholdInput').value = details.cpuThreshold || "";
+        document.getElementById('ramThresholdInput').value = details.ramThreshold || "";
+
+        const container = document.getElementById('diskThresholdsContainer');
+        container.innerHTML = '';
+
+        if (disks.length === 0) container.innerHTML = '<div class="text-muted text-center">Disk verisi yok.</div>';
+        else {
+            disks.forEach(d => {
+                container.innerHTML += `
+                <div class="d-flex align-items-center justify-content-between mb-2 p-2 rounded border border-secondary" style="background: rgba(255,255,255,0.05);">
+                    <div>
+                        <span class="fw-bold text-info">${d.diskName}</span> 
+                        <small class="text-muted ms-1">(${d.totalSizeGb.toFixed(0)} GB)</small>
+                    </div>
+                    <div class="input-group input-group-sm" style="width: 120px;">
+                        <input type="number" class="form-control bg-dark text-white border-secondary disk-threshold-input" 
+                               data-name="${d.diskName}" 
+                               value="${d.thresholdPercent || ""}" 
+                               min="0" max="100">
+                        <span class="input-group-text bg-secondary text-white border-secondary">%</span>
+                    </div>
+                </div>`;
+            });
+        }
+
+        thresholdModalInstance.show();
+    } catch (e) { alert("Ayarlar yüklenemedi: " + e.message); }
+};
+
+window.saveThresholdsWithValidation = async function () {
     const id = document.getElementById('modalComputerId').value;
     const cpu = document.getElementById('cpuThresholdInput').value;
     const ram = document.getElementById('ramThresholdInput').value;
-    const tags = $('#modalTagSelect').val() || [];
-
-    // 0-100 Validation
-    const validate = (v) => { if (v === "" || v === null) return true; const n = parseFloat(v); return n >= 0 && n <= 100; };
-    if (!validate(cpu) || !validate(ram)) { alert("Hata: Değerler 0-100 arasında olmalıdır!"); return; }
 
     const disks = [];
-    let dErr = false;
     document.querySelectorAll('.disk-threshold-input').forEach(i => {
-        if (!validate(i.value)) dErr = true;
-        disks.push({ diskName: i.getAttribute('data-name'), thresholdPercent: i.value === "" ? null : parseFloat(i.value) });
+        disks.push({
+            diskName: i.getAttribute('data-name'),
+            thresholdPercent: i.value ? parseFloat(i.value) : null
+        });
     });
-    if (dErr) { alert("Hata: Disk değerleri 0-100 arasında olmalıdır!"); return; }
 
     try {
-        // 1. Eşikleri Kaydet
         await api.put(`/api/Admin/update-thresholds/${id}`, {
-            cpuThreshold: cpu === "" ? null : parseFloat(cpu),
-            ramThreshold: ram === "" ? null : parseFloat(ram),
+            cpuThreshold: cpu ? parseFloat(cpu) : null,
+            ramThreshold: ram ? parseFloat(ram) : null,
             diskThresholds: disks
         });
-
-        // 2. Bilgisayara Etiketleri Kaydet
-        await api.put(`/api/Admin/computers/${id}/tags`, { tags: tags });
-
-        alert("✅ Ayarlar ve etiketler başarıyla kaydedildi.");
-        closeModal();
+        thresholdModalInstance.hide();
         loadAgents();
-    } catch (e) { alert("Kaydetme hatası: " + e.message); }
+        alert("✅ Eşik değerleri kaydedildi.");
+    } catch (e) { alert(e.message); }
 };
 
-// --- INIT ---
-loadFilterTags();
-loadAgents();
-setInterval(loadAgents, 10000);
+// --- BAŞLAT ---
+$(document).ready(function () {
+    if (document.getElementById('agentRows')) {
+        loadFilterTags();
+        loadAgents();
+        setInterval(loadAgents, 10000);
+    }
+});

@@ -4,28 +4,60 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>STAJ2 - Giriş</title>
-    <link rel="stylesheet" href="/assets/css/app.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #0f172a;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .form-control {
+            background: #0f172a;
+            border-color: #334155;
+            color: white;
+        }
+
+            .form-control:focus {
+                background: #0f172a;
+                color: white;
+                border-color: #38bdf8;
+                box-shadow: none;
+            }
+    </style>
 </head>
 <body>
-    <div class="page">
-        <div class="card">
-            <div class="topbar">
-                <h2>Giriş Yap</h2>
-            </div>
+    <div class="login-card text-white">
+        <h2 class="text-center text-info mb-4 fw-bold">Monitoring Giriş</h2>
 
-            <label>Gmail / Email</label>
-            <input id="email" type="email" placeholder="mail@example.com" />
+        <div id="msg" class="alert alert-danger small" style="display:none;"></div>
 
-            <label>Şifre</label>
-            <input id="password" type="password" placeholder="Şifre" />
+        <div class="mb-3">
+            <label class="form-label small text-muted text-uppercase">E-posta</label>
+            <input id="email" type="email" class="form-control" placeholder="mail@example.com" />
+        </div>
 
-            <div class="space"></div>
-            <button id="btnLogin">Giriş Yap</button>
+        <div class="mb-4">
+            <label class="form-label small text-muted text-uppercase">Şifre</label>
+            <input id="password" type="password" class="form-control" placeholder="••••••••" />
+        </div>
 
-            <div id="msg" class="msg" style="display:none;"></div>
+        <button id="btnLogin" class="btn btn-primary w-100 py-2 fw-bold">Giriş Yap</button>
 
-            <div class="space"></div>
-            <a class="linkbtn" href="/register.html">Hesabın yok mu? Kayıt Ol</a>
+        <div class="mt-4 text-center">
+            <a href="/register.html" class="text-info text-decoration-none small">Hesabın yok mu? Kayıt Ol</a>
         </div>
     </div>
 
@@ -34,38 +66,26 @@
     <script src="/assets/js/auth.js"></script>
     <script src="/assets/js/ui.js"></script>
     <script>
-        (function () {
-            const params = new URLSearchParams(window.location.search);
-            const reason = params.get("reason");
-            if (reason === "auth") { ui.show("msg"); ui.setText("msg", "Devam etmek için giriş yapmalısın."); }
-            if (reason === "forbidden") { ui.show("msg"); ui.setText("msg", "Bu sayfaya erişim yetkin yok."); }
+        document.getElementById("btnLogin").addEventListener("click", async () => {
+            ui.hide("msg");
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
 
-            document.getElementById("btnLogin").addEventListener("click", async () => {
-                ui.hide("msg");
-                const email = document.getElementById("email").value.trim();
-                const password = document.getElementById("password").value;
+            if (!email || !password) {
+                ui.show("msg");
+                ui.setText("msg", "Lütfen tüm alanları doldurun.");
+                return;
+            }
 
-                if (!email || !password) {
-                    ui.show("msg");
-                    ui.setText("msg", "❌ Lütfen tüm alanları doldurun.");
-                    return;
-                }
-
-                try {
-                    // Backend artık 'roles' (liste) dönüyor
-                    const res = await api.post("/api/Auth/login", { email, password });
-
-                    // Çoklu rol yapısını kaydet
-                    auth.saveAuth(res.token, res.roles);
-
-                    // Herkesi ortak ana sayfa olan Viewer'a gönderiyoruz
-                    window.location.href = "/viewer.html";
-                } catch (e) {
-                    ui.show("msg");
-                    ui.setText("msg", "❌ " + e.message);
-                }
-            });
-        })();
+            try {
+                const res = await api.post("/api/Auth/login", { email, password });
+                auth.saveAuth(res.token, res.roles);
+                window.location.href = "/viewer.html";
+            } catch (e) {
+                ui.show("msg");
+                ui.setText("msg", e.message);
+            }
+        });
     </script>
 </body>
 </html>
