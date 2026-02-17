@@ -15,6 +15,14 @@
                     <div class="subtitle">Görüntüleyici Paneli</div>
                 </div>
                 <div class="actions">
+                    <div id="filterWrapper" style="position: relative; margin-right: 10px;">
+                        <button class="btn ghost small" onclick="toggleFilter()">🔍 Etiketle Filtrele</button>
+                        <div id="tagFilterDropdown" class="card" style="display:none; position:absolute; right:0; top:40px; z-index:100; min-width:200px; padding:15px; max-height:300px; overflow-y:auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                            <div id="tagCheckboxes">
+                                <small class="muted-text">Etiketler yükleniyor...</small>
+                            </div>
+                        </div>
+                    </div>
                     <button class="btn ghost small" id="btnLogout">Çıkış</button>
                 </div>
             </div>
@@ -29,7 +37,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Cihaz Adı</th>
+                            <th>Cihaz Adı & Etiketler</th>
                             <th>IP Adresi</th>
                             <th>CPU</th>
                             <th>RAM Kullanımı (Toplam)</th>
@@ -53,7 +61,7 @@
 
     <script>
         (function () {
-            if (!guards.requireRole(["Görüntüleyici"])) return;
+            if (!guards.requireRole(["Görüntüleyici", "Yönetici"])) return;
             document.getElementById("btnLogout").addEventListener("click", () => {
                 auth.clearAuth();
                 window.location.href = "/login.html";

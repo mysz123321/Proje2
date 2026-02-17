@@ -74,8 +74,14 @@ public class AdminController : ControllerBase
     }
 
     // --- 4. ETİKET YÖNETİMİ ---
+    // STAJ2/Controllers/AdminController.cs içinde şu metodu bul ve değiştir:
+
     [HttpGet("tags")]
-    public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
+    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")] // Yetkiyi genişlettik!
+    public async Task<IActionResult> GetTags()
+    {
+        return Ok(await _db.Tags.ToListAsync());
+    }
 
     [HttpPost("tags")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)

@@ -254,12 +254,31 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
+    // STAJ2/Controllers/AgentTelemetryController.cs içindeki Latest metodunu tamamen bununla değiştir:
+
     [HttpGet("latest")]
-    public IActionResult Latest()
+    public async Task<IActionResult> Latest()
     {
+        List<AgentTelemetryDto> list;
         lock (_latestData)
         {
-            return Ok(_latestData.Values.OrderByDescending(x => x.Ts).ToList());
+            list = _latestData.Values.OrderByDescending(x => x.Ts).ToList();
         }
+
+        var macs = list.Select(x => x.MacAddress).ToList();
+        var computers = await _context.Computers.Include(c => c.Tags).Where(c => macs.Contains(c.MacAddress)).ToListAsync();
+
+        foreach (var dto in list)
+        {
+            var comp = computers.FirstOrDefault(c => c.MacAddress == dto.MacAddress);
+            if (comp != null)
+            {
+                dto.ComputerId = comp.Id;
+                dto.DisplayName = comp.DisplayName;
+                // ETİKETLERİ DTO'YA AKTAR
+                dto.Tags = comp.Tags.Select(t => t.Name).ToList();
+            }
+        }
+        return Ok(list);
     }
 }

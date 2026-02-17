@@ -16,6 +16,6 @@
         public double CpuUsage { get; set; }
         public double RamUsage { get; set; }
         public required string DiskUsage { get; set; }
-
-        public DateTime Ts { get; set; }
+        public List<string> Tags { get; set; } = new();
+    public DateTime Ts { get; set; }
     }
