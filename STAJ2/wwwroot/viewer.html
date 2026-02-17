@@ -57,6 +57,25 @@
             padding: 8px;
         }
 
+        /* Çoklu Rol Onay Kutuları */
+        .role-checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+            .role-checkbox-group label {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                cursor: pointer;
+                font-size: 0.75rem;
+                background: rgba(255,255,255,0.05);
+                padding: 2px 6px;
+                border-radius: 4px;
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+
         .btn.danger {
             background: #ef4444;
             border-color: #ef4444;
@@ -64,15 +83,6 @@
 
             .btn.danger:hover {
                 background: #dc2626;
-            }
-
-        /* Modal Tasarım Düzeltmeleri */
-        #diskThresholdsContainer div {
-            transition: background 0.2s;
-        }
-
-            #diskThresholdsContainer div:hover {
-                background: rgba(255,255,255,0.05) !important;
             }
     </style>
 </head>
@@ -85,9 +95,7 @@
                     <div id="userWelcome" class="subtitle">Hoş geldiniz...</div>
                 </div>
                 <div class="actions" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <div style="min-width: 250px;">
-                        <select id="tagSelect" multiple="multiple" style="width: 100%;"></select>
-                    </div>
+                    <div style="min-width: 250px;"><select id="tagSelect" multiple="multiple" style="width: 100%;"></select></div>
                     <button class="btn primary small" onclick="applyFilter()">Filtrele</button>
                     <button class="btn ghost small" id="btnLogout">Çıkış</button>
                 </div>
@@ -123,7 +131,7 @@
                         </table>
                     </section>
                     <section class="card">
-                        <div class="card-header"><h3>👥 Kullanıcı Yönetimi</h3></div>
+                        <div class="card-header"><h3>👥 Kullanıcı & Çoklu Rol Yönetimi</h3></div>
                         <table class="small-table">
                             <thead><tr><th>Kullanıcı</th><th>Roller</th><th>İşlemler</th></tr></thead>
                             <tbody id="userRows"></tbody>
@@ -133,7 +141,7 @@
                 <section class="card" style="margin-top:20px;">
                     <div class="card-header"><h3>🏷️ Etiket Yönetimi</h3></div>
                     <div style="display:flex; gap:10px; margin-bottom:15px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
-                        <input type="text" id="newTagName" placeholder="Yeni etiket adı..." style="flex:1;">
+                        <input type="text" id="newTagName" placeholder="Yeni etiket adı...">
                         <button class="btn primary" onclick="createNewTag()">➕ Etiket Ekle</button>
                     </div>
                     <div id="tagManagerList" style="display:flex; flex-wrap:wrap; gap:10px; padding: 10px;"></div>
@@ -149,22 +157,19 @@
 
             <div style="margin-bottom: 25px;">
                 <h4 style="color:#94a3b8; margin-bottom:15px; font-size:0.9rem; text-transform:uppercase;">Performans Eşikleri (%)</h4>
-
                 <div style="margin-bottom:15px;">
                     <label style="display:block; margin-bottom:5px; font-weight:bold;">CPU Eşiği</label>
-                    <input type="number" id="cpuThresholdInput" min="0" max="100" style="width:100%;" placeholder="Örn: 90">
+                    <input type="number" id="cpuThresholdInput" min="0" max="100" style="width:100%;">
                 </div>
-
                 <div>
                     <label style="display:block; margin-bottom:5px; font-weight:bold;">RAM Eşiği</label>
-                    <input type="number" id="ramThresholdInput" min="0" max="100" style="width:100%;" placeholder="Örn: 85">
+                    <input type="number" id="ramThresholdInput" min="0" max="100" style="width:100%;">
                 </div>
             </div>
 
             <div style="margin-bottom: 25px;">
                 <h4 style="color:#94a3b8; margin-bottom:15px; font-size:0.9rem; text-transform:uppercase;">Disk Sınırları (%)</h4>
-                <div id="diskThresholdsContainer" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid #334155; max-height:200px; overflow-y:auto;">
-                </div>
+                <div id="diskThresholdsContainer" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid #334155;"></div>
             </div>
 
             <div style="margin-bottom: 25px;">
@@ -174,7 +179,7 @@
 
             <div class="modal-actions" style="margin-top:30px; border-top:1px solid #334155; padding-top:20px; text-align:right;">
                 <button class="btn ghost" onclick="closeModal()" style="margin-right:10px;">İptal</button>
-                <button class="btn primary" onclick="saveThresholds()" style="padding:10px 25px;">💾 Kaydet</button>
+                <button class="btn primary" onclick="saveThresholdsWithValidation()">💾 Kaydet</button>
             </div>
         </div>
     </div>
@@ -187,6 +192,8 @@
     <script src="/assets/js/guards.js"></script>
     <script src="/assets/js/agent-ui.js"></script>
     <script>
+        const systemRoles = [{ id: 1, name: "Yönetici" }, { id: 2, name: "Denetleyici" }, { id: 3, name: "Görüntüleyici" }];
+
         $(document).ready(function () {
             if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
 
@@ -197,12 +204,116 @@
             if (isAdmin) {
                 document.getElementById("adminPanel").style.display = "block";
                 document.getElementById("thActions").style.display = "table-cell";
-                loadAdminData();
+                loadAdminSections();
             }
 
             $('#tagSelect').select2({ placeholder: "Etiketle filtrele..." });
             document.getElementById("btnLogout").addEventListener("click", () => { auth.clearAuth(); window.location.href = "/login.html"; });
         });
+
+        async function loadAdminSections() {
+            try {
+                const requests = await api.get("/api/Admin/requests");
+                renderRequests(requests);
+
+                const users = await api.get("/api/Admin/users");
+                renderUsers(users);
+
+                const tags = await api.get("/api/Admin/tags");
+                renderTagManager(tags);
+            } catch (e) { console.error("Admin verileri yüklenemedi", e); }
+        }
+
+        function renderUsers(users) {
+            const container = document.getElementById("userRows");
+            container.innerHTML = users.map(u => {
+                const roleCheckboxes = systemRoles.map(r => `
+                        <label>
+                            <input type="checkbox" class="user-role-cb-${u.id}" value="${r.id}" ${u.roles.includes(r.name) ? 'checked' : ''}>
+                            ${r.name}
+                        </label>`).join("");
+
+                return `<tr>
+                        <td><strong>${u.username}</strong></td>
+                        <td><div class="role-checkbox-group">${roleCheckboxes}</div></td>
+                        <td>
+                            <div style="display:flex; gap:5px;">
+                                <button class="btn primary small" onclick="updateUserRoles(${u.id})">💾</button>
+                                ${!u.roles.includes("Yönetici") ? `<button class="btn danger small" onclick="deleteUser(${u.id})">🗑️</button>` : ""}
+                            </div>
+                        </td>
+                    </tr>`;
+            }).join("");
+        }
+
+        window.updateUserRoles = async (userId) => {
+            const checked = Array.from(document.querySelectorAll(`.user-role-cb-${userId}:checked`));
+            const roleIds = checked.map(cb => parseInt(cb.value));
+            if (roleIds.length === 0) return alert("En az bir rol seçmelisiniz.");
+            try {
+                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: roleIds });
+                alert("Kullanıcı rolleri güncellendi.");
+                loadAdminSections();
+            } catch (e) { alert("Hata: " + e.message); }
+        };
+
+        window.deleteUser = async (id) => {
+            if (confirm("Kullanıcı silinsin mi?")) {
+                try { await api.del(`/api/Admin/users/${id}`); loadAdminSections(); } catch (e) { alert(e.message); }
+            }
+        };
+
+        function renderTagManager(tags) {
+            document.getElementById("tagManagerList").innerHTML = tags.map(t => `
+                    <span class="pill">${t.name} <small onclick="deleteTag(${t.id})" style="cursor:pointer; margin-left:5px; color:#ef4444;">×</small></span>
+                `).join("");
+        }
+
+        window.createNewTag = async () => {
+            const name = document.getElementById("newTagName").value.trim();
+            if (!name) return;
+            try {
+                await api.post("/api/Admin/tags", { name: name });
+                document.getElementById("newTagName").value = "";
+                loadAdminSections(); // Etiket eklenince listeyi yenile
+            } catch (e) { alert(e.message); }
+        };
+
+        window.deleteTag = async (id) => {
+            if (confirm("Etiket silinsin mi?")) {
+                try { await api.del(`/api/Admin/tags/${id}`); loadAdminSections(); } catch (e) { alert(e.message); }
+            }
+        };
+
+        window.saveThresholdsWithValidation = async function () {
+            const cpu = parseFloat(document.getElementById('cpuThresholdInput').value);
+            const ram = parseFloat(document.getElementById('ramThresholdInput').value);
+            if (cpu < 0 || cpu > 100 || ram < 0 || ram > 100) return alert("HATA: 0-100 arası değer girin!");
+
+            const disks = document.querySelectorAll('.disk-threshold-input');
+            for (let i of disks) {
+                const v = parseFloat(i.value);
+                if (v < 0 || v > 100) return alert("HATA: Disk değeri 0-100 arası olmalıdır!");
+            }
+
+            if (typeof saveThresholds === "function") await saveThresholds();
+        };
+
+        function renderRequests(reqs) {
+            document.getElementById("requestRows").innerHTML = reqs.map(r => `
+                    <tr>
+                        <td>${r.username}</td>
+                        <td><select id="reqRole_${r.id}" class="small-select">${systemRoles.map(x => `<option value="${x.id}" ${x.id == 3 ? 'selected' : ''}>${x.name}</option>`).join("")}</select></td>
+                        <td><button class="btn primary small" onclick="approveReq(${r.id})">Onayla</button></td>
+                    </tr>`).join("");
+        }
+
+        async function approveReq(id) {
+            const roleId = document.getElementById(`reqRole_${id}`).value;
+            await api.post(`/api/Admin/approve/${id}`, { roleId: parseInt(roleId) });
+            loadAdminSections();
+        }
+
         function closeModal() { document.getElementById('thresholdModal').style.display = 'none'; }
     </script>
 </body>

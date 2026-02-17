@@ -74,6 +74,15 @@
             padding: 4px;
             border-radius: 4px;
         }
+
+        .role-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: rgba(30, 41, 59, 0.5);
+            padding: 8px;
+            border-radius: 6px;
+        }
     </style>
 </head>
 <body>
@@ -96,7 +105,6 @@
                     <h2>Cihaz Yönetimi & Eşik Ayarları</h2>
                     <span class="pill" id="agentCount">0</span>
                 </div>
-                <div id="agentMsg" class="message"></div>
                 <table>
                     <thead>
                         <tr>
@@ -116,7 +124,6 @@
                         <h2>Bekleyen Kayıt Talepleri</h2>
                         <span class="pill" id="pendingCount">0</span>
                     </div>
-                    <div id="reqMsg" class="message"></div>
                     <table>
                         <thead>
                             <tr>
@@ -140,17 +147,16 @@
                     <div id="tagList" style="margin-top:15px; display:flex; flex-wrap:wrap; gap:8px;"></div>
                 </section>
 
-                <section class="card muted">
+                <section class="card muted" style="grid-column: span 2;">
                     <div class="card-header">
-                        <h2>Sistemdeki Kullanıcılar</h2>
+                        <h2>Sistemdeki Kullanıcılar & Rol Yönetimi</h2>
                         <span class="pill" id="userCount">0</span>
                     </div>
-                    <div id="userMsg" class="message"></div>
                     <table>
                         <thead>
                             <tr>
                                 <th>Kullanıcı</th>
-                                <th>Mevcut Rol</th>
+                                <th>Roller (Birden Fazla Seçilebilir)</th>
                                 <th>İşlem</th>
                             </tr>
                         </thead>
@@ -202,9 +208,8 @@
             const endpoints = {
                 requests: "/api/Admin/requests",
                 approve: (id) => `/api/Admin/approve/${id}`,
-                reject: (id) => `/api/Admin/reject/${id}`,
                 users: "/api/Admin/users",
-                changeRole: (id) => `/api/Admin/users/${id}/change-role`,
+                changeRoles: (id) => `/api/Admin/users/${id}/change-roles`,
                 deleteUser: (id) => `/api/Admin/users/${id}`,
                 agents: "/api/agent-telemetry/latest",
                 updateName: "/api/Admin/update-display-name",
@@ -242,8 +247,7 @@
                                         <button class="btn small primary" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')">✏️</button>
                                         <button class="btn small warning" onclick="openThresholdSettings(${a.computerId || 0})">⚙️</button>
                                     </div>
-                                </td>
-                            `;
+                                </td>`;
                         agentBody.appendChild(tr);
                     });
                 } catch (e) { console.error(e); }
@@ -257,35 +261,35 @@
                 }
             };
 
-            // --- 2. MODAL & ETİKETLEME ---
+            // --- 2. MODAL & EŞİK KONTROLÜ ---
             window.openThresholdSettings = async function (computerId) {
                 document.getElementById('modalComputerId').value = computerId;
                 try {
-                    // Verileri çek
                     const [disks, allTags, computer] = await Promise.all([
                         api.get(endpoints.getDisks(computerId)),
                         api.get(endpoints.tags),
                         api.get(endpoints.getComputer(computerId))
                     ]);
 
-                    // Eşikleri doldur
                     document.getElementById('cpuThresholdInput').value = computer.cpuThreshold;
                     document.getElementById('ramThresholdInput').value = computer.ramThreshold;
 
-                    // Diskleri listele
                     const dContainer = document.getElementById('diskThresholdsContainer');
                     dContainer.innerHTML = '<h4 style="margin:15px 0 10px">Disk Sınırları</h4>';
                     disks.forEach(d => {
-                        dContainer.innerHTML += `<div class="disk-row"><span>${d.diskName} (${d.totalSizeGb.toFixed(1)} GB)</span>
-                                <input type="number" class="disk-threshold-input small-select" style="width:60px" data-name="${d.diskName}" value="${d.thresholdPercent}"></div>`;
+                        dContainer.innerHTML += `
+                                <div class="disk-row">
+                                    <span>${d.diskName} (${d.totalSizeGb.toFixed(1)} GB)</span>
+                                    <input type="number" class="disk-threshold-input small-select" style="width:60px"
+                                           data-name="${d.diskName}" value="${d.thresholdPercent}" min="0" max="100">
+                                </div>`;
                     });
 
-                    // Etiketleri listele
                     const tContainer = document.getElementById('computerTagsContainer');
                     tContainer.innerHTML = allTags.map(t => {
-                        const isChecked = computer.tags && computer.tags.some(ct => ct.id === t.id);
+                        const isChecked = computer.tags && computer.tags.includes(t.name);
                         return `<label style="font-size:0.8rem; display:flex; align-items:center; gap:5px; cursor:pointer">
-                                <input type="checkbox" class="tag-checkbox" value="${t.id}" ${isChecked ? 'checked' : ''}> ${t.name}</label>`;
+                                    <input type="checkbox" class="tag-checkbox" value="${t.name}" ${isChecked ? 'checked' : ''}> ${t.name}</label>`;
                     }).join("");
 
                     document.getElementById('thresholdModal').style.display = 'flex';
@@ -294,24 +298,39 @@
 
             window.saveThresholds = async function () {
                 const id = document.getElementById('modalComputerId').value;
-                const cpuVal = document.getElementById('cpuThresholdInput').value;
-                const ramVal = document.getElementById('ramThresholdInput').value;
+                const cpuVal = parseFloat(document.getElementById('cpuThresholdInput').value);
+                const ramVal = parseFloat(document.getElementById('ramThresholdInput').value);
+
+                // 0-100 Kontrolü
+                if ((cpuVal < 0 || cpuVal > 100) || (ramVal < 0 || ramVal > 100)) {
+                    alert("Eşik değerleri 0 ile 100 arasında olmalıdır!");
+                    return;
+                }
+
+                const diskInputs = Array.from(document.querySelectorAll('.disk-threshold-input'));
+                for (let input of diskInputs) {
+                    const val = parseFloat(input.value);
+                    if (val < 0 || val > 100) {
+                        alert("Disk eşik değerleri 0-100 arası olmalıdır!");
+                        return;
+                    }
+                }
 
                 const body = {
-                    cpuThreshold: cpuVal === "" ? null : parseFloat(cpuVal),
-                    ramThreshold: ramVal === "" ? null : parseFloat(ramVal),
-                    diskThresholds: Array.from(document.querySelectorAll('.disk-threshold-input')).map(i => ({
+                    cpuThreshold: isNaN(cpuVal) ? null : cpuVal,
+                    ramThreshold: isNaN(ramVal) ? null : ramVal,
+                    diskThresholds: diskInputs.map(i => ({
                         diskName: i.dataset.name,
                         thresholdPercent: i.value === "" ? null : parseFloat(i.value)
                     }))
                 };
 
-                const selectedTagIds = Array.from(document.querySelectorAll('.tag-checkbox:checked')).map(cb => parseInt(cb.value));
+                const selectedTags = Array.from(document.querySelectorAll('.tag-checkbox:checked')).map(cb => cb.value);
 
                 try {
                     await Promise.all([
                         api.put(endpoints.updateThresholds(id), body),
-                        api.put(endpoints.updateComputerTags(id), selectedTagIds)
+                        api.put(endpoints.updateComputerTags(id), { tags: selectedTags })
                     ]);
                     alert("Başarıyla kaydedildi.");
                     closeModal();
@@ -321,26 +340,20 @@
 
             window.closeModal = () => document.getElementById('thresholdModal').style.display = 'none';
 
-            // admin.html içindeki createTag fonksiyonunu bul ve değiştir:
-            // admin.html içindeki createTag fonksiyonu
+            // --- 3. ETİKET YÖNETİMİ ---
             window.createTag = async () => {
                 const nameInput = document.getElementById("newTagName");
                 const name = nameInput.value.trim();
                 if (!name) return;
-
                 try {
-                    // ARTIK NESNE OLARAK GÖNDERİYORUZ: { name: "..." }
                     await api.post(endpoints.tags, { name: name });
                     nameInput.value = "";
                     loadTags();
-                    alert("Etiket başarıyla eklendi.");
-                } catch (e) {
-                    alert("Hata: " + e.message);
-                }
+                } catch (e) { alert("Hata: " + e.message); }
             };
 
             window.deleteTag = async (id) => {
-                if (confirm("Bu etiketi silmek istediğine emin misin?")) {
+                if (confirm("Silinsin mi?")) {
                     await api.del(`${endpoints.tags}/${id}`);
                     loadTags();
                 }
@@ -353,39 +366,60 @@
                 ).join("");
             }
 
-            // --- 4. KULLANICI & TALEP YÖNETİMİ ---
+            // --- 4. KULLANICI & ÇOKLU ROL YÖNETİMİ ---
             async function loadUsers() {
                 userBody.innerHTML = "";
                 const list = await api.get(endpoints.users);
                 document.getElementById("userCount").textContent = list.length;
                 list.forEach(u => {
                     const tr = document.createElement("tr");
-                    const roleOptions = roles.map(r => `<option value="${r.id}" ${u.role === r.name ? 'selected' : ''}>${r.name}</option>`).join("");
-                    tr.innerHTML = `<td>${u.username}</td><td><select class="small-select" data-role-select>${roleOptions}</select></td>
-                            <td><div class="actions"><button class="btn small primary" onclick="updateUserRole(${u.id}, this)">💾</button>
-                            ${u.role !== "Yönetici" ? `<button class="btn small danger" onclick="deleteUser(${u.id})">🗑️</button>` : ""}</div></td>`;
+                    const roleCheckboxes = roles.map(r => `
+                            <label style="display:inline-flex; align-items:center; margin-right:10px; font-size:0.8rem; cursor:pointer;">
+                                <input type="checkbox" name="role_${u.id}" value="${r.id}" ${u.roles.includes(r.name) ? 'checked' : ''}>
+                                <span style="margin-left:4px">${r.name}</span>
+                            </label>`).join("");
+
+                    tr.innerHTML = `
+                            <td>${u.username}</td>
+                            <td><div class="role-container">${roleCheckboxes}</div></td>
+                            <td>
+                                <div class="actions">
+                                    <button class="btn small primary" onclick="updateUserRoles(${u.id})">💾</button>
+                                    ${!u.roles.includes("Yönetici") ? `<button class="btn small danger" onclick="deleteUser(${u.id})">🗑️</button>` : ""}
+                                </div>
+                            </td>`;
                     userBody.appendChild(tr);
                 });
             }
 
-            window.updateUserRole = async (id, btn) => {
-                const roleId = btn.closest('tr').querySelector('[data-role-select]').value;
-                await api.put(endpoints.changeRole(id), { newRoleId: parseInt(roleId) });
-                alert("Rol güncellendi.");
-                loadUsers();
+            window.updateUserRoles = async (userId) => {
+                const checked = Array.from(document.querySelectorAll(`input[name="role_${userId}"]:checked`));
+                const ids = checked.map(cb => parseInt(cb.value));
+                if (ids.length === 0) return alert("En az bir rol seçilmeli.");
+                try {
+                    await api.put(endpoints.changeRoles(userId), { newRoleIds: ids });
+                    alert("Güncellendi.");
+                    loadUsers();
+                } catch (e) { alert("Hata: " + e.message); }
             };
 
             window.deleteUser = async (id) => {
-                if (confirm("Silinsin mi?")) { await api.del(endpoints.deleteUser(id)); loadUsers(); }
+                if (confirm("Kullanıcıyı silmek istediğinize emin misiniz?")) {
+                    await api.del(endpoints.deleteUser(id));
+                    loadUsers();
+                }
             };
 
+            // --- 5. TALEPLER ---
             async function loadRequests() {
                 reqBody.innerHTML = "";
                 const list = await api.get(endpoints.requests);
                 document.getElementById("pendingCount").textContent = list.length;
                 list.forEach(r => {
                     const tr = document.createElement("tr");
-                    tr.innerHTML = `<td>${r.username}</td><td><select class="small-select" data-role>${roles.map(x => `<option value="${x.id}" ${x.id === 3 ? "selected" : ""}>${x.name}</option>`).join("")}</select></td>
+                    tr.innerHTML = `
+                            <td>${r.username}</td>
+                            <td><select class="small-select" data-role>${roles.map(x => `<option value="${x.id}" ${x.id === 3 ? "selected" : ""}>${x.name}</option>`).join("")}</select></td>
                             <td><button class="btn small primary" onclick="approveReq(${r.id}, this)">Onayla</button></td>`;
                     reqBody.appendChild(tr);
                 });
@@ -393,11 +427,11 @@
 
             window.approveReq = async (id, btn) => {
                 const roleId = btn.closest('tr').querySelector('[data-role]').value;
-                await api.post(endpoints.approve(id), { roleId: parseInt(roleId) });
+                await api.post(`/api/Admin/approve/${id}`, { roleId: parseInt(roleId) });
                 loadRequests(); loadUsers();
             };
 
-            // Init
+            // Başlat
             loadRequests(); loadUsers(); loadAgents(); loadTags();
         })();
     </script>

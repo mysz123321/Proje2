@@ -98,15 +98,23 @@ public class AdminController : ControllerBase
         return Ok();
     }
 
-    [HttpPut("users/{userId}/change-role")]
-    public async Task<IActionResult> ChangeUserRole(int userId, [FromBody] ChangeRoleRequest request)
+    [HttpPut("users/{userId}/change-roles")] // İsim çoğul yapıldı
+    public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
         if (user == null) return NotFound();
-        var newRole = await _db.Roles.FindAsync(request.NewRoleId);
-        if (newRole == null) return BadRequest();
-        user.Roles.Clear();
-        user.Roles.Add(newRole);
+
+        // Veritabanındaki geçerli rolleri çekiyoruz
+        var newRoles = await _db.Roles.Where(r => request.NewRoleIds.Contains(r.Id)).ToListAsync();
+
+        if (newRoles.Count == 0) return BadRequest("En az bir geçerli rol seçilmelidir.");
+
+        user.Roles.Clear(); // Mevcut tüm rolleri sil
+        foreach (var role in newRoles)
+        {
+            user.Roles.Add(role); // Yeni seçilen tüm rolleri ekle
+        }
+
         await _db.SaveChangesAsync();
         return Ok();
     }
@@ -119,7 +127,7 @@ public class AdminController : ControllerBase
         return Ok();
     }
 }
-
+public class ChangeRolesRequest { public List<int> NewRoleIds { get; set; } = new(); }
 public class TagCreateRequest { public string Name { get; set; } = null!; }
 public class UpdateComputerNameRequest { public int Id { get; set; } public string NewDisplayName { get; set; } = null!; }
 public class ChangeRoleRequest { public int NewRoleId { get; set; } }
