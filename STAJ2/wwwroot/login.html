@@ -35,27 +35,38 @@
     <script src="/assets/js/auth.js"></script>
     <script src="/assets/js/ui.js"></script>
     <script>
-    (function () {
-      const params = new URLSearchParams(window.location.search);
-      const reason = params.get("reason");
-      if (reason === "auth") { ui.show("msg"); ui.setText("msg", "Devam etmek için giriş yapmalısın."); }
-      if (reason === "forbidden") { ui.show("msg"); ui.setText("msg", "Bu sayfaya erişim yetkin yok."); }
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const reason = params.get("reason");
+            if (reason === "auth") { ui.show("msg"); ui.setText("msg", "Devam etmek için giriş yapmalısın."); }
+            if (reason === "forbidden") { ui.show("msg"); ui.setText("msg", "Bu sayfaya erişim yetkin yok."); }
 
-      document.getElementById("btnLogin").addEventListener("click", async () => {
-        ui.hide("msg");
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
+            document.getElementById("btnLogin").addEventListener("click", async () => {
+                ui.hide("msg");
+                const email = document.getElementById("email").value.trim();
+                const password = document.getElementById("password").value;
 
-        try {
-          const res = await api.post("/api/Auth/login", { email, password });
-          auth.saveAuth(res.token, res.role);
-          auth.redirectByRole(res.role);
-        } catch (e) {
-          ui.show("msg");
-          ui.setText("msg", "❌ " + e.message);
-        }
-      });
-    })();
+                if (!email || !password) {
+                    ui.show("msg");
+                    ui.setText("msg", "❌ Lütfen tüm alanları doldurun.");
+                    return;
+                }
+
+                try {
+                    // Backend artık 'roles' (liste) dönüyor
+                    const res = await api.post("/api/Auth/login", { email, password });
+
+                    // Çoklu rol yapısını kaydet
+                    auth.saveAuth(res.token, res.roles);
+
+                    // Herkesi ortak ana sayfa olan Viewer'a gönderiyoruz
+                    window.location.href = "/viewer.html";
+                } catch (e) {
+                    ui.show("msg");
+                    ui.setText("msg", "❌ " + e.message);
+                }
+            });
+        })();
     </script>
 </body>
 </html>

@@ -1,41 +1,31 @@
-﻿(function () {
+﻿// STAJ2/wwwroot/assets/js/auth.js
+(function () {
     const TOKEN_KEY = "staj2_token";
-    const ROLE_KEY = "staj2_role";
-
-    function saveAuth(token, role) {
-        localStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem(ROLE_KEY, role);
-    }
-
-    function clearAuth() {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(ROLE_KEY);
-    }
-
-    function getToken() {
-        return localStorage.getItem(TOKEN_KEY);
-    }
-
-    function getRole() {
-        return localStorage.getItem(ROLE_KEY);
-    }
-
-    function isLoggedIn() {
-        return !!getToken();
-    }
-
-    function redirectByRole(role) {
-        if (role === "Yönetici") window.location.href = "/admin.html";
-        else if (role === "Denetleyici") window.location.href = "/auditor.html";
-        else window.location.href = "/viewer.html"; // Görüntüleyici
-    }
+    const ROLES_KEY = "staj2_roles";
 
     window.auth = {
-        saveAuth,
-        clearAuth,
-        getToken,
-        getRole,
-        isLoggedIn,
-        redirectByRole
+        saveAuth: (token, roles) => {
+            localStorage.setItem(TOKEN_KEY, token);
+            // Rolleri dizi olarak kaydet
+            localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
+        },
+        clearAuth: () => {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(ROLES_KEY);
+        },
+        getToken: () => localStorage.getItem(TOKEN_KEY),
+        // Rolleri dizi (array) olarak döndürür
+        getRoles: () => {
+            try {
+                const raw = localStorage.getItem(ROLES_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) { return []; }
+        },
+        // Kullanıcıda bu rol var mı?
+        hasRole: (roleName) => {
+            const roles = window.auth.getRoles();
+            return roles.includes(roleName);
+        },
+        isLoggedIn: () => !!localStorage.getItem(TOKEN_KEY)
     };
 })();

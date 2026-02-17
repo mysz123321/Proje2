@@ -3,14 +3,15 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>STAJ2 - Görüntüleyici</title>
+    <title>STAJ2 - Monitoring Merkezi</title>
     <link rel="stylesheet" href="/assets/css/app.css" />
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
-        /* Dark mode için Select2 stil düzenlemesi */
+        /* Dark mode Select2 stil düzenlemesi */
         .select2-container--default .select2-selection--multiple {
             background-color: #1e293b;
             border: 1px solid #334155;
+            min-height: 38px;
             color: white;
         }
 
@@ -20,16 +21,59 @@
             color: white;
         }
 
-        .select2-container--default .select2-results__option--highlighted[aria-selected] {
-            background-color: #38bdf8;
-        }
-
         .select2-container--default .select2-selection--multiple .select2-selection__choice {
             background-color: #38bdf8;
             border: none;
             color: #0f172a;
             font-weight: bold;
+            padding: 2px 8px;
         }
+
+        .select2-container--default .select2-search--inline .select2-search__field {
+            color: white !important;
+        }
+
+        .admin-section {
+            display: none;
+            margin-top: 30px;
+            border-top: 2px solid #334155;
+            padding-top: 20px;
+        }
+
+        .grid-admin {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-admin {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .small-table td {
+            font-size: 0.85rem;
+            padding: 8px;
+        }
+
+        .btn.danger {
+            background: #ef4444;
+            border-color: #ef4444;
+        }
+
+            .btn.danger:hover {
+                background: #dc2626;
+            }
+
+        /* Modal Tasarım Düzeltmeleri */
+        #diskThresholdsContainer div {
+            transition: background 0.2s;
+        }
+
+            #diskThresholdsContainer div:hover {
+                background: rgba(255,255,255,0.05) !important;
+            }
     </style>
 </head>
 <body>
@@ -38,66 +82,128 @@
             <div class="header-row">
                 <div>
                     <h1>Staj Monitoring Sistemi</h1>
-                    <div class="subtitle">Görüntüleyici Paneli</div>
+                    <div id="userWelcome" class="subtitle">Hoş geldiniz...</div>
                 </div>
-                <div class="actions" style="display: flex; align-items: center; gap: 10px;">
-                    <select id="tagSelect" multiple="multiple" style="width: 300px;">
-                    </select>
+                <div class="actions" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div style="min-width: 250px;">
+                        <select id="tagSelect" multiple="multiple" style="width: 100%;"></select>
+                    </div>
                     <button class="btn primary small" onclick="applyFilter()">Filtrele</button>
                     <button class="btn ghost small" id="btnLogout">Çıkış</button>
                 </div>
             </div>
         </header>
 
-        <main class="app-main" style="display: flex; justify-content: center; align-items: flex-start;">
-            <section class="card" style="width: 100%; max-width: 1200px;">
-                <div class="card-header">
-                    <h2>Canlı Sistem Bilgileri</h2>
-                </div>
+        <main class="app-main" style="padding: 20px;">
+            <section class="card">
+                <div class="card-header"><h2>Canlı Cihaz Durumları</h2></div>
                 <table>
                     <thead>
                         <tr>
-                            <th>Cihaz Adı & Etiketler</th>
-                            <th>IP Adresi</th>
+                            <th>Cihaz & Etiketler</th>
+                            <th>IP</th>
                             <th>CPU</th>
-                            <th>RAM Kullanımı (Toplam)</th>
-                            <th>Disk Doluluğu (Boyut)</th>
-                            <th>Son Güncelleme</th>
+                            <th>RAM</th>
+                            <th>Diskler</th>
+                            <th>Güncelleme</th>
+                            <th id="thActions" style="display:none;">İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody id="agentRows">
-                        <tr><td colspan="6">Veriler yükleniyor...</td></tr>
-                    </tbody>
+                    <tbody id="agentRows"><tr><td colspan="7" class="text-center">Veriler yükleniyor...</td></tr></tbody>
                 </table>
             </section>
+
+            <div id="adminPanel" class="admin-section">
+                <div class="grid-admin">
+                    <section class="card">
+                        <div class="card-header"><h3>📩 Bekleyen Kayıt Talepleri</h3></div>
+                        <table class="small-table">
+                            <thead><tr><th>Kullanıcı</th><th>Rol</th><th>İşlem</th></tr></thead>
+                            <tbody id="requestRows"></tbody>
+                        </table>
+                    </section>
+                    <section class="card">
+                        <div class="card-header"><h3>👥 Kullanıcı Yönetimi</h3></div>
+                        <table class="small-table">
+                            <thead><tr><th>Kullanıcı</th><th>Roller</th><th>İşlemler</th></tr></thead>
+                            <tbody id="userRows"></tbody>
+                        </table>
+                    </section>
+                </div>
+                <section class="card" style="margin-top:20px;">
+                    <div class="card-header"><h3>🏷️ Etiket Yönetimi</h3></div>
+                    <div style="display:flex; gap:10px; margin-bottom:15px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                        <input type="text" id="newTagName" placeholder="Yeni etiket adı..." style="flex:1;">
+                        <button class="btn primary" onclick="createNewTag()">➕ Etiket Ekle</button>
+                    </div>
+                    <div id="tagManagerList" style="display:flex; flex-wrap:wrap; gap:10px; padding: 10px;"></div>
+                </section>
+            </div>
         </main>
+    </div>
+
+    <div id="thresholdModal" class="modal" style="display:none; align-items:center; justify-content:center; padding: 20px;">
+        <div class="modal-content card" style="width:100%; max-width:600px; background:#0f172a; border:1px solid #334155; padding: 25px;">
+            <h3 style="border-bottom:1px solid #334155; padding-bottom:15px; margin-bottom:20px;">⚙️ Cihaz Ayarları</h3>
+            <input type="hidden" id="modalComputerId">
+
+            <div style="margin-bottom: 25px;">
+                <h4 style="color:#94a3b8; margin-bottom:15px; font-size:0.9rem; text-transform:uppercase;">Performans Eşikleri (%)</h4>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px; font-weight:bold;">CPU Eşiği</label>
+                    <input type="number" id="cpuThresholdInput" min="0" max="100" style="width:100%;" placeholder="Örn: 90">
+                </div>
+
+                <div>
+                    <label style="display:block; margin-bottom:5px; font-weight:bold;">RAM Eşiği</label>
+                    <input type="number" id="ramThresholdInput" min="0" max="100" style="width:100%;" placeholder="Örn: 85">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h4 style="color:#94a3b8; margin-bottom:15px; font-size:0.9rem; text-transform:uppercase;">Disk Sınırları (%)</h4>
+                <div id="diskThresholdsContainer" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid #334155; max-height:200px; overflow-y:auto;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h4 style="color:#94a3b8; margin-bottom:15px; font-size:0.9rem; text-transform:uppercase;">Cihaz Etiketleri</h4>
+                <select id="modalTagSelect" multiple="multiple" style="width: 100%;"></select>
+            </div>
+
+            <div class="modal-actions" style="margin-top:30px; border-top:1px solid #334155; padding-top:20px; text-align:right;">
+                <button class="btn ghost" onclick="closeModal()" style="margin-right:10px;">İptal</button>
+                <button class="btn primary" onclick="saveThresholds()" style="padding:10px 25px;">💾 Kaydet</button>
+            </div>
+        </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
     <script src="/assets/js/config.js"></script>
     <script src="/assets/js/api.js"></script>
     <script src="/assets/js/auth.js"></script>
     <script src="/assets/js/guards.js"></script>
     <script src="/assets/js/agent-ui.js"></script>
-
     <script>
-        (function () {
-            if (!guards.requireRole(["Görüntüleyici", "Yönetici"])) return;
-            document.getElementById("btnLogout").addEventListener("click", () => {
-                auth.clearAuth();
-                window.location.href = "/login.html";
-            });
+        $(document).ready(function () {
+            if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
 
-            // Select2 Başlatma
-            $(document).ready(function () {
-                $('#tagSelect').select2({
-                    placeholder: "Etiket seçin veya arayın...",
-                    allowClear: true
-                });
-            });
-        })();
+            const isAdmin = auth.hasRole("Yönetici");
+            const username = localStorage.getItem("staj2_username") || "Kullanıcı";
+            document.getElementById("userWelcome").textContent = `Hoş geldin, ${username} (${auth.getRoles().join(", ")})`;
+
+            if (isAdmin) {
+                document.getElementById("adminPanel").style.display = "block";
+                document.getElementById("thActions").style.display = "table-cell";
+                loadAdminData();
+            }
+
+            $('#tagSelect').select2({ placeholder: "Etiketle filtrele..." });
+            document.getElementById("btnLogout").addEventListener("click", () => { auth.clearAuth(); window.location.href = "/login.html"; });
+        });
+        function closeModal() { document.getElementById('thresholdModal').style.display = 'none'; }
     </script>
 </body>
 </html>

@@ -68,6 +68,11 @@ namespace Staj2.Infrastructure.Data
                 .HasOne(m => m.ComputerDisk)
                 .WithMany(d => d.DiskMetrics)
                 .HasForeignKey(m => m.ComputerDiskId);
+            // OnModelCreating içinde mevcut kodların altına ekle:
+            modelBuilder.Entity<User>()
+                .HasMany(u => u.Roles)
+                .WithMany(r => r.Users)
+                .UsingEntity(j => j.ToTable("UserRoles")); // Veritabanında "UserRoles" tablosu oluşacak
             // --- 4. REGISTRATION REQUEST ---
             modelBuilder.Entity<UserRegistrationRequest>(entity =>
             {

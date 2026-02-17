@@ -4,84 +4,51 @@ using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using STAJ2.Services;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using STAJ2.Models.Agent;
 
 namespace STAJ2.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Yönetici")] // Yetki sorunu yaşarsan burayı geçici olarak yorum yap
+[Authorize(Roles = "Yönetici")]
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly IMailSender _mail;
-    private readonly IConfiguration _config;
+    public AdminController(AppDbContext db) { _db = db; }
 
-    public AdminController(AppDbContext db, IMailSender mail, IConfiguration config)
-    {
-        _db = db;
-        _mail = mail;
-        _config = config;
-    }
-
-    // --- 1. BİLGİSAYAR DETAYI (Ayarlar Modal'ı İçin) ---
     [HttpGet("computers/{id:int}")]
     public async Task<IActionResult> GetComputer(int id)
     {
         var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
-        if (computer == null) return NotFound("Bilgisayar bulunamadı.");
-
-        return Ok(new
-        {
-            computer.Id,
-            computer.CpuThreshold,
-            computer.RamThreshold,
-            Tags = computer.Tags.Select(t => new { t.Id, t.Name })
-        });
+        if (computer == null) return NotFound();
+        return Ok(new { computer.Id, computer.CpuThreshold, computer.RamThreshold, Tags = computer.Tags.Select(t => t.Name) });
     }
 
-    // --- 2. DİSKLERİ GETİRME ---
     [HttpGet("computers/{computerId:int}/disks")]
-    public async Task<IActionResult> GetComputerDisks(int computerId)
-    {
-        var disks = await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync();
-        return Ok(disks);
-    }
+    public async Task<IActionResult> GetComputerDisks(int computerId) => Ok(await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync());
 
-    // --- 3. EŞİKLERİ GÜNCELLEME ---
     [HttpPut("update-thresholds/{computerId:int}")]
     public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
     {
         var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
-        if (computer == null) return NotFound("Cihaz bulunamadı.");
-
+        if (computer == null) return NotFound();
         computer.CpuThreshold = request.CpuThreshold;
         computer.RamThreshold = request.RamThreshold;
-
         if (request.DiskThresholds != null)
         {
-            foreach (var diskReq in request.DiskThresholds)
+            foreach (var dReq in request.DiskThresholds)
             {
-                var disk = computer.Disks.FirstOrDefault(d => d.DiskName == diskReq.DiskName);
-                if (disk != null) disk.ThresholdPercent = diskReq.ThresholdPercent;
+                var disk = computer.Disks.FirstOrDefault(d => d.DiskName == dReq.DiskName);
+                if (disk != null) disk.ThresholdPercent = dReq.ThresholdPercent;
             }
         }
         await _db.SaveChangesAsync();
-        return Ok(new { message = "Güncellendi." });
+        return Ok();
     }
-
-    // --- 4. ETİKET YÖNETİMİ ---
-    // STAJ2/Controllers/AdminController.cs içinde şu metodu bul ve değiştir:
 
     [HttpGet("tags")]
-    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")] // Yetkiyi genişlettik!
-    public async Task<IActionResult> GetTags()
-    {
-        return Ok(await _db.Tags.ToListAsync());
-    }
+    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")]
+    public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
 
     [HttpPost("tags")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
@@ -104,22 +71,24 @@ public class AdminController : ControllerBase
         return Ok();
     }
 
-    [HttpPut("computers/{computerId:int}/tags")]
-    public async Task<IActionResult> UpdateComputerTags(int computerId, [FromBody] List<int> tagIds)
+    // --- CİHAZ ETİKETLERİNİ GÜNCELLEME ---
+    [HttpPut("computers/{id}/tags")]
+    public async Task<IActionResult> UpdateComputerTags(int id, [FromBody] UpdateComputerTagsRequest request)
     {
-        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == computerId);
+        var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
         if (computer == null) return NotFound();
-        computer.Tags = await _db.Tags.Where(t => tagIds.Contains(t.Id)).ToListAsync();
+        var newTags = await _db.Tags.Where(t => request.Tags.Contains(t.Name)).ToListAsync();
+        computer.Tags.Clear();
+        foreach (var tag in newTags) computer.Tags.Add(tag);
         await _db.SaveChangesAsync();
         return Ok();
     }
 
-    // --- DİĞER STANDART İŞLEMLER ---
     [HttpGet("requests")]
     public async Task<IActionResult> PendingRequests() => Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
 
     [HttpGet("users")]
-    public async Task<IActionResult> GetAllUsers() => Ok(await _db.Users.Include(u => u.Role).Select(u => new { u.Id, u.Username, Role = u.Role.Name }).ToListAsync());
+    public async Task<IActionResult> GetAllUsers() => Ok(await _db.Users.Include(u => u.Roles).OrderBy(u => u.Username).Select(u => new { u.Id, u.Username, u.Email, Roles = u.Roles.Select(r => r.Name).ToList() }).ToListAsync());
 
     [HttpDelete("users/{id:int}")]
     public async Task<IActionResult> DeleteUser(int id)
@@ -129,11 +98,16 @@ public class AdminController : ControllerBase
         return Ok();
     }
 
-    [HttpPut("users/{userId:int}/change-role")]
+    [HttpPut("users/{userId}/change-role")]
     public async Task<IActionResult> ChangeUserRole(int userId, [FromBody] ChangeRoleRequest request)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user != null) { user.RoleId = request.NewRoleId; await _db.SaveChangesAsync(); }
+        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
+        if (user == null) return NotFound();
+        var newRole = await _db.Roles.FindAsync(request.NewRoleId);
+        if (newRole == null) return BadRequest();
+        user.Roles.Clear();
+        user.Roles.Add(newRole);
+        await _db.SaveChangesAsync();
         return Ok();
     }
 
@@ -146,15 +120,9 @@ public class AdminController : ControllerBase
     }
 }
 
-// --- TÜM DTO MODELLERİ ---
 public class TagCreateRequest { public string Name { get; set; } = null!; }
 public class UpdateComputerNameRequest { public int Id { get; set; } public string NewDisplayName { get; set; } = null!; }
-public class ApproveRequest { public int RoleId { get; set; } }
 public class ChangeRoleRequest { public int NewRoleId { get; set; } }
-public class UpdateThresholdsRequest
-{
-    public double? CpuThreshold { get; set; }
-    public double? RamThreshold { get; set; }
-    public List<DiskThresholdItem>? DiskThresholds { get; set; }
-}
+public class UpdateThresholdsRequest { public double? CpuThreshold { get; set; } public double? RamThreshold { get; set; } public List<DiskThresholdItem>? DiskThresholds { get; set; } }
 public class DiskThresholdItem { public string DiskName { get; set; } = null!; public double? ThresholdPercent { get; set; } }
+public class UpdateComputerTagsRequest { public List<string> Tags { get; set; } = new(); }

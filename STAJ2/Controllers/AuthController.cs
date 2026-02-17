@@ -16,7 +16,6 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
-    
 
     public AuthController(AppDbContext db, IConfiguration config)
     {
@@ -28,30 +27,26 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _db.Users
-            .Include(x => x.Role)
+            .Include(x => x.Roles) // Çoklu rol desteği için Roles eklendi
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
-        if (user == null)
-            return Unauthorized("Kullanıcı bulunamadı");
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            return Unauthorized("Giriş bilgileri hatalı");
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return Unauthorized("Şifre hatalı");
-
-        // Token üret
         var token = CreateJwtToken(user);
 
         return Ok(new
         {
             token,
             user.Username,
-            user.Email,
-            role = user.Role.Name
+            // Frontend'e tüm rolleri liste olarak dönüyoruz
+            roles = user.Roles.Select(r => r.Name).ToList()
         });
     }
+
     [HttpPost("set-password")]
     public async Task<IActionResult> SetPassword([FromBody] SetPasswordRequest req)
     {
-        // token hash
         var tokenHash = Sha256(req.Token);
 
         var tokenRow = await _db.PasswordSetupTokens
@@ -66,27 +61,35 @@ public class AuthController : ControllerBase
 
         var rr = tokenRow.RegistrationRequest;
 
-        // ekstra güvenlik: email + username eşleşsin
         if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
         {
             return BadRequest("Email veya kullanıcı adı eşleşmiyor.");
         }
 
-        // Kullanıcı zaten var mı?
         var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
         if (exists) return Conflict("Kullanıcı zaten oluşturulmuş.");
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
 
-        _db.Users.Add(new User
+        // --- DÜZELTİLEN KISIM BURASI ---
+        var newUser = new User
         {
             Username = rr.Username,
             Email = rr.Email,
             PasswordHash = hash,
-            IsApproved = true,
-            RoleId = rr.RequestedRoleId
-        });
+            IsApproved = true
+        };
+
+        // Kayıt isteğindeki rolü bulup listeye ekliyoruz
+        var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
+        if (requestedRole != null)
+        {
+            newUser.Roles.Add(requestedRole);
+        }
+
+        _db.Users.Add(newUser);
+        // -------------------------------
 
         tokenRow.IsUsed = true;
         tokenRow.UsedAt = DateTime.UtcNow;
@@ -100,23 +103,25 @@ public class AuthController : ControllerBase
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
     }
-    
+
     private string CreateJwtToken(User user)
     {
         var jwt = _config.GetSection("Jwt");
-
-        var keyBytes = Encoding.UTF8.GetBytes(jwt["Key"]!);
-        var key = new SymmetricSecurityKey(keyBytes);
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.Role.Name)
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Username)
         };
+
+        // Tüm rolleri token içerisine ClaimTypes.Role olarak ekle
+        foreach (var role in user.Roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role.Name));
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],
@@ -129,4 +134,3 @@ public class AuthController : ControllerBase
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
-
