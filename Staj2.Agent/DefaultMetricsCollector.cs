@@ -142,12 +142,15 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
     {
         try
         {
-            // Tüm ağ kartlarını tara, aktif olanı ve en hızlısını al
-            var mac = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .OrderByDescending(n => n.Speed)
-                .Select(n => n.GetPhysicalAddress().ToString())
-                .FirstOrDefault();
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+         // Sanal ve Loopback olmayanları al, OperationalStatus'a BAKMA (Down olsa da al)
+         .Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                && !n.Description.ToLower().Contains("virtual")
+                && !n.Description.ToLower().Contains("pseudo"))
+         .OrderByDescending(n => n.NetworkInterfaceType == NetworkInterfaceType.Ethernet) // Ethernet varsa hep onu seç
+         .ThenBy(n => n.Name);
+
+            var mac = interfaces.Select(n => n.GetPhysicalAddress().ToString()).FirstOrDefault();
 
             // Formatsız gelirse (AABBCCDDEEFF), aralara tire koyarak daha okunaklı yapabilirsin:
             if (!string.IsNullOrEmpty(mac) && mac.Length == 12)
