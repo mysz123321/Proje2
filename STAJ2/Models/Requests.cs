@@ -7,9 +7,7 @@
     // Etiket İşlemleri için
     public class TagCreateRequest { public string Name { get; set; } = null!; }
 
-    // Cihaz İşlemleri için (ComputerController tarafından kullanılacak)
-    public class UpdateComputerNameRequest { public int Id { get; set; } public string NewDisplayName { get; set; } = null!; }
-
+    
     public class UpdateThresholdsRequest
     {
         public double? CpuThreshold { get; set; }
@@ -22,6 +20,11 @@
         public string DiskName { get; set; } = null!;
         public double? ThresholdPercent { get; set; }
     }
-
+    // YENİ EKLİYORUZ: AdminController'da reddetme işlemi için
+    public class RejectRegistrationRequest
+    {
+        public int RequestId { get; set; }
+        public string RejectionReason { get; set; }
+    }
     public class UpdateComputerTagsRequest { public List<string> Tags { get; set; } = new(); }
 }

@@ -81,7 +81,6 @@
             case 'computers':
                 title.innerText = "Bilgisayarlar";
                 subtitle.innerText = "Sistemdeki tüm cihazların canlı performansı.";
-                // Tablo yapısını temizledik, renkler CSS'den gelecek
                 content.innerHTML = `
                     <div class="card shadow-sm">
                         <div class="table-responsive">
@@ -126,7 +125,9 @@
     async function loadRequestsView(container) {
         try {
             const reqs = await api.get("/api/Admin/requests");
-            // "text-white bg-dark" sınıflarını kaldırdık
+
+            // DÜZELTME: map(r => ...) kullandığın için aşağıda 'req' değil 'r' kullandık.
+            // DÜZELTME: onclick fonksiyonlarını 'ui.approveRequest' olarak güncelledik.
             let rows = reqs.map(r => `
                 <tr>
                     <td class="fw-bold">${r.username}</td>
@@ -135,8 +136,14 @@
                             ${systemRoles.map(x => `<option value="${x.id}" ${x.id == 3 ? 'selected' : ''}>${x.name}</option>`).join("")}
                         </select>
                     </td>
-                    <td class="text-end">
-                        <button class="btn btn-success btn-sm" style="color:white;" onclick="ui.approveReq(${r.id})"><i class="bi bi-check-lg"></i> Onayla</button>
+                    <td>
+                        <button class="btn btn-sm btn-success" onclick="ui.approveRequest(${r.id})">
+                            Onayla
+                        </button>
+                        
+                        <button class="btn btn-sm btn-danger" onclick="ui.rejectRequest(${r.id})">
+                            Reddet
+                        </button>
                     </td>
                 </tr>`).join("");
 
@@ -155,7 +162,6 @@
     async function loadUsersView(container) {
         try {
             const users = await api.get("/api/Admin/users");
-            // "text-light" sınıfını kaldırdık
             let rows = users.map(u => {
                 const roleChecks = systemRoles.map(r => `
                     <div class="form-check form-check-inline">
@@ -204,28 +210,92 @@
         } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
     }
 
-    // --- Fonksiyonları Dışarı Aç ---
+    // --- Fonksiyonları Dışarı Aç (Window.UI) ---
     window.ui = {
         show, hide, setText, backOrHome,
         renderSidebar, switchView, toggleTheme,
-        approveReq: async (id) => {
-            const roleId = document.getElementById(`reqRole_${id}`).value;
-            await api.post(`/api/Admin/approve/${id}`, { roleId: parseInt(roleId) });
-            ui.switchView('requests');
+
+        // --- ONAYLAMA ---
+        approveRequest: async (id) => {
+            if (!confirm("Bu kullanıcıyı onaylamak istiyor musunuz?")) return;
+            try {
+                const roleId = document.getElementById(`reqRole_${id}`).value;
+                await api.post(`/api/admin/requests/approve/${id}`, { newRoleId: parseInt(roleId) });
+
+                alert("Kullanıcı onaylandı.");
+
+                // EKRANI YENİLEME TAKTİĞİ:
+                // Önce içeriği temizle, kullanıcı yenilendiğini hissetsin
+                document.getElementById('dynamic-content').innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
+                // Sonra sayfayı tekrar çağır
+                setTimeout(() => ui.switchView('requests'), 100);
+
+            } catch (e) {
+                alert(e.message || "Bir hata oluştu.");
+            }
         },
+
+        // --- REDDETME ---
+        rejectRequest: async (id) => {
+            const reason = prompt("Lütfen ret sebebini giriniz:");
+            if (reason === null) return;
+
+            if (reason.length > 200) {
+                alert("Ret sebebi 200 karakterden uzun olamaz.");
+                return;
+            }
+
+            try {
+                await api.post(`/api/admin/requests/reject`, {
+                    requestId: id,
+                    rejectionReason: reason
+                });
+
+                alert("Talep reddedildi.");
+
+                // EKRANI YENİLEME TAKTİĞİ:
+                document.getElementById('dynamic-content').innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
+                setTimeout(() => ui.switchView('requests'), 100);
+
+            } catch (e) {
+                alert(e.message || "Bir hata oluştu.");
+            }
+        },
+
+        // --- KULLANICI GÜNCELLEME ---
         updateUserRoles: async (userId) => {
             const container = document.querySelector(`.user-role-group-${userId}`);
             const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
             const roleIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
 
-            try { await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: roleIds }); alert("Roller güncellendi."); ui.switchView('users'); } catch (e) { alert(e.message); }
+            try {
+                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: roleIds });
+                alert("Roller güncellendi.");
+                ui.switchView('users');
+            } catch (e) {
+                alert(e.message);
+            }
         },
-        deleteUser: async (id) => { if (confirm("Kullanıcı silinsin mi?")) { await api.del(`/api/Admin/users/${id}`); ui.switchView('users'); } },
+
+        // --- KULLANICI SİLME ---
+        deleteUser: async (id) => {
+            if (confirm("Kullanıcı silinsin mi?")) {
+                await api.del(`/api/Admin/users/${id}`);
+                ui.switchView('users');
+            }
+        },
+
+        // --- ETİKET İŞLEMLERİ ---
         createNewTag: async () => {
             const name = document.getElementById("newTagName").value.trim();
             if (name) { await api.post("/api/Admin/tags", { name }); ui.switchView('tags'); }
         },
-        deleteTag: async (id) => { if (confirm("Etiket silinsin mi?")) { await api.del(`/api/Admin/tags/${id}`); ui.switchView('tags'); } }
+        deleteTag: async (id) => {
+            if (confirm("Etiket silinsin mi?")) {
+                await api.del(`/api/Admin/tags/${id}`);
+                ui.switchView('tags');
+            }
+        }
     };
 
     // --- Tema Başlatma (Sayfa Yüklenince) ---

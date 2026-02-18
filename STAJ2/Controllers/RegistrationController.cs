@@ -23,8 +23,7 @@ public class RegistrationController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRegistrationRequest request)
     {
-        if (request == null)
-            return BadRequest("Geçersiz istek.");
+        if (request == null) return BadRequest("Geçersiz istek.");
 
         var username = (request.Username ?? "").Trim();
         var email = (request.Email ?? "").Trim().ToLowerInvariant();
@@ -32,29 +31,24 @@ public class RegistrationController : ControllerBase
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(email))
             return BadRequest("Kullanıcı adı ve email zorunludur.");
 
-        // 1) Kullanıcı zaten ana tabloda (Users) var mı?
+        // 1) Kullanıcı zaten USERS tablosunda (aktif kullanıcı) var mı?
         var userExists = await _db.Users.AnyAsync(x => x.Email == email || x.Username == username);
         if (userExists)
             return Conflict("Bu email veya kullanıcı adı zaten kayıtlı. Giriş yapabilirsiniz.");
 
-        // 2) Mevcut bir kayıt isteği var mı?
-        var existingRequest = await _db.RegistrationRequests.FirstOrDefaultAsync(x =>
-            x.Email == email || x.Username == username);
+        // 2) Sadece BEKLEYEN (Pending) bir istek var mı diye bakıyoruz.
+        // (Onaylanmış veya Reddedilmiş eski istekler bizi ilgilendirmiyor, yeni talep açabiliriz)
+        var pendingRequest = await _db.RegistrationRequests.FirstOrDefaultAsync(x =>
+            (x.Email == email || x.Username == username) &&
+            x.Status == RegistrationStatus.Pending);
 
-        if (existingRequest != null)
+        if (pendingRequest != null)
         {
-            // Eğer istek hala BEKLEYEN durumundaysa hata ver
-            if (existingRequest.Status == RegistrationStatus.Pending)
-            {
-                return Conflict("Bu email veya kullanıcı adı için zaten bekleyen bir kayıt isteği var.");
-            }
-
-            // Eğer istek onaylanmış/reddedilmiş ama kullanıcı silinmişse, 
-            // Unique Index hatası almamak için eski isteği siliyoruz.
-            _db.RegistrationRequests.Remove(existingRequest);
+            return Conflict("Bu hesap için zaten onay bekleyen bir talep var. Lütfen admin onayını bekleyiniz.");
         }
 
-        // 3) Yeni kayıt isteğini oluştur (Varsayılan Rol: Görüntüleyici)
+        // 3) Yeni kayıt isteğini oluştur (INSERT)
+        // Eski kayıtları silmiyoruz, veritabanına yeni bir satır ekliyoruz.
         const int viewerRoleId = 3;
 
         var rr = new UserRegistrationRequest
@@ -69,20 +63,18 @@ public class RegistrationController : ControllerBase
         _db.RegistrationRequests.Add(rr);
         await _db.SaveChangesAsync();
 
-        // 4) --- MAİL GÖNDERİMİ ---
-        // Kayıt başarılı olduktan sonra kullanıcıya bilgi maili atıyoruz.
+        // 4) Mail Gönderimi
         try
         {
             await _mail.SendAsync(
                 rr.Email,
                 "Kayıt İsteğiniz Alındı",
-                $"Merhaba {rr.Username},\n\nKayıt isteğiniz başarıyla sistemimize ulaştı. Yönetici onayından sonra şifrenizi belirleyebileceğiniz bir mail daha alacaksınız."
+                $"Merhaba {rr.Username},\n\nKayıt isteğiniz alındı. Yönetici onayından sonra bilgilendirileceksiniz."
             );
         }
         catch (Exception ex)
         {
-            // Mail gitmese bile kayıt başarılı olduğu için hata dönmüyoruz, sadece logluyoruz.
-            Console.WriteLine($"Kayıt bildirim maili gönderilemedi: {ex.Message}");
+            Console.WriteLine($"Mail hatası: {ex.Message}");
         }
 
         return Ok(new { rr.Id, message = "Kayıt isteği alındı. Admin onayı bekleniyor." });

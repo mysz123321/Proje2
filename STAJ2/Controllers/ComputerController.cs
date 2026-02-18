@@ -83,17 +83,24 @@ public class ComputerController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok();
     }
-
+    
     // 5. İsim Değiştirme
     [HttpPut("update-display-name")]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
     {
-        var computer = await _db.Computers.FindAsync(request.Id);
-        if (computer != null)
+        // --- VALIDATION (JSON Formatlı) ---
+        if (!string.IsNullOrEmpty(request.NewDisplayName) && request.NewDisplayName.Length > 200)
         {
-            computer.DisplayName = request.NewDisplayName;
-            await _db.SaveChangesAsync();
+            return BadRequest(new { message = "Görünen isim 200 karakterden uzun olamaz." });
         }
-        return Ok();
+        // ----------------------------------
+
+        var computer = await _db.Computers.FindAsync(request.Id);
+        if (computer == null) return NotFound(new { message = "Bilgisayar bulunamadı." });
+
+        computer.DisplayName = request.NewDisplayName;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "İsim başarıyla güncellendi." });
     }
 }
