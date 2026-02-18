@@ -272,22 +272,22 @@ window.fetchHistoryMetrics = async () => {
             return;
         }
 
+
         container.innerHTML = data.cpuRam.map(m => {
             const time = new Date(m.createdAt).toLocaleString();
 
-            // Diskleri o anki zamana göre süz (10 sn tolerans)
             const disks = data.disks
                 .filter(d => Math.abs(new Date(d.createdAt).getTime() - new Date(m.createdAt).getTime()) < 10000)
-                .map(d => `<span class="badge bg-secondary-subtle text-white border border-secondary me-2 px-2 py-1" style="font-weight:500;">${d.diskName}: %${Math.round(d.usedPercent)}</span>`)
+                .map(d => `<span class="badge bg-secondary me-1" style="font-weight:500;">${d.diskName}: %${Math.round(d.usedPercent)}</span>`)
                 .join("");
 
-            // text-light ve var(--text-main) eklenerek koyu temada siyah kalması engellendi
+            // td elemanlarına 'text-light' ekleyerek koyu modda görünürlüğü garanti ediyoruz
             return `
-                <tr class="border-bottom border-secondary" style="color: var(--text-main) !important;">
-                    <td class="small ps-4 fw-bold opacity-75">${time}</td>
-                    <td><span class="badge bg-info-subtle text-info px-3 py-2 fw-bold" style="font-size:0.9rem;">%${Math.round(m.cpuUsage)}</span></td>
-                    <td><span class="badge bg-warning-subtle text-warning px-3 py-2 fw-bold" style="font-size:0.9rem;">%${Math.round(m.ramUsage)}%</span></td>
-                    <td class="pe-4">${disks || '<span class="text-muted small">Veri yok</span>'}</td>
+                <tr class="border-bottom border-secondary">
+                    <td class="small ps-4 fw-bold text-light opacity-75">${time}</td>
+                    <td><span class="badge bg-info text-dark fw-bold px-3 py-2" style="font-size:0.9rem;">%${Math.round(m.cpuUsage)}</span></td>
+                    <td><span class="badge bg-warning text-dark fw-bold px-3 py-2" style="font-size:0.9rem;">%${Math.round(m.ramUsage)}</span></td>
+                    <td class="pe-4 text-light">${disks || '<span class="text-muted small">Veri yok</span>'}</td>
                 </tr>`;
         }).join("");
 

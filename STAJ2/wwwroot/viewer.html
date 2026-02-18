@@ -20,7 +20,7 @@
             color: var(--text-main, #e2e8f0);
             min-height: 100vh;
             overflow-x: hidden;
-            display: block !important;
+            display: block !important; /* app.css'teki flex ayarını eziyoruz */
             transition: background 0.3s ease, color 0.3s ease;
         }
 
@@ -43,30 +43,59 @@
             padding: 25px;
         }
 
-        .table {
-            --bs-table-bg: transparent;
-            --bs-table-color: var(--text-main);
-            border-color: var(--border-color);
+        /* --- MODAL VE KART RENK/KONUM DÜZELTMELERİ --- */
+
+        /* Modalı tam merkeze çivilemek için */
+        .modal.show {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
-        .table-hover tbody tr:hover > * {
-            background-color: var(--bg-hover) !important;
+        /* Geçmiş Metrik Modalı özel genişlik */
+        #historyModal .modal-dialog {
+            width: 75% !important;
+            max-width: 75% !important;
+            margin: 0 !important;
+        }
+
+        /* app.css'teki 500px kısıtlamasını kaldırıyoruz */
+        #historyModal .modal-content {
+            max-width: none !important;
+            width: 100% !important;
+            height: 85vh;
+            background: var(--bg-modal-content, #0f172a) !important;
             color: var(--text-main) !important;
-            box-shadow: none !important;
+            border: 1px solid var(--border-color) !important;
         }
 
-        .modal-content {
-            background-color: var(--bg-modal-content, #1e293b);
-            border: 1px solid var(--border-color);
-            color: var(--text-main, #e2e8f0);
+        #historyModal .modal-body {
+            overflow-y: auto;
+            flex: 1;
         }
 
-        .modal-header, .modal-footer {
-            border-color: var(--border-color);
+        /* Kartların koyu temada beyaz kalmasını engellemek için */
+        #historyModal .card {
+            background: var(--bg-card-muted) !important;
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-main) !important;
         }
 
-        [data-theme="dark"] .btn-close {
-            filter: invert(1) grayscale(100%) brightness(200%);
+        /* Koyu tema tablo yazıları */
+        #historyModal .table {
+            color: var(--text-main) !important;
+        }
+
+            #historyModal .table td, #historyModal .table th {
+                color: var(--text-main) !important;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+        /* Inputların koyu modda görünmesi */
+        input[type="datetime-local"] {
+            color-scheme: dark;
+            color: var(--text-main) !important;
+            background: var(--bg-input) !important;
         }
 
         .nav-link {
@@ -90,11 +119,6 @@
                 font-weight: bold;
             }
 
-        .user-panel {
-            background: var(--bg-card-muted);
-            border-top: 1px solid var(--border-color);
-        }
-
         @media (max-width: 992px) {
             #sidebar {
                 margin-left: calc(-1 * var(--sidebar-width));
@@ -108,67 +132,12 @@
                 margin-left: 0;
                 width: 100%;
             }
-        }
 
-        /* Tarih inputlarının metin rengi koyu temada görünmüyorsa fix */
-        input[type="datetime-local"] {
-            color-scheme: dark;
-        }
-        /* HISTORY MODAL: ekranın ortası + %75 boyut */
-        #historyModal .modal-dialog {
-            width: 75vw;
-            max-width: 75vw;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        #historyModal .modal-content {
-            height: 75vh;
-        }
-
-        #historyModal .modal-body {
-            overflow: auto;
-            /* header yüksekliğini düşerek içerik alanını dengeler */
-            max-height: calc(75vh - 70px);
-        }
-
-        /* Mobilde daha geniş kullan */
-        @media (max-width: 992px) {
             #historyModal .modal-dialog {
-                width: 95vw;
-                max-width: 95vw;
-            }
-
-            #historyModal .modal-content {
-                height: 85vh;
-            }
-
-            #historyModal .modal-body {
-                max-height: calc(85vh - 70px);
+                width: 95% !important;
+                max-width: 95% !important;
             }
         }
-
-        /* Filtre inputlarında yazıların görünmesi (datetime/number/text) */
-        #historyModal input,
-        #historyModal select,
-        #historyModal textarea {
-            color: var(--text-main) !important;
-            background-color: var(--bg-input) !important;
-            border-color: var(--border-color) !important;
-        }
-
-            /* datetime-local koyu temada değerleri görünür yap */
-            #historyModal input[type="datetime-local"] {
-                color-scheme: dark;
-            }
-
-        /* (İstersen global de yap) number/text inputların görünmesi */
-        input[type="number"],
-        input[type="text"],
-        input[type="datetime-local"] {
-            color: var(--text-main);
-        }
-
     </style>
 </head>
 <body>
@@ -226,11 +195,11 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold">CPU Eşiği (%)</label>
-                            <input type="number" id="cpuThresholdInput" class="form-control" placeholder="Örn: 80" style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
+                            <input type="number" id="cpuThresholdInput" class="form-control" placeholder="Örn: 80">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold">RAM Eşiği (%)</label>
-                            <input type="number" id="ramThresholdInput" class="form-control" placeholder="Örn: 90" style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
+                            <input type="number" id="ramThresholdInput" class="form-control" placeholder="Örn: 90">
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-bold">Disk Sınırları</label>
@@ -279,11 +248,11 @@
                     <input type="hidden" id="renameComputerId">
                     <div class="mb-3">
                         <label class="form-label text-muted small">Mevcut</label>
-                        <input type="text" id="currentComputerName" class="form-control" disabled style="background:var(--bg-card-muted); color:var(--text-muted); border-color:var(--border-color);">
+                        <input type="text" id="currentComputerName" class="form-control" disabled>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Yeni İsim</label>
-                        <input type="text" id="newComputerName" class="form-control" placeholder="Yeni isim..." style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
+                        <input type="text" id="newComputerName" class="form-control" placeholder="Yeni isim...">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -295,28 +264,28 @@
     </div>
 
     <div id="historyModal" class="modal fade" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog">
             <div class="modal-content shadow-lg border-0">
                 <div class="modal-header bg-dark text-white border-bottom-0 py-3 px-4">
-                    <h4 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i> Metrik Geçmişi Analizi</h4>
+                    <h4 class="modal-title fw-bold text-white"><i class="bi bi-clock-history me-2"></i> Metrik Geçmişi Analizi</h4>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
                 </div>
 
-                <div class="modal-body p-4 p-md-5" style="background-color: var(--bg-body);">
+                <div class="modal-body p-4 p-md-5">
                     <input type="hidden" id="historyComputerId">
 
                     <div class="row justify-content-center mb-5">
                         <div class="col-12">
-                            <div class="card shadow-sm border" style="background-color: var(--bg-card);">
+                            <div class="card shadow-sm border">
                                 <div class="card-body p-4">
                                     <div class="row g-3 align-items-end">
                                         <div class="col-md-5">
-                                            <label class="form-label fw-bold text-muted small mb-1">BAŞLANGIÇ ZAMANI</label>
-                                            <input type="datetime-local" id="historyStart" class="form-control form-control-lg" style="background-color: var(--bg-input); color: var(--text-main); border-color: var(--border-color);">
+                                            <label class="form-label fw-bold small mb-1 text-info">BAŞLANGIÇ ZAMANI</label>
+                                            <input type="datetime-local" id="historyStart" class="form-control form-control-lg">
                                         </div>
                                         <div class="col-md-5">
-                                            <label class="form-label fw-bold text-muted small mb-1">BİTİŞ ZAMANI</label>
-                                            <input type="datetime-local" id="historyEnd" class="form-control form-control-lg" style="background-color: var(--bg-input); color: var(--text-main); border-color: var(--border-color);">
+                                            <label class="form-label fw-bold small mb-1 text-info">BİTİŞ ZAMANI</label>
+                                            <input type="datetime-local" id="historyEnd" class="form-control form-control-lg">
                                         </div>
                                         <div class="col-md-2">
                                             <button class="btn btn-primary btn-lg w-100 fw-bold shadow-sm" onclick="fetchHistoryMetrics()">
@@ -330,9 +299,9 @@
                     </div>
 
                     <div id="historyResults" style="display:none;">
-                        <div class="table-responsive rounded-3 border shadow-sm" style="max-height: 600px; overflow-y: auto; background-color: var(--bg-card);">
-                            <table class="table table-hover align-middle mb-0" style="color: var(--text-main) !important;">
-                                <thead class="sticky-top bg-secondary text-white border-bottom">
+                        <div class="table-responsive rounded-3 border border-secondary shadow-sm" style="max-height: 550px; overflow-y: auto;">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="sticky-top bg-dark border-bottom border-secondary">
                                     <tr class="small text-uppercase fw-bold">
                                         <th class="ps-4 py-3" style="min-width: 200px;">Zaman</th>
                                         <th class="py-3" style="min-width: 130px;">CPU (%)</th>
@@ -340,7 +309,7 @@
                                         <th class="py-3 pe-4">Disk Durumları</th>
                                     </tr>
                                 </thead>
-                                <tbody id="historyTableBody" style="color: var(--text-main) !important;">
+                                <tbody id="historyTableBody">
                                 </tbody>
                             </table>
                         </div>
@@ -348,7 +317,7 @@
 
                     <div id="historyPlaceholder" class="text-center py-5 my-5">
                         <div class="opacity-25 mb-3 text-muted">
-                            <i class="bi bi-calendar-range display-1"></i>
+                            <i class="bi bi-calendar-range display-1 text-white"></i>
                         </div>
                         <h4 class="text-muted fw-light">Lütfen bir tarih aralığı seçerek analize başlayın.</h4>
                     </div>
