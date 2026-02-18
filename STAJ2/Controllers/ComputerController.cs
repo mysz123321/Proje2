@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
 using STAJ2.Models; // Request modellerini (DTO) görmek için
+using System.Globalization;
 
 namespace STAJ2.Controllers;
 
@@ -102,5 +103,40 @@ public class ComputerController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new { message = "İsim başarıyla güncellendi." });
+    }
+    // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
+    [HttpGet("{id:int}/metrics-history")]
+    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string start, [FromQuery] string end)
+    {
+        // Tarih formatı: "yyyy-MM-ddTHH:mm" (HTML5 datetime-local formatı)
+        if (!DateTime.TryParse(start, out DateTime startTime) || !DateTime.TryParse(end, out DateTime endTime))
+        {
+            return BadRequest("Geçersiz tarih formatı.");
+        }
+
+        // 1. CPU ve RAM metriklerini çek
+        var cpuRamMetrics = await _db.ComputerMetrics
+            .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
+            .ToListAsync();
+
+        // 2. Disk metriklerini çek (Bilgisayara bağlı tüm diskler için)
+        var diskMetrics = await _db.DiskMetrics
+            .Include(m => m.ComputerDisk)
+            .Where(m => m.ComputerDisk.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => new {
+                m.CreatedAt,
+                m.UsedPercent,
+                DiskName = m.ComputerDisk.DiskName
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            CpuRam = cpuRamMetrics,
+            Disks = diskMetrics
+        });
     }
 }
