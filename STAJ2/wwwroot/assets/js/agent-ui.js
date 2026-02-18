@@ -62,13 +62,16 @@ function renderTable() {
 
         const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
-        // GÜNCELLEME: History (bi-list-ul) butonu eklendi
+        // GÜNCELLEME: Renkli buton sınıfları (btn-tag ve btn-history) eklendi
         const actionButtons = canEdit ? `
             <div style="display:flex; gap:5px;">
-                <button class="btn primary border small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>
-                <button class="btn warning border small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>
-                <button class="btn ghost border small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>
-                <button class="btn info border small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar">
+                <button class="btn primary small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>
+                
+                <button class="btn warning small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>
+                
+                <button class="btn btn-tag small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>
+                
+                <button class="btn btn-history small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar">
                     <i class="bi bi-list-ul"></i>
                 </button>
             </div>` : "";
