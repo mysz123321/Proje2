@@ -167,11 +167,8 @@ public sealed class AgentTelemetryController : ControllerBase
             return StatusCode(500, ex.Message);
         }
     }
-
-    // Bu metod arka planda mail gönderip DB günceller
     private async Task HandleBackgroundAlert(int computerId, AgentTelemetryDto dto)
     {
-        // Yeni bir scope açarak veritabanı ve mail servislerini alıyoruz
         using (var scope = _scopeFactory.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -180,84 +177,106 @@ public sealed class AgentTelemetryController : ControllerBase
 
             try
             {
-                // Bilgisayarı ve ona bağlı tüm disk ayarlarını veritabanından çekiyoruz
                 var computer = await dbContext.Computers
                     .Include(c => c.Disks)
                     .FirstOrDefaultAsync(c => c.Id == computerId);
 
                 if (computer == null) return;
 
-                // Bildirim aralığını yine config'den alabiliriz (veya bunu da bilgisayar bazlı yapabilirsin)
                 var alertingConfig = config.GetSection("Alerting");
-                int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours", 24);
+                var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
 
-                // Zaman Kontrolü: Eğer son bildirimden bu yana belirlenen süre geçmediyse işlem yapma
-                if (computer.LastNotifyTime != null && computer.LastNotifyTime.Value.AddHours(intervalHours) > DateTime.Now)
-                {
-                    return;
-                }
+                // Alıcı yoksa hiç başlama
+                if (recipients == null || recipients.Count == 0) return;
 
-                string alertReasons = "";
+                int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours", 1);
                 string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
 
-                // 1. CPU Kontrolü: Veritabanında eşik tanımlanmışsa (null değilse) kontrol et
+                bool dbUpdateNeeded = false;
+
+                // --- YARDIMCI YEREL FONKSİYON: Mail Gönderme İşi ---
+                // Kod tekrarını önlemek için mail atma işlemini buraya aldık.
+                async Task SendAlertMail(string title, string message)
+                {
+                    string subject = $"🚨 {title}: {deviceName}";
+                    string fullBody = $"Merhaba,\n\n" +
+                                      $"{deviceName} ({computer.IpAddress}) cihazında aşağıdaki limit aşımı tespit edilmiştir:\n\n" +
+                                      $"{message}\n\n" +
+                                      $"--------------------------------------------------\n" +
+                                      $"Zaman: {DateTime.Now}";
+
+                    foreach (var email in recipients)
+                    {
+                        try
+                        {
+                            await mailSender.SendAsync(email, subject, fullBody);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Mail Hatası ({email}): {ex.Message}");
+                        }
+                    }
+                }
+                // ----------------------------------------------------
+
+                // 1. CPU KONTROLÜ
                 if (computer.CpuThreshold.HasValue && dto.CpuUsage >= computer.CpuThreshold.Value)
                 {
-                    alertReasons += $"* CPU Kullanımı: %{dto.CpuUsage:F1} (Belirlenen Eşik: %{computer.CpuThreshold.Value})\n";
+                    if (computer.CpuLastNotifyTime == null || (DateTime.Now - computer.CpuLastNotifyTime.Value).TotalHours >= intervalHours)
+                    {
+                        string msg = $"⚠️ CPU KULLANIMI: %{dto.CpuUsage:F1} (Limit: %{computer.CpuThreshold.Value})";
+                        await SendAlertMail("CPU UYARISI", msg); // Anında gönder
+
+                        computer.CpuLastNotifyTime = DateTime.Now;
+                        dbUpdateNeeded = true;
+                    }
                 }
 
-                // 2. RAM Kontrolü: Veritabanında eşik tanımlanmışsa kontrol et
+                // 2. RAM KONTROLÜ
                 if (computer.RamThreshold.HasValue && dto.RamUsage >= computer.RamThreshold.Value)
                 {
-                    alertReasons += $"* RAM Kullanımı: %{dto.RamUsage:F1} (Belirlenen Eşik: %{computer.RamThreshold.Value})\n";
+                    if (computer.RamLastNotifyTime == null || (DateTime.Now - computer.RamLastNotifyTime.Value).TotalHours >= intervalHours)
+                    {
+                        string msg = $"⚠️ RAM KULLANIMI: %{dto.RamUsage:F1} (Limit: %{computer.RamThreshold.Value})";
+                        await SendAlertMail("RAM UYARISI", msg); // Anında gönder
+
+                        computer.RamLastNotifyTime = DateTime.Now;
+                        dbUpdateNeeded = true;
+                    }
                 }
 
-                // 3. Disk Kontrolü: Dinamik olarak gelen her diski kendi eşiğiyle karşılaştır
-                // dto.DiskUsage formatı: "C: %40.5 D: %10.2"
+                // 3. DİSK KONTROLÜ (Tek Tek)
                 var diskUsageParts = dto.DiskUsage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 for (int i = 0; i < diskUsageParts.Length; i += 2)
                 {
                     if (i + 1 < diskUsageParts.Length)
                     {
-                        string diskName = diskUsageParts[i].Replace(":", "").Trim(); // Örn: "C"
+                        string diskName = diskUsageParts[i].Replace(":", "").Trim();
                         string percentStr = diskUsageParts[i + 1].Replace("%", "").Replace(",", ".");
 
                         if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double currentUsage))
                         {
-                            // Veritabanında bu diske özel bir eşik ayarı var mı bakıyoruz
-                            var diskSetting = computer.Disks.FirstOrDefault(d => d.DiskName == diskName);
+                            var targetDisk = computer.Disks.FirstOrDefault(d => d.DiskName == diskName);
 
-                            // Eğer eşik atanmışsa (null değilse) ve sınırı aşmışsa uyarılara ekle
-                            if (diskSetting != null && diskSetting.ThresholdPercent.HasValue && currentUsage >= diskSetting.ThresholdPercent.Value)
+                            if (targetDisk != null && targetDisk.ThresholdPercent.HasValue && currentUsage >= targetDisk.ThresholdPercent.Value)
                             {
-                                alertReasons += $"* Disk ({diskName}): %{currentUsage:F1} (Belirlenen Eşik: %{diskSetting.ThresholdPercent.Value})\n";
+                                if (targetDisk.LastNotifyTime == null || (DateTime.Now - targetDisk.LastNotifyTime.Value).TotalHours >= intervalHours)
+                                {
+                                    string msg = $"⚠️ DİSK DOLULUK ({diskName}): %{currentUsage:F1} (Limit: %{targetDisk.ThresholdPercent.Value})";
+                                    await SendAlertMail($"DİSK UYARISI ({diskName})", msg); // Anında ve diske özel başlıkla gönder
+
+                                    targetDisk.LastNotifyTime = DateTime.Now;
+                                    dbUpdateNeeded = true;
+                                }
                             }
                         }
                     }
                 }
 
-                // Eğer herhangi bir aşım varsa mail gönder
-                if (!string.IsNullOrEmpty(alertReasons))
+                // Eğer herhangi bir mail atıldıysa zamanlayıcıları kaydet
+                if (dbUpdateNeeded)
                 {
-                    var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
-                    if (recipients != null && recipients.Count > 0)
-                    {
-                        string subject = $"⚠️ KRİTİK SİSTEM UYARISI: {deviceName}";
-                        string body = $"Merhaba,\n\n{deviceName} cihazında aşağıdaki sınırlar aşılmıştır:\n\n" +
-                                      $"{alertReasons}\n" +
-                                      $"Ölçüm Zamanı: {DateTime.Now}\n" +
-                                      $"Cihaz IP: {computer.IpAddress}\n\n" +
-                                      $"Not: Bu cihaz için yeni bir uyarı en erken {intervalHours} saat sonra gönderilecektir.";
-
-                        foreach (var email in recipients)
-                        {
-                            await mailSender.SendAsync(email, subject, body);
-                        }
-
-                        // Son bildirim zamanını güncelle ki sürekli mail atmasın
-                        computer.LastNotifyTime = DateTime.Now;
-                        await dbContext.SaveChangesAsync();
-                    }
+                    await dbContext.SaveChangesAsync();
                 }
             }
             catch (Exception ex)
