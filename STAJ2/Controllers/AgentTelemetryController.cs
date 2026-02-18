@@ -78,7 +78,7 @@ public sealed class AgentTelemetryController : ControllerBase
             // Bilgisayarı kaydediyoruz (Id oluşması için)
             await _context.SaveChangesAsync(ct);
 
-            // --- YENİ DİSK MANTIĞI ---
+            // --- YENİ DİSK MANTIĞI (GÜNCELLENMİŞ) ---
             // dto.TotalDiskGb formatı: "C: 465.1234 D: 0.1955"
             var diskTotalParts = dto.TotalDiskGb.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < diskTotalParts.Length; i += 2)
@@ -88,20 +88,33 @@ public sealed class AgentTelemetryController : ControllerBase
                     string dName = diskTotalParts[i].Replace(":", "");
                     double.TryParse(diskTotalParts[i + 1].Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out double dSize);
 
-                    // Eğer bu disk tabloda yoksa ekle
-                    if (!computer.Disks.Any(d => d.DiskName == dName))
+                    // Mevcut diskleri kontrol et
+                    var existingDisk = computer.Disks.FirstOrDefault(d => d.DiskName == dName);
+
+                    if (existingDisk == null)
                     {
+                        // 1. Eğer bu disk tabloda yoksa yeni kayıt ekle
                         _context.ComputerDisks.Add(new ComputerDisk
                         {
                             ComputerId = computer.Id,
                             DiskName = dName,
                             TotalSizeGb = dSize,
-                            ThresholdPercent = null // Varsayılan eşik
+                            ThresholdPercent = null
                         });
+                    }
+                    else
+                    {
+                        // 2. Eğer disk varsa ama boyutu değişmişse (örn: SSD yükseltmesi), veritabanını güncelle
+                        // Küçük yuvarlama farklarını (0.1 GB altı) görmezden gelmek için Math.Abs kullanıyoruz
+                        if (Math.Abs(existingDisk.TotalSizeGb - dSize) > 0.1)
+                        {
+                            existingDisk.TotalSizeGb = dSize;
+                        }
                     }
                 }
             }
             await _context.SaveChangesAsync(ct);
+
             dto.DisplayName = computer.DisplayName; // Veritabanındaki güncel görünen adı DTO'ya bas
             dto.ComputerId = computer.Id;
             // 3. Metrik Kaydı
