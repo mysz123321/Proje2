@@ -16,23 +16,25 @@
         }
 
         body {
-            background-color: #0f172a;
-            color: #e2e8f0;
+            background-color: var(--bg-body, #0f172a);
+            color: var(--text-main, #e2e8f0);
             min-height: 100vh;
             overflow-x: hidden;
             display: block !important;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         #sidebar {
             width: var(--sidebar-width);
-            background: #1e293b;
-            border-right: 1px solid #334155;
+            background: var(--bg-card, #1e293b);
+            border-right: 1px solid var(--border-color, #334155);
             position: fixed;
             top: 0;
             left: 0;
             height: 100vh;
             z-index: 1000;
             overflow-y: auto;
+            transition: background 0.3s ease;
         }
 
         #main-wrapper {
@@ -41,87 +43,41 @@
             padding: 25px;
         }
 
-        /* Tablo Stilleri */
+        /* Tablo */
         .table {
             --bs-table-bg: transparent;
-            --bs-table-color: #e2e8f0;
-            border-color: #334155;
+            --bs-table-color: var(--text-main);
+            border-color: var(--border-color);
         }
 
         .table-hover tbody tr:hover > * {
-            background-color: rgba(56, 189, 248, 0.15) !important;
-            color: #ffffff !important;
+            background-color: var(--bg-hover) !important;
+            color: var(--text-main) !important;
             box-shadow: none !important;
-        }
-
-        /* Select2 Dark Mode Fix (Daha önceki düzeltmemiz) */
-        .select2-container--default .select2-selection--multiple .select2-selection__choice {
-            background-color: #0ea5e9 !important;
-            color: #ffffff !important;
-            border: 1px solid #0284c7 !important;
-            border-radius: 4px;
-            display: flex !important;
-            flex-direction: row-reverse;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 8px;
-            margin-right: 5px;
-            margin-top: 4px;
-        }
-
-        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
-            color: #ffffff !important;
-            border: none !important;
-            background: transparent !important;
-            margin-left: 8px !important;
-            margin-right: 0 !important;
-            font-weight: bold;
-            font-size: 1.1em;
-            line-height: 1;
-            padding: 0 !important;
-        }
-
-            .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
-                color: #fff !important;
-                opacity: 1;
-            }
-
-        .select2-container--default .select2-selection--multiple {
-            background-color: #0f172a !important;
-            border: 1px solid #334155 !important;
-            min-height: 42px;
-        }
-
-        .select2-dropdown {
-            background-color: #1e293b !important;
-            border: 1px solid #334155 !important;
-            color: #e2e8f0 !important;
-            z-index: 10000 !important;
-        }
-
-        .select2-search__field {
-            color: #ffffff !important;
-            margin-top: 8px !important;
-            margin-left: 8px !important;
         }
 
         /* Modallar */
         .modal-content {
-            background-color: #1e293b;
-            border: 1px solid #475569;
-            color: #fff;
+            background-color: var(--bg-modal-content);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
         }
 
         .modal-header, .modal-footer {
-            border-color: #334155;
+            border-color: var(--border-color);
         }
 
-        .btn-close {
+        [data-theme="dark"] .btn-close {
             filter: invert(1) grayscale(100%) brightness(200%);
         }
 
+        [data-theme="light"] .btn-close {
+            filter: none;
+        }
+
+        /* Nav Link */
         .nav-link {
-            color: #94a3b8;
+            color: var(--text-muted);
             padding: 12px 20px;
             display: flex;
             align-items: center;
@@ -131,7 +87,7 @@
         }
 
             .nav-link:hover {
-                background: rgba(56, 189, 248, 0.1);
+                background: var(--bg-hover);
                 color: #38bdf8;
             }
 
@@ -141,10 +97,15 @@
                 font-weight: bold;
             }
 
+        /* User Panel */
+        .user-panel {
+            background: var(--bg-card-muted);
+            border-top: 1px solid var(--border-color);
+        }
+
         @media (max-width: 992px) {
             #sidebar {
                 margin-left: calc(-1 * var(--sidebar-width));
-                transition: 0.3s;
             }
 
                 #sidebar.active {
@@ -156,37 +117,60 @@
                 width: 100%;
             }
         }
+
+        /* Select2 Fixleri (App.css'den miras alır ama burada inline ezmek gerekebilir) */
+        .select2-container--default .select2-selection--multiple {
+            background-color: var(--bg-input) !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        .select2-dropdown {
+            background-color: var(--bg-card) !important;
+            color: var(--text-main) !important;
+        }
+
+        .select2-search__field {
+            color: var(--text-main) !important;
+        }
     </style>
 </head>
 <body>
 
     <nav id="sidebar">
-        <div class="p-4 border-bottom border-secondary">
-            <h4 class="text-info fw-bold mb-0"><i class="bi bi-shield-check"></i> STAJ2</h4>
-            <small class="text-muted">Monitoring v2.0</small>
+        <div class="p-4 border-bottom border-secondary" style="border-color:var(--border-color) !important;">
+            <h4 class="fw-bold mb-0" style="color:#38bdf8;"><i class="bi bi-shield-check"></i> STAJ2</h4>
+            <small style="color:var(--text-muted);">Monitoring v2.0</small>
         </div>
+
         <ul class="nav flex-column mt-3" id="main-nav"></ul>
-        <div style="position: absolute; bottom: 0; width: 100%;" class="p-3 border-top border-secondary bg-dark">
+
+        <div style="position: absolute; bottom: 0; width: 100%;" class="p-3 user-panel">
             <div class="d-flex align-items-center gap-2 mb-3">
                 <div class="rounded-circle bg-info d-flex align-items-center justify-content-center text-dark fw-bold" style="width:35px; height:35px;">
                     <i class="bi bi-person"></i>
                 </div>
                 <div style="overflow:hidden;">
-                    <div id="userWelcome" class="small fw-bold text-white text-truncate">Kullanıcı</div>
-                    <div id="userRoles" class="small fw-bold text-white text-truncate" style="font-size: 0.7rem;">...</div>
+                    <div id="userWelcome" class="small fw-bold text-truncate" style="color:var(--text-main);">Kullanıcı</div>
+                    <div id="userRoles" class="small fw-bold text-truncate" style="font-size: 0.7rem; color:var(--text-muted);">...</div>
                 </div>
             </div>
-            <button class="btn btn-outline-danger btn-sm w-100" id="btnLogout">
-                <i class="bi bi-box-arrow-left"></i> Çıkış Yap
-            </button>
+
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm flex-grow-1" onclick="ui.toggleTheme()" title="Temayı Değiştir">
+                    <i id="theme-icon" class="bi bi-sun-fill"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm flex-grow-1" id="btnLogout">
+                    <i class="bi bi-box-arrow-left"></i> Çıkış
+                </button>
+            </div>
         </div>
     </nav>
 
     <div id="main-wrapper">
-        <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary">
+        <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary" style="border-color:var(--border-color) !important;">
             <div>
-                <h2 id="view-title" class="mb-0">Yükleniyor...</h2>
-                <p class="text-muted mb-0 small" id="view-subtitle">Lütfen bekleyiniz.</p>
+                <h2 id="view-title" class="mb-0" style="color:var(--text-title);">Yükleniyor...</h2>
+                <p class="mb-0 small" id="view-subtitle" style="color:var(--text-muted);">Lütfen bekleyiniz.</p>
             </div>
             <div id="globalFilters" class="d-flex gap-2 align-items-center" style="min-width: 300px;">
                 <select id="tagSelect" multiple="multiple" class="form-control" style="width: 100%;"></select>
@@ -200,23 +184,23 @@
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">⚙️ Performans Sınırları</h5>
+                    <h5 class="modal-title" style="color:var(--text-title);">⚙️ Performans Sınırları</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="modalComputerId">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold text-info">CPU Eşiği (%)</label>
-                            <input type="number" id="cpuThresholdInput" class="form-control" placeholder="Örn: 80">
+                            <label class="form-label fw-bold" style="color:var(--text-main);">CPU Eşiği (%)</label>
+                            <input type="number" id="cpuThresholdInput" class="form-control" placeholder="Örn: 80" style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold text-info">RAM Eşiği (%)</label>
-                            <input type="number" id="ramThresholdInput" class="form-control" placeholder="Örn: 90">
+                            <label class="form-label fw-bold" style="color:var(--text-main);">RAM Eşiği (%)</label>
+                            <input type="number" id="ramThresholdInput" class="form-control" placeholder="Örn: 90" style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
                         </div>
                         <div class="col-12">
-                            <label class="form-label fw-bold">Disk Sınırları</label>
-                            <div id="diskThresholdsContainer" class="p-3 rounded border border-secondary bg-dark"></div>
+                            <label class="form-label fw-bold" style="color:var(--text-main);">Disk Sınırları</label>
+                            <div id="diskThresholdsContainer" class="p-3 rounded border" style="background:var(--bg-card-muted); border-color:var(--border-color);"></div>
                         </div>
                     </div>
                 </div>
@@ -232,13 +216,13 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">🏷️ Etiket Yönetimi</h5>
+                    <h5 class="modal-title" style="color:var(--text-title);">🏷️ Etiket Yönetimi</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="tagModalComputerId">
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Atanacak Etiketler</label>
+                        <label class="form-label fw-bold" style="color:var(--text-main);">Atanacak Etiketler</label>
                         <select id="modalTagSelect" multiple="multiple" class="form-control" style="width:100%"></select>
                     </div>
                 </div>
@@ -254,18 +238,18 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">✏️ İsim Düzenle</h5>
+                    <h5 class="modal-title" style="color:var(--text-title);">✏️ İsim Düzenle</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="renameComputerId">
                     <div class="mb-3">
                         <label class="form-label text-muted">Mevcut</label>
-                        <input type="text" id="currentComputerName" class="form-control" disabled>
+                        <input type="text" id="currentComputerName" class="form-control" disabled style="background:var(--bg-card-muted); color:var(--text-muted); border-color:var(--border-color);">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-info">Yeni İsim</label>
-                        <input type="text" id="newComputerName" class="form-control" placeholder="Yeni isim...">
+                        <label class="form-label fw-bold" style="color:var(--text-main);">Yeni İsim</label>
+                        <input type="text" id="newComputerName" class="form-control" placeholder="Yeni isim..." style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -289,6 +273,11 @@
 
     <script>
         $(document).ready(function () {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            const icon = document.getElementById('theme-icon');
+            if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+
             if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
 
             const username = localStorage.getItem("staj2_username") || "Kullanıcı";

@@ -3,61 +3,43 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>STAJ2 - Giriş</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background: #0f172a;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .login-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 400px;
-            padding: 2rem;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        }
-
-        .form-control {
-            background: #0f172a;
-            border-color: #334155;
-            color: white;
-        }
-
-            .form-control:focus {
-                background: #0f172a;
-                color: white;
-                border-color: #38bdf8;
-                box-shadow: none;
-            }
-    </style>
+    <title>STAJ2 - Giriş Yap</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/assets/css/app.css" />
 </head>
 <body>
-    <div class="login-card text-white">
-        <h2 class="text-center text-info mb-4 fw-bold">Monitoring Giriş</h2>
+    <div class="page">
+        <div class="card" style="width: 100%; max-width: 400px;">
+            <div class="topbar">
+                <h2>Giriş Yap</h2>
+                <div class="actions">
+                    <button class="btn ghost" onclick="ui.toggleTheme()" title="Temayı Değiştir" style="padding: 0.4rem 0.6rem;">
+                        <i id="theme-icon" class="bi bi-sun-fill"></i>
+                    </button>
+                    <a href="/index.html" class="btn ghost small" style="text-decoration:none;">Anasayfa</a>
+                </div>
+            </div>
 
-        <div id="msg" class="alert alert-danger small" style="display:none;"></div>
+            <div id="msg" class="message error" style="display:none;"></div>
 
-        <div class="mb-3">
-            <label class="form-label small text-muted text-uppercase">E-posta</label>
-            <input id="email" type="email" class="form-control" placeholder="mail@example.com" />
-        </div>
+            <div class="form-group">
+                <label class="text-uppercase small fw-bold text-muted">E-posta</label>
+                <input id="email" type="email" placeholder="mail@example.com" />
+            </div>
 
-        <div class="mb-4">
-            <label class="form-label small text-muted text-uppercase">Şifre</label>
-            <input id="password" type="password" class="form-control" placeholder="••••••••" />
-        </div>
+            <div class="form-group">
+                <label class="text-uppercase small fw-bold text-muted">Şifre</label>
+                <input id="password" type="password" placeholder="••••••••" />
+            </div>
 
-        <button id="btnLogin" class="btn btn-primary w-100 py-2 fw-bold">Giriş Yap</button>
+            <div class="space"></div>
 
-        <div class="mt-4 text-center">
-            <a href="/register.html" class="text-info text-decoration-none small">Hesabın yok mu? Kayıt Ol</a>
+            <button id="btnLogin" class="btn primary" style="width:100%; justify-content:center;">Giriş Yap</button>
+
+            <div class="space"></div>
+            <div class="small">
+                <a href="/register.html" style="color:var(--text-muted); text-decoration:none;">Hesabın yok mu? <span style="color:#38bdf8;">Kayıt Ol</span></a>
+            </div>
         </div>
     </div>
 
@@ -66,6 +48,11 @@
     <script src="/assets/js/auth.js"></script>
     <script src="/assets/js/ui.js"></script>
     <script>
+        // Tema ikonunu başlat
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        const icon = document.getElementById('theme-icon');
+        if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+
         document.getElementById("btnLogin").addEventListener("click", async () => {
             ui.hide("msg");
             const email = document.getElementById("email").value.trim();

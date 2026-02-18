@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>STAJ2 - Anasayfa</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/assets/css/app.css" />
 </head>
 <body>
@@ -11,7 +12,12 @@
         <div class="card">
             <div class="topbar">
                 <h2>STAJ2</h2>
-                <button class="secondary" onclick="ui.backOrHome()">← Geri</button>
+                <div class="actions">
+                    <button class="btn ghost" onclick="ui.toggleTheme()" title="Temayı Değiştir" style="padding: 0.4rem 0.6rem;">
+                        <i id="theme-icon" class="bi bi-sun-fill"></i>
+                    </button>
+                    <button class="secondary btn ghost" onclick="ui.backOrHome()">← Geri</button>
+                </div>
             </div>
             <p>Sisteme giriş yapabilir veya kayıt isteği oluşturabilirsin.</p>
 
@@ -27,5 +33,13 @@
     </div>
 
     <script src="/assets/js/ui.js"></script>
+    <script>
+        // İkonun doğru başlamasını sağla
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        const icon = document.getElementById('theme-icon');
+        if (icon) {
+            icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+        }
+    </script>
 </body>
 </html>

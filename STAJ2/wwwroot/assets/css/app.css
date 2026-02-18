@@ -1,4 +1,44 @@
-﻿/* Temel Sıfırlama */
+﻿/* --- TEMA DEĞİŞKENLERİ --- */
+:root {
+    /* VARSAYILAN (KOYU) TEMA */
+    --bg-body: radial-gradient(circle at top, #0f172a, #020617);
+    --bg-card: rgba(15, 23, 42, 0.9);
+    --bg-card-muted: rgba(15, 23, 42, 0.65);
+    --bg-input: #1e293b;
+    --bg-hover: rgba(30, 41, 59, 0.4);
+    --bg-modal-overlay: rgba(2, 6, 23, 0.85);
+    --bg-modal-content: #0f172a;
+    --text-main: #e5e7eb;
+    --text-title: #f8fafc;
+    --text-muted: #9ca3af;
+    --text-input: #f8fafc;
+    --border-color: rgba(148, 163, 184, 0.2);
+    --border-input: rgba(148, 163, 184, 0.3);
+    --shadow-card: 0 18px 45px rgba(0, 0, 0, 0.4);
+    /* Disk satırları için özel */
+    --bg-disk-row: rgba(30, 41, 59, 0.5);
+}
+
+[data-theme="light"] {
+    /* AÇIK TEMA */
+    --bg-body: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-card-muted: #f8fafc;
+    --bg-input: #ffffff;
+    --bg-hover: #e2e8f0;
+    --bg-modal-overlay: rgba(15, 23, 42, 0.4);
+    --bg-modal-content: #ffffff;
+    --text-main: #334155; /* Koyu gri/lacivert metin */
+    --text-title: #0f172a; /* Tam siyah başlıklar */
+    --text-muted: #64748b;
+    --text-input: #0f172a;
+    --border-color: #cbd5e1;
+    --border-input: #cbd5e1;
+    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --bg-disk-row: #e2e8f0;
+}
+
+/* Temel Sıfırlama */
 *,
 *::before,
 *::after {
@@ -9,12 +49,13 @@
 
 body {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: radial-gradient(circle at top, #0f172a, #020617);
-    color: #e5e7eb;
+    background: var(--bg-body);
+    color: var(--text-main);
     min-height: 100vh;
     display: flex;
     align-items: flex-start;
     justify-content: center;
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* App Shell ve Layout */
@@ -39,12 +80,12 @@ body {
 .app-header h1 {
     font-size: 2rem;
     letter-spacing: 0.03em;
-    color: #f8fafc;
+    color: var(--text-title);
 }
 
 .subtitle {
     margin-top: 0.5rem;
-    color: #9ca3af;
+    color: var(--text-muted);
     font-size: 0.95rem;
 }
 
@@ -68,16 +109,17 @@ body {
 
 /* Kart Tasarımları (Glassmorphism) */
 .card {
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--bg-card);
     border-radius: 1rem;
     padding: 1.5rem;
-    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-color);
     backdrop-filter: blur(10px);
+    transition: background 0.3s ease, border-color 0.3s ease;
 }
 
     .card.muted {
-        background: rgba(15, 23, 42, 0.65);
+        background: var(--bg-card-muted);
     }
 
 .card-header {
@@ -89,7 +131,7 @@ body {
 
 .card h2 {
     font-size: 1.2rem;
-    color: #f1f5f9;
+    color: var(--text-title);
 }
 
 /* Tablo Tasarımları */
@@ -106,18 +148,18 @@ th, td {
 }
 
 th {
-    color: #9ca3af;
+    color: var(--text-muted);
     font-weight: 500;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    border-bottom: 1px solid var(--border-color);
 }
 
 tbody tr {
-    border-bottom: 1px solid rgba(148, 163, 184, 0.05);
+    border-bottom: 1px solid var(--border-color);
     transition: background 0.2s;
 }
 
     tbody tr:hover {
-        background: rgba(30, 41, 59, 0.4);
+        background: var(--bg-hover);
     }
 
 /* Form Elemanları */
@@ -130,15 +172,15 @@ tbody tr {
 
 label {
     font-size: 0.9rem;
-    color: #cbd5e1;
+    color: var(--text-main);
 }
 
 input, select, .small-select {
     border-radius: 0.6rem;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    border: 1px solid var(--border-input);
     padding: 0.6rem 0.75rem;
-    background: #1e293b;
-    color: #f8fafc;
+    background: var(--bg-input);
+    color: var(--text-input);
     outline: none;
     transition: all 0.2s ease;
 }
@@ -165,7 +207,7 @@ input, select, .small-select {
 
     .btn.primary {
         background: linear-gradient(135deg, #38bdf8, #6366f1);
-        color: #020617;
+        color: #020617; /* Primary buton yazısı her temada koyu kalabilir */
         box-shadow: 0 8px 20px rgba(56, 189, 248, 0.3);
     }
 
@@ -186,12 +228,12 @@ input, select, .small-select {
 
     .btn.ghost {
         background: transparent;
-        color: #e2e8f0;
-        border: 1px solid rgba(148, 163, 184, 0.4);
+        color: var(--text-main);
+        border: 1px solid var(--border-color);
     }
 
         .btn.ghost:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--bg-hover);
         }
 
     .btn.small {
@@ -200,83 +242,63 @@ input, select, .small-select {
     }
 
 /* Modal Sistemi */
-/* Modal Karartma Arka Planı */
 .modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(2, 6, 23, 0.85); /* Derin lacivert karartma */
-    display: none; /* JS flex yapacak */
+    background: var(--bg-modal-overlay);
+    display: none;
     align-items: center;
     justify-content: center;
     z-index: 2000;
     backdrop-filter: blur(8px);
 }
 
-/* Modal İçerik Kutusu */
 .modal-content {
-    background: #0f172a !important; /* Arka planı koyu lacivert yaptık */
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    background-color: var(--bg-modal-content) !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border-color) !important;
     border-radius: 1.25rem;
     padding: 2rem;
     width: 95%;
     max-width: 500px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    color: #f8fafc !important; /* Yazı rengini beyaza çektik */
 }
 
     .modal-content h3 {
-        color: #38bdf8; /* Parlak mavi başlık */
+        color: #38bdf8;
         margin-bottom: 1.5rem;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        border-bottom: 1px solid var(--border-color);
         padding-bottom: 0.5rem;
     }
 
     /* Modal içindeki inputlar */
     .modal-content input {
-        background: #1e293b !important;
-        border: 1px solid rgba(148, 163, 184, 0.4) !important;
-        color: #f8fafc !important;
+        background-color: var(--bg-input) !important;
+        border: 1px solid var(--border-input) !important;
+        color: var(--text-input) !important;
         margin-top: 5px;
     }
-/* app.css dosyasına ekle */
-.modal-content {
-    background-color: #0f172a !important; /* Beyazlığı öldüren ana satır */
-    color: #f8fafc !important;
-    border: 1px solid rgba(56, 189, 248, 0.3) !important;
-}
 
 #diskThresholdsContainer h4 {
     color: #38bdf8;
     margin: 15px 0 10px 0;
 }
 
-.disk-row {
-    background: rgba(30, 41, 59, 0.7) !important;
-    border: 1px solid rgba(148, 163, 184, 0.1);
-    color: #e2e8f0;
-}
-
-/* Modal içindeki tüm inputların beyaz kalmasını önle */
-.modal-content input {
-    background-color: #1e293b !important;
-    color: #ffffff !important;
-    border: 1px solid #334155 !important;
-}
 /* Disk Satırları */
 .disk-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(30, 41, 59, 0.5);
+    background: var(--bg-disk-row) !important;
     padding: 0.8rem;
     border-radius: 0.75rem;
     margin-bottom: 0.6rem;
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
 }
-
 
 /* Diğer Bileşenler */
 .pill {
@@ -297,17 +319,27 @@ input, select, .small-select {
 }
 
     .message.success {
-        color: #4ade80;
-        background: rgba(74, 222, 128, 0.1);
+        color: #15803d; /* Daha okunaklı yeşil */
+        background: rgba(74, 222, 128, 0.2);
     }
 
-    .message.error {
-        color: #f87171;
-        background: rgba(248, 113, 113, 0.1);
-    }
+[data-theme="dark"] .message.success {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.1);
+}
+
+.message.error {
+    color: #b91c1c; /* Daha okunaklı kırmızı */
+    background: rgba(248, 113, 113, 0.2);
+}
+
+[data-theme="dark"] .message.error {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.1);
+}
 
 .muted-text {
-    color: #64748b;
+    color: var(--text-muted);
     font-size: 0.8rem;
 }
 
@@ -315,4 +347,107 @@ input, select, .small-select {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+}
+
+/* Sayfa ortalama container (Login/Register için) */
+.page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.space {
+    height: 1rem;
+}
+
+.linkbtn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 0.8rem;
+    border-radius: 0.5rem;
+    background: var(--bg-hover);
+    color: var(--text-main);
+    text-decoration: none;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+    .linkbtn:hover {
+        background: #38bdf8;
+        color: #020617;
+        border-color: #38bdf8;
+    }
+
+.small {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+/* ... Önceki kodlar aynen kalacak ... */
+
+/* --- SELECT2 KOYU TEMA DÜZELTMELERİ (En Alta Ekle) --- */
+
+/* Seçim kutusunun kendisi */
+.select2-container--default .select2-selection--multiple {
+    background-color: var(--bg-input) !important;
+    border: 1px solid var(--border-color) !important;
+    min-height: 38px;
+}
+
+    /* Seçilen etiketlerin (Pill) görünümü */
+    .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        background-color: #38bdf8 !important; /* Açık mavi */
+        color: #000000 !important; /* Siyah yazı - Okunabilirlik için */
+        border: 1px solid #0ea5e9 !important;
+        font-weight: 600;
+    }
+
+    /* Çarpı (Silme) ikonu */
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+        color: #000000 !important; /* Siyah */
+        border-right: 1px solid rgba(0,0,0,0.2) !important;
+        margin-right: 5px !important;
+    }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            background-color: rgba(0,0,0,0.1) !important;
+            color: #000000 !important;
+        }
+
+/* Açılır Liste (Dropdown) Arka Planı */
+.select2-dropdown {
+    background-color: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-main) !important;
+    z-index: 9999 !important;
+}
+
+/* Arama Kutusu */
+.select2-search__field {
+    background-color: transparent !important;
+    color: var(--text-main) !important;
+}
+
+/* Liste Elemanları */
+.select2-container--default .select2-results__option {
+    color: var(--text-main) !important;
+}
+
+/* Hover/Seçili Durum */
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background-color: #38bdf8 !important;
+    color: #000000 !important;
+}
+
+.select2-container--default .select2-results__option--selected {
+    background-color: rgba(56, 189, 248, 0.2) !important;
 }
