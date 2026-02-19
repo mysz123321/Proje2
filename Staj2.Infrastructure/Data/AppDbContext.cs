@@ -24,6 +24,15 @@ namespace Staj2.Infrastructure.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // ==========================================================
+            // --- GLOBAL QUERY FILTERS (SOFT DELETE İÇİN) ---
+            // Veritabanı sorguları otomatik olarak IsDeleted = false olanları çeker.
+            // ==========================================================
+            modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
+            modelBuilder.Entity<Tag>().HasQueryFilter(t => !t.IsDeleted);
+            modelBuilder.Entity<Computer>().HasQueryFilter(c => !c.IsDeleted);
+
+
             // --- İLİŞKİLER VE ARA TABLOLAR ---
 
             // Tag - Computer (Many-to-Many)
@@ -57,7 +66,10 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Username).IsUnique();
+
+                // DİKKAT: .IsUnique() BURADAN KALDIRILDI. 
+                // Böylece IsDeleted olan bir kullanıcı adı, yeni bir kullanıcı tarafından tekrar alınabilir.
+                entity.HasIndex(e => e.Username);
 
                 // Kısıtlamalar
                 entity.Property(e => e.Email).HasMaxLength(200);
@@ -80,7 +92,10 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<Computer>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.MacAddress).IsUnique();
+
+                // DİKKAT: .IsUnique() BURADAN DA KALDIRILDI.
+                // Böylece eski silinmiş (IsDeleted=true) cihazın MAC adresiyle, tekrar yeni bir cihaz (Insert) eklenebilir.
+                entity.HasIndex(e => e.MacAddress);
                 entity.Property(e => e.MacAddress).IsRequired().HasMaxLength(50); // Mac genelde kısadır ama 50 kalsın
 
                 // Kısıtlamalar
@@ -108,12 +123,9 @@ namespace Staj2.Infrastructure.Data
                 entity.Property(e => e.TokenHash).HasMaxLength(200);
             });
 
-            // AppDbContext.cs içindeki ilgili bloğu bul ve bu şekilde değiştir:
-
             // 7. REGISTRATION REQUEST
             modelBuilder.Entity<UserRegistrationRequest>(entity =>
             {
-                // ESKİ HALİ: entity.HasIndex(e => e.Email).IsUnique();
                 // YENİ HALİ (Unique YOK):
                 entity.HasIndex(e => e.Email);
                 entity.HasIndex(e => e.Username);

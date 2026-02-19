@@ -6,7 +6,6 @@ public class UserRegistrationRequest
 
     public string Username { get; set; } = null!;
     public string Email { get; set; } = null!;
-
     public int RequestedRoleId { get; set; }
     public Role RequestedRole { get; set; } = null!;
 

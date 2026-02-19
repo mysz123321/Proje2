@@ -11,7 +11,7 @@ namespace Staj2.Domain.Entities
         public string? IpAddress { get; set; }
         public string? CpuModel { get; set; }
         public double TotalRamMb { get; set; }
-
+        public bool IsDeleted { get; set; } = false;
         // Etiketler
         public List<Tag> Tags { get; set; } = new();
 

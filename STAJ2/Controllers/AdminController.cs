@@ -37,7 +37,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> DeleteUser(int id)
     {
         var user = await _db.Users.FindAsync(id);
-        if (user != null) { _db.Users.Remove(user); await _db.SaveChangesAsync(); }
+        if (user != null) { user.IsDeleted = true; await _db.SaveChangesAsync(); }
         return Ok(new { message = "Kullanıcı silindi." });
     }
 
@@ -203,7 +203,7 @@ public class AdminController : ControllerBase
         var tag = await _db.Tags.FindAsync(id);
         if (tag == null) return NotFound(new { message = "Etiket bulunamadı." });
 
-        _db.Tags.Remove(tag);
+        tag.IsDeleted = true;
         await _db.SaveChangesAsync();
         return Ok(new { message = "Etiket silindi." });
     }
