@@ -68,10 +68,19 @@
             border: 1px solid var(--border-color) !important;
         }
 
-        .modal.show {
-            display: flex !important;
+        .modal {
             align-items: center !important;
             justify-content: center !important;
+        }
+
+            .modal.show, .modal[style*="display: block"] {
+                display: flex !important;
+            }
+
+        /* 2. SCROLLBAR (KAYDIRMA ÇUBUĞU) DENGESİ (Arka planın büyümesini/şişmesini çözer) */
+        body.modal-open {
+            overflow-y: scroll !important; /* Kaydırma çubuğu alanını her zaman sabit tutar */
+            padding-right: 0 !important; /* Bootstrap'in yersiz boşluk ekleyip ekranı daraltmasını engeller */
         }
 
         #historyModal .modal-dialog {
