@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/css/app.css" />
-
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --sidebar-width: 260px;
@@ -43,32 +43,31 @@
             padding: 25px;
         }
 
-        /* --- KART VE TEMA DÜZELTMELERİ (KESİN ÇÖZÜM) --- */
-
-        /* 1. Koyu Temada Kartların Beyaz Kalmasını Engelleme */
+        /* --- KART VE TEMA DÜZELTMELERİ --- */
         [data-theme="dark"] .card {
             background-color: var(--bg-card, #1e293b) !important;
             border-color: var(--border-color, #334155) !important;
             color: var(--text-main, #e2e8f0) !important;
         }
+
         [data-theme="dark"] .card-body {
             color: var(--text-main) !important;
         }
 
-        /* 2. Takvim İkonu Fix: Temaya Göre İkon Rengi */
         [data-theme="dark"] input[type="datetime-local"] {
-            color-scheme: dark; /* Koyu temada ikon beyaz */
+            color-scheme: dark;
         }
+
         [data-theme="light"] input[type="datetime-local"] {
-            color-scheme: light; /* Açık temada ikon siyah */
+            color-scheme: light;
         }
+
         input[type="datetime-local"] {
             color: var(--text-main) !important;
             background-color: var(--bg-input) !important;
             border: 1px solid var(--border-color) !important;
         }
 
-        /* 3. Modal Merkezi Konum ve Genişlik */
         .modal.show {
             display: flex !important;
             align-items: center !important;
@@ -94,12 +93,11 @@
             color: var(--text-main) !important;
         }
 
-        #historyModal .table td, #historyModal .table th {
-            color: var(--text-main) !important;
-            border-color: var(--border-color) !important;
-        }
+            #historyModal .table td, #historyModal .table th {
+                color: var(--text-main) !important;
+                border-color: var(--border-color) !important;
+            }
 
-        /* Diğer Nav Link Stilleri */
         .nav-link {
             color: var(--text-muted);
             padding: 12px 20px;
@@ -109,14 +107,50 @@
             border-radius: 8px;
             margin: 4px 12px;
         }
-        .nav-link:hover { background: var(--bg-hover); color: #38bdf8; }
-        .nav-link.active { background: #38bdf8; color: #0f172a !important; font-weight: bold; }
+
+            .nav-link:hover {
+                background: var(--bg-hover);
+                color: #38bdf8;
+            }
+
+            .nav-link.active {
+                background: #38bdf8;
+                color: #0f172a !important;
+                font-weight: bold;
+            }
 
         @media (max-width: 992px) {
-            #sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
-            #sidebar.active { margin-left: 0; }
-            #main-wrapper { margin-left: 0; width: 100%; }
-            #historyModal .modal-dialog { width: 95% !important; max-width: 95% !important; }
+            #sidebar {
+                margin-left: calc(-1 * var(--sidebar-width));
+            }
+
+                #sidebar.active {
+                    margin-left: 0;
+                }
+
+            #main-wrapper {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            #historyModal .modal-dialog {
+                width: 95% !important;
+                max-width: 95% !important;
+            }
+        }
+        /* --- Switch (Toggle) Görünürlük Düzeltmesi --- */
+        [data-theme="light"] .form-check-input.custom-toggle {
+            background-color: #cbd5e1;
+            border-color: #64748b;
+        }
+
+            [data-theme="light"] .form-check-input.custom-toggle:checked {
+                background-color: #0ea5e9;
+                border-color: #0369a1;
+            }
+
+        .form-check-input.custom-toggle {
+            cursor: pointer;
         }
     </style>
 </head>
@@ -250,53 +284,67 @@
                 <div class="modal-body p-4 p-md-5">
                     <input type="hidden" id="historyComputerId">
 
-                    <div class="row justify-content-center mb-5">
-                        <div class="col-12">
-                            <div class="card shadow-sm border border-secondary" style="background-color: var(--bg-card-muted) !important;">
-                                <div class="card-body p-4">
-                                    <div class="row g-3 align-items-end">
-                                        <div class="col-md-5">
-                                            <label class="form-label fw-bold small mb-1">BAŞLANGIÇ ZAMANI</label>
-                                            <input type="datetime-local" id="historyStart" class="form-control form-control-lg">
-                                        </div>
-                                        <div class="col-md-5">
-                                            <label class="form-label fw-bold small mb-1">BİTİŞ ZAMANI</label>
-                                            <input type="datetime-local" id="historyEnd" class="form-control form-control-lg">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <button class="btn btn-primary btn-lg w-100 fw-bold shadow-sm" onclick="fetchHistoryMetrics()">
-                                                <i class="bi bi-search me-2"></i> Filtrele
-                                            </button>
+                    <div class="row h-100">
+                        <div class="col-lg-3 border-end border-secondary pe-lg-4" style="border-color: var(--border-color) !important;">
+                            <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders"></i> Kontrol Paneli</h5>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small mb-1" style="color:var(--text-muted);">BAŞLANGIÇ ZAMANI</label>
+                                <input type="datetime-local" id="historyStart" class="form-control" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-bold small mb-1" style="color:var(--text-muted);">BİTİŞ ZAMANI</label>
+                                <input type="datetime-local" id="historyEnd" class="form-control" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                            </div>
+
+                            <button class="btn btn-primary w-100 fw-bold shadow-sm mb-4" onclick="fetchHistoryMetrics()">
+                                <i class="bi bi-search me-2"></i> Filtrele
+                            </button>
+
+                            <div id="diskFiltersContainer" style="display:none; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                                <div class="d-flex align-items-center mb-3">
+                                    <i class="bi bi-hdd-network text-info me-2"></i>
+                                    <h6 class="mb-0 small fw-bold text-uppercase" style="color:var(--text-muted);">Diskleri Göster</h6>
+                                </div>
+                                <div id="diskCheckboxes" class="row g-2"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-9 ps-lg-4 mt-4 mt-lg-0" style="height: calc(85vh - 150px); overflow-y: auto; overflow-x: hidden; padding-bottom: 20px; padding-right: 5px;">
+
+                            <div id="historyPlaceholder" class="text-center py-5 mt-5" style="display: block;">
+                                <div class="opacity-25 mb-3 text-muted">
+                                    <i class="bi bi-graph-up display-1"></i>
+                                </div>
+                                <h4 class="text-muted fw-light">Lütfen sol taraftan tarih aralığı seçerek analize başlayın.</h4>
+                            </div>
+
+                            <div id="historyResults" style="display:none; width: 100%;">
+                                <div id="chartsContainer" class="d-flex flex-column gap-3 w-100 pb-4">
+
+                                    <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
+                                        <div class="card-body p-2" style="overflow: hidden;">
+                                            <div style="position: relative; height: 180px; width: 100%;">
+                                                <canvas id="cpuChart"></canvas>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
+                                        <div class="card-body p-2" style="overflow: hidden;">
+                                            <div style="position: relative; height: 180px; width: 100%;">
+                                                <canvas id="ramChart"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="dynamicDiskCharts" class="d-flex flex-column gap-3"></div>
+
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div id="historyResults" style="display:none;">
-                        <div class="rounded-3 border border-secondary shadow-sm" style="background-color: var(--bg-card); overflow: hidden;">
-                            <div style="max-height: 40vh; overflow-y: auto; overflow-x: auto;">
-                                <table class="table table-hover align-middle mb-0" style="margin: 0;">
-                                    <thead class="sticky-top bg-secondary text-white border-bottom" style="z-index: 2;">
-                                        <tr class="small text-uppercase fw-bold">
-                                            <th class="ps-4 py-3 bg-secondary text-white" style="min-width: 200px;">Zaman</th>
-                                            <th class="py-3 bg-secondary text-white" style="min-width: 130px;">CPU (%)</th>
-                                            <th class="py-3 bg-secondary text-white" style="min-width: 130px;">RAM (%)</th>
-                                            <th class="py-3 pe-4 bg-secondary text-white">Disk Durumları</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="historyTableBody"></tbody>
-                                </table>
-                            </div>
                         </div>
-                    </div>
-
-                    <div id="historyPlaceholder" class="text-center py-5 my-5">
-                        <div class="opacity-25 mb-3 text-muted">
-                            <i class="bi bi-calendar-range display-1"></i>
-                        </div>
-                        <h4 class="text-muted fw-light">Lütfen bir tarih aralığı seçerek analize başlayın.</h4>
                     </div>
                 </div>
             </div>
@@ -331,7 +379,7 @@
             ui.renderSidebar(roles);
             ui.switchView('computers');
 
-            $('#tagSelect').select2({ placeholder: "Etiketle filtrele...", tags:false });
+            $('#tagSelect').select2({ placeholder: "Etiketle filtrele...", tags: false });
 
             document.getElementById("btnLogout").addEventListener("click", () => {
                 auth.clearAuth();

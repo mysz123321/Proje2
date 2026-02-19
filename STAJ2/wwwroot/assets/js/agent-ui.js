@@ -1,5 +1,9 @@
 ﻿// STAJ2/wwwroot/assets/js/agent-ui.js
 
+// --- GRAFİKLER İÇİN EKLENEN GLOBAL DEĞİŞKENLER ---
+let historyCharts = { cpu: null, ram: null, disks: {} };
+let currentHistoryData = { cpuRam: [], disks: [] };
+
 // --- DEĞİŞİKLİK 1: İki sekme için ayrı etiket dizileri ---
 let selectedLiveTags = [];
 let selectedAllTags = [];
@@ -11,11 +15,9 @@ let allSystemComputers = [];
 window.applyFilter = () => {
     const tags = $('#tagSelect').val() || [];
 
-    // DEĞİŞİKLİK 2: Hangi sekmenin aktif olduğunu kontrol ediyoruz
     const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
     const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
 
-    // Filtreyi sadece aktif olan sekmenin hafızasına yazıp, o tabloyu yeniliyoruz
     if (isLiveTab) {
         selectedLiveTags = tags;
         renderTable();
@@ -69,7 +71,6 @@ function renderTable() {
     const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
     const now = new Date().getTime();
 
-    // DEĞİŞİKLİK 3: Sadece Canlı sekmesine ait etiket (selectedLiveTags) filtresini uyguluyoruz
     const liveAndFilteredAgents = allAgents.filter(a => {
         const matchesTags = selectedLiveTags.length === 0 || selectedLiveTags.every(t => a.tags && a.tags.includes(t));
         if (!matchesTags) return false;
@@ -249,12 +250,29 @@ window.saveThresholdsWithValidation = async () => {
     } catch (e) { alert("Hata: " + e.message); }
 };
 
-// --- 3. GEÇMİŞ METRİK FONKSİYONLARI ---
+// --- 3. GEÇMİŞ METRİK FONKSİYONLARI (GRAFİKLİ SOL MENÜLÜ YAPI) ---
 
 window.openHistoryModal = (id) => {
     document.getElementById("historyComputerId").value = id;
-    document.getElementById("historyTableBody").innerHTML = "";
+
+    // Eski grafikleri yok et
+    if (historyCharts.cpu) historyCharts.cpu.destroy();
+    if (historyCharts.ram) historyCharts.ram.destroy();
+    Object.values(historyCharts.disks).forEach(chart => chart.destroy());
+    historyCharts.disks = {};
+
+    // HTML containerlarını temizle
+    const dynamicDiskCharts = document.getElementById("dynamicDiskCharts");
+    if (dynamicDiskCharts) dynamicDiskCharts.innerHTML = "";
+
+    const diskCheckboxes = document.getElementById("diskCheckboxes");
+    if (diskCheckboxes) diskCheckboxes.innerHTML = "";
+
+    const diskFiltersContainer = document.getElementById("diskFiltersContainer");
+    if (diskFiltersContainer) diskFiltersContainer.style.display = "none";
+
     document.getElementById("historyResults").style.display = "none";
+    // DİKKAT: Burada flex yerine block kullanıyoruz
     document.getElementById("historyPlaceholder").style.display = "block";
 
     const now = new Date();
@@ -278,46 +296,181 @@ window.fetchHistoryMetrics = async () => {
 
     if (!start || !end) return alert("Lütfen tarih aralığı seçiniz.");
 
-    const container = document.getElementById("historyTableBody");
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
 
-    container.innerHTML = '<tr><td colspan="4" class="text-center p-5"><div class="spinner-border text-info"></div></td></tr>';
-    placeholder.style.display = "none";
-    results.style.display = "block";
+    placeholder.innerHTML = '<div class="text-center py-5 mt-5"><div class="spinner-border text-info"></div><div class="mt-3 text-muted">Veriler analiz ediliyor...</div></div>';
+    placeholder.style.display = "block";
+    results.style.display = "none";
+    document.getElementById("diskFiltersContainer").style.display = "none";
 
     try {
         const data = await api.get(`/api/Computer/${id}/metrics-history?start=${start}&end=${end}`);
 
         if (!data.cpuRam || data.cpuRam.length === 0) {
-            container.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-muted">Kayıt bulunamadı.</td></tr>';
+            placeholder.innerHTML = '<div class="text-center py-5 mt-5"><h5 class="text-muted fw-light mt-4">Bu tarih aralığında kayıt bulunamadı.</h5></div>';
             return;
         }
 
-        container.innerHTML = data.cpuRam.map(m => {
-            const time = new Date(m.createdAt).toLocaleString();
+        currentHistoryData = data;
 
-            const disks = data.disks
-                .filter(d => Math.abs(new Date(d.createdAt).getTime() - new Date(m.createdAt).getTime()) < 10000)
-                .map(d => `<span class="badge bg-secondary me-1" style="font-weight:500;">${d.diskName}: %${Math.round(d.usedPercent)}</span>`)
-                .join("");
+        // ÇÖZÜM 1: TARİH SIRALAMASINI DÜZELTME (Eskiden -> Yeniye)
+        if (currentHistoryData.cpuRam) {
+            currentHistoryData.cpuRam.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
+        if (currentHistoryData.disks) {
+            currentHistoryData.disks.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
 
-            return `
-                <tr class="border-bottom border-secondary">
-                    <td class="small ps-4 fw-bold text-light opacity-75">${time}</td>
-                    <td><span class="badge bg-info text-dark fw-bold px-3 py-2" style="font-size:0.9rem;">%${Math.round(m.cpuUsage)}</span></td>
-                    <td><span class="badge bg-warning text-dark fw-bold px-3 py-2" style="font-size:0.9rem;">%${Math.round(m.ramUsage)}</span></td>
-                    <td class="pe-4 text-light">${disks || '<span class="text-muted small">Veri yok</span>'}</td>
-                </tr>`;
-        }).join("");
+        placeholder.style.display = "none";
+        results.style.display = "block";
+        document.getElementById("diskFiltersContainer").style.display = "block";
+
+        renderBaseCharts(data.cpuRam);
+        generateDiskFilters(data.disks);
+
+        placeholder.innerHTML = `<div class="opacity-25 mb-3 text-muted"><i class="bi bi-graph-up display-1"></i></div><h4 class="text-muted fw-light">Lütfen sol taraftan tarih aralığı seçerek analize başlayın.</h4>`;
 
     } catch (e) {
-        container.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-5"><i class="bi bi-exclamation-triangle me-2"></i> ${e.message}</td></tr>`;
+        placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger"><i class="bi bi-exclamation-triangle me-2"></i> Metrikler yüklenirken hata: ${e.message}</div>`;
     }
 };
 
-// --- 4. TÜM BİLGİSAYARLAR SEKMESİ ---
+function renderBaseCharts(cpuRamData) {
+    // ÇÖZÜM: toLocaleTimeString() yerine formatChartDate fonksiyonumuzu kullanıyoruz
+    const labels = cpuRamData.map(m => formatChartDate(m.createdAt));
+    const cpuData = cpuRamData.map(m => m.cpuUsage);
+    const ramData = cpuRamData.map(m => m.ramUsage);
 
+    if (historyCharts.cpu) historyCharts.cpu.destroy();
+    if (historyCharts.ram) historyCharts.ram.destroy();
+
+    historyCharts.cpu = createLineChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuData, '#38bdf8');
+    historyCharts.ram = createLineChart('ramChart', 'RAM Kullanımı (%)', labels, ramData, '#facc15');
+}
+// --- YENİ: Tarih ve Saati Okunaklı Formata Çeviren Fonksiyon ---
+function formatChartDate(dateString) {
+    const d = new Date(dateString);
+    // Örn: "19 Şub 14:30" formatında çıktı verir
+    return d.toLocaleDateString('tr-TR', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+function generateDiskFilters(disksData) {
+    const diskNames = [...new Set(disksData.map(d => d.diskName))];
+
+    const container = document.getElementById('diskCheckboxes');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const dynamicChartsContainer = document.getElementById('dynamicDiskCharts');
+    if (dynamicChartsContainer) dynamicChartsContainer.innerHTML = '';
+
+    historyCharts.disks = {};
+
+    diskNames.forEach(diskName => {
+        // ÇÖZÜM: col-4 ile yan yana 3'lü dizilim. İçi dikey hizalı ve oldukça minimal!
+        const checkboxHtml = `
+            <div class="col-4">
+                <div class="form-check form-switch p-2 border rounded d-flex flex-column align-items-center justify-content-center text-center shadow-sm h-100" style="background: var(--bg-card); border-color: var(--border-color) !important; margin: 0; padding-left: 0 !important;">
+                    <label class="form-check-label fw-bold mb-1 w-100" style="font-size:0.75rem; color:var(--text-main); cursor:pointer;" for="chk_disk_${diskName}">${diskName}</label>
+                    <input class="form-check-input disk-toggle custom-toggle m-0" type="checkbox" id="chk_disk_${diskName}" value="${diskName}" style="float:none; width: 2.2em; height: 1.1em;">
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', checkboxHtml);
+
+        const chartId = `diskChart_${diskName.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+        const chartHtml = `
+            <div class="card border border-secondary shadow-sm" id="container_${chartId}" style="background-color: var(--bg-card); display: none;">
+                <div class="card-body p-2" style="overflow: hidden;">
+                    <div style="position: relative; height: 180px; width: 100%;">
+                        <canvas id="${chartId}"></canvas>
+                    </div>
+                </div>
+            </div>
+        `;
+        dynamicChartsContainer.insertAdjacentHTML('beforeend', chartHtml);
+
+        document.getElementById(`chk_disk_${diskName}`).addEventListener('change', function () {
+            toggleDiskChart(this.checked, diskName, chartId);
+        });
+    });
+}
+
+function toggleDiskChart(isVisible, diskName, chartId) {
+    const container = document.getElementById(`container_${chartId}`);
+
+    if (isVisible) {
+        container.style.display = 'block';
+
+        const diskData = currentHistoryData.disks.filter(d => d.diskName === diskName);
+
+        // ÇÖZÜM: Burada da formatChartDate fonksiyonunu kullanıyoruz
+        const labels = diskData.map(d => formatChartDate(d.createdAt));
+        const diskUsageData = diskData.map(d => d.usedPercent);
+
+        historyCharts.disks[diskName] = createLineChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, diskUsageData, '#10b981');
+    } else {
+        container.style.display = 'none';
+        if (historyCharts.disks[diskName]) {
+            historyCharts.disks[diskName].destroy();
+            delete historyCharts.disks[diskName];
+        }
+    }
+}
+
+function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+
+    // ÇÖZÜM 2: TEMA KONTROLÜ VE DİNAMİK RENKLER
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const textColor = isLight ? '#334155' : '#e2e8f0'; // Açık temada koyu gri, koyu temada açık gri
+    const gridColor = isLight ? '#cbd5e1' : '#334155'; // Arka plan çizgileri için uyumlu renk
+
+    return new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: labelText,
+                data: dataPoints,
+                borderColor: colorHex,
+                backgroundColor: colorHex + '33',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 1,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                // Başlık rengi temanıza göre değişecek
+                legend: { labels: { color: textColor, font: { weight: 'bold' } } },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                // X ve Y eksenindeki yazılar ve çizgiler temaya göre değişecek
+                x: { ticks: { color: textColor, maxTicksLimit: 10 }, grid: { color: gridColor } },
+                y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
+            }
+        }
+    });
+}
 window.loadAllComputers = async () => {
     try {
         const res = await fetch("/api/Computer", {
@@ -337,7 +490,6 @@ window.renderAllComputersTable = () => {
 
     const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
 
-    // DEĞİŞİKLİK 4: Tüm bilgisayarlar sekmesine ait etiket (selectedAllTags) filtresini uyguluyoruz
     const filtered = selectedAllTags.length === 0
         ? allSystemComputers
         : allSystemComputers.filter(a => selectedAllTags.every(t => a.tags && a.tags.includes(t)));
@@ -404,15 +556,12 @@ $(document).ready(function () {
         placeholder: "Sistemden bir etiket seçiniz..."
     });
 
-    // --- YENİ EKLENEN KOD: YAZI YAZMAYI VE ARAMAYI TAMAMEN KAPATIR ---
-    // Herhangi bir select2 menüsü açıldığında, içindeki yazı alanını "Sadece Okunabilir" yapar
     $(document).on('select2:open', function () {
         document.querySelectorAll('.select2-search__field').forEach(input => {
-            input.readOnly = true;        // Klavye girişini engeller
-            input.style.cursor = 'pointer'; // Fare imlecini yazı imlecinden çıkartıp el işaretine çevirir
+            input.readOnly = true;
+            input.style.cursor = 'pointer';
         });
     });
-    // ------------------------------------------------------------------
 
     $('#main-nav').on('click', '.nav-link', function () {
         setTimeout(() => {

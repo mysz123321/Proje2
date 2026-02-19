@@ -276,7 +276,8 @@ input, select, .small-select {
         padding-bottom: 0.5rem;
     }
 
-    .modal-content input {
+    /* 1. Modal içindeki normal inputlar (Yazı/Sayı kutuları) */
+    .modal-content input:not([type="checkbox"]) {
         background-color: var(--bg-input) !important;
         border: 1px solid var(--border-input) !important;
         color: var(--text-input) !important;
