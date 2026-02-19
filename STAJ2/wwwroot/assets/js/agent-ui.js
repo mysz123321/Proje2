@@ -1,13 +1,28 @@
 ﻿// STAJ2/wwwroot/assets/js/agent-ui.js
 
-let selectedTags = [];
+// --- DEĞİŞİKLİK 1: İki sekme için ayrı etiket dizileri ---
+let selectedLiveTags = [];
+let selectedAllTags = [];
 let allAgents = [];
-let allSystemComputers = []; // Yeni eklenen
+let allSystemComputers = [];
+
 // --- 1. ANA TABLO VE FİLTRELEME ---
 
 window.applyFilter = () => {
-    selectedTags = $('#tagSelect').val() || [];
-    renderTable();
+    const tags = $('#tagSelect').val() || [];
+
+    // DEĞİŞİKLİK 2: Hangi sekmenin aktif olduğunu kontrol ediyoruz
+    const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
+    const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
+
+    // Filtreyi sadece aktif olan sekmenin hafızasına yazıp, o tabloyu yeniliyoruz
+    if (isLiveTab) {
+        selectedLiveTags = tags;
+        renderTable();
+    } else if (isAllTab) {
+        selectedAllTags = tags;
+        if (typeof renderAllComputersTable === "function") renderAllComputersTable();
+    }
 };
 
 async function loadFilterTags() {
@@ -52,16 +67,13 @@ function renderTable() {
     if (!tbody) return;
 
     const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
-
     const now = new Date().getTime();
 
-    // 1. İSTEK: Hem etiket filtresini uygula hem de sadece son 90 sn içinde veri gönderenleri (Canlı) tut
+    // DEĞİŞİKLİK 3: Sadece Canlı sekmesine ait etiket (selectedLiveTags) filtresini uyguluyoruz
     const liveAndFilteredAgents = allAgents.filter(a => {
-        // Etiket kontrolü
-        const matchesTags = selectedTags.length === 0 || selectedTags.every(t => a.tags && a.tags.includes(t));
+        const matchesTags = selectedLiveTags.length === 0 || selectedLiveTags.every(t => a.tags && a.tags.includes(t));
         if (!matchesTags) return false;
 
-        // 90 saniye canlılık kontrolü
         if (!a.ts) return false;
         const agentTime = new Date(a.ts).getTime();
         return (now - agentTime) <= 90000;
@@ -114,21 +126,22 @@ function renderTable() {
 
 window.handleRename = (id, currentName) => {
     document.getElementById("renameComputerId").value = id;
-    document.getElementById("currentComputerName").value = currentName;
-    document.getElementById("newComputerName").value = "";
+    document.getElementById("newComputerName").value = currentName;
     const modal = new bootstrap.Modal(document.getElementById("renameModal"));
     modal.show();
 };
 
 window.saveComputerName = async () => {
     const id = document.getElementById("renameComputerId").value;
-    const newName = document.getElementById("newComputerName").value;
-    if (!newName) return alert("Yeni isim giriniz");
+    const newName = document.getElementById("newComputerName").value.trim();
+    if (!newName) return alert("İsim alanı boş bırakılamaz!");
+    if (newName.length > 200) return alert("Bilgisayar ismi 200 karakterden uzun olamaz!");
+
     try {
         await api.put(`/api/Computer/update-display-name`, { id: parseInt(id), newDisplayName: newName });
         const modal = bootstrap.Modal.getInstance(document.getElementById("renameModal"));
         modal.hide();
-        loadAgents();// DOĞRU SATIR:
+        loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert(e.message); }
 };
@@ -137,9 +150,8 @@ window.openTagModal = async (id) => {
     document.getElementById("tagModalComputerId").value = id;
     const modal = new bootstrap.Modal(document.getElementById("tagsModal"));
 
-    // DEĞİŞİKLİK BURADA: Cihazı her iki listede de ara
     let agent = allAgents.find(a => a.computerId == id);
-    if (!agent) agent = allSystemComputers.find(c => c.id == id); // Eğer canlıda yoksa tüm cihazlarda bul
+    if (!agent) agent = allSystemComputers.find(c => c.id == id);
 
     const existingTags = agent ? (agent.tags || []) : [];
     $('#modalTagSelect').val(existingTags).trigger('change');
@@ -155,14 +167,13 @@ window.saveTags = async () => {
         await api.put(`/api/Computer/${id}/tags`, { tags: selectedTags });
         const modal = bootstrap.Modal.getInstance(document.getElementById("tagsModal"));
         modal.hide();
-        loadAgents();// DOĞRU SATIR:
+        loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert(e.message); }
 };
 
 window.openThresholdSettings = async (id) => {
     document.getElementById("modalComputerId").value = id;
-
     document.getElementById("cpuThresholdInput").value = "";
     document.getElementById("ramThresholdInput").value = "";
     document.getElementById("cpuThresholdInput").placeholder = "Yükleniyor...";
@@ -234,7 +245,6 @@ window.saveThresholdsWithValidation = async () => {
         const modal = bootstrap.Modal.getInstance(document.getElementById("thresholdModal"));
         modal.hide();
         loadAgents();
-        // DOĞRU SATIR:
         if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert("Hata: " + e.message); }
 };
@@ -272,7 +282,6 @@ window.fetchHistoryMetrics = async () => {
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
 
-    // Yüklenirken spinner'ı göster (text-info sınıfı görünür kılar)
     container.innerHTML = '<tr><td colspan="4" class="text-center p-5"><div class="spinner-border text-info"></div></td></tr>';
     placeholder.style.display = "none";
     results.style.display = "block";
@@ -285,7 +294,6 @@ window.fetchHistoryMetrics = async () => {
             return;
         }
 
-
         container.innerHTML = data.cpuRam.map(m => {
             const time = new Date(m.createdAt).toLocaleString();
 
@@ -294,7 +302,6 @@ window.fetchHistoryMetrics = async () => {
                 .map(d => `<span class="badge bg-secondary me-1" style="font-weight:500;">${d.diskName}: %${Math.round(d.usedPercent)}</span>`)
                 .join("");
 
-            // td elemanlarına 'text-light' ekleyerek koyu modda görünürlüğü garanti ediyoruz
             return `
                 <tr class="border-bottom border-secondary">
                     <td class="small ps-4 fw-bold text-light opacity-75">${time}</td>
@@ -308,6 +315,7 @@ window.fetchHistoryMetrics = async () => {
         container.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-5"><i class="bi bi-exclamation-triangle me-2"></i> ${e.message}</td></tr>`;
     }
 };
+
 // --- 4. TÜM BİLGİSAYARLAR SEKMESİ ---
 
 window.loadAllComputers = async () => {
@@ -329,9 +337,10 @@ window.renderAllComputersTable = () => {
 
     const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
 
-    const filtered = selectedTags.length === 0
+    // DEĞİŞİKLİK 4: Tüm bilgisayarlar sekmesine ait etiket (selectedAllTags) filtresini uyguluyoruz
+    const filtered = selectedAllTags.length === 0
         ? allSystemComputers
-        : allSystemComputers.filter(a => selectedTags.every(t => a.tags && a.tags.includes(t)));
+        : allSystemComputers.filter(a => selectedAllTags.every(t => a.tags && a.tags.includes(t)));
 
     tbody.innerHTML = filtered.map(c => {
         const lastSeen = new Date(c.lastSeen).toLocaleString();
@@ -346,22 +355,17 @@ window.renderAllComputersTable = () => {
             statusBadge = `<span class="badge bg-secondary">Pasif</span>`;
         }
 
-        // 2. ve 3. İSTEK: Buton görünürlük kuralları
         const actionButtons = canEdit ? `
             <div style="display:flex; gap:5px;">
-                
                 ${!c.isDeleted ? `
                     <button class="btn primary small" onclick="handleRename(${c.id}, '${c.displayName || c.machineName}')" title="İsim Değiştir">✏️</button>
                     <button class="btn warning small" onclick="openThresholdSettings(${c.id})" title="Limit Ayarları">⚙️</button>
                     <button class="btn btn-tag small" onclick="openTagModal(${c.id})" title="Etiketle">🏷️</button>
                 ` : ""}
-
                 <button class="btn btn-history small" onclick="openHistoryModal(${c.id})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>
-                
                 ${(!c.isActive && !c.isDeleted) ? `
                     <button class="btn danger small" onclick="deleteComputer(${c.id})" title="Sil">🗑️</button>
                 ` : ""}
-                
             </div>` : "";
 
         return `
@@ -384,20 +388,43 @@ window.deleteComputer = async (id) => {
 
     try {
         await api.del(`/api/Computer/${id}`);
-        // Listeleri yenile
         loadAllComputers();
-        loadAgents();// DOĞRU SATIR:
+        loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) {
         alert(e.message);
     }
 };
+
 // --- BAŞLATMA ---
 $(document).ready(function () {
     $('#modalTagSelect').select2({
         dropdownParent: $('#tagsModal'),
-        tags: true,
-        placeholder: "Etiket seçin veya yazın..."
+        tags: false,
+        placeholder: "Sistemden bir etiket seçiniz..."
+    });
+
+    // --- YENİ EKLENEN KOD: YAZI YAZMAYI VE ARAMAYI TAMAMEN KAPATIR ---
+    // Herhangi bir select2 menüsü açıldığında, içindeki yazı alanını "Sadece Okunabilir" yapar
+    $(document).on('select2:open', function () {
+        document.querySelectorAll('.select2-search__field').forEach(input => {
+            input.readOnly = true;        // Klavye girişini engeller
+            input.style.cursor = 'pointer'; // Fare imlecini yazı imlecinden çıkartıp el işaretine çevirir
+        });
+    });
+    // ------------------------------------------------------------------
+
+    $('#main-nav').on('click', '.nav-link', function () {
+        setTimeout(() => {
+            const id = $(this).attr('id');
+            if (id === 'nav-computers') {
+                $('#tagSelect').val(selectedLiveTags).trigger('change.select2');
+            } else if (id === 'nav-all-computers') {
+                $('#tagSelect').val(selectedAllTags).trigger('change.select2');
+            } else {
+                $('#tagSelect').val([]).trigger('change.select2');
+            }
+        }, 50);
     });
 
     loadFilterTags();

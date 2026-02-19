@@ -169,7 +169,7 @@ public class ComputerController : ControllerBase
         var computer = await _db.Computers.FindAsync(id);
         if (computer == null) return NotFound(new { message = "Bilgisayar bulunamadı." });
 
-        bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= 90;
+        bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= 150;
         if (isActive)
         {
             return BadRequest(new { message = "Aktif olan bir bilgisayarı silemezsiniz. Lütfen önce ajanı durdurun." });

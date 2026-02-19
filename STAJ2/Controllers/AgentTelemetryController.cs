@@ -286,7 +286,6 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
-    // STAJ2/Controllers/AgentTelemetryController.cs içindeki Latest metodunu tamamen bununla değiştir:
 
     [HttpGet("latest")]
     public async Task<IActionResult> Latest()
