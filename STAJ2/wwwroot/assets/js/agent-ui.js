@@ -2,7 +2,7 @@
 
 let selectedTags = [];
 let allAgents = [];
-
+let allSystemComputers = []; // Yeni eklenen
 // --- 1. ANA TABLO VE FİLTRELEME ---
 
 window.applyFilter = () => {
@@ -53,24 +53,29 @@ function renderTable() {
 
     const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
 
-    const filtered = selectedTags.length === 0
-        ? allAgents
-        : allAgents.filter(a => selectedTags.every(t => a.tags && a.tags.includes(t)));
+    const now = new Date().getTime();
 
-    tbody.innerHTML = filtered.map(a => {
+    // 1. İSTEK: Hem etiket filtresini uygula hem de sadece son 90 sn içinde veri gönderenleri (Canlı) tut
+    const liveAndFilteredAgents = allAgents.filter(a => {
+        // Etiket kontrolü
+        const matchesTags = selectedTags.length === 0 || selectedTags.every(t => a.tags && a.tags.includes(t));
+        if (!matchesTags) return false;
+
+        // 90 saniye canlılık kontrolü
+        if (!a.ts) return false;
+        const agentTime = new Date(a.ts).getTime();
+        return (now - agentTime) <= 90000;
+    });
+
+    tbody.innerHTML = liveAndFilteredAgents.map(a => {
         const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
-
         const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
-        // GÜNCELLEME: Renkli buton sınıfları (btn-tag ve btn-history) eklendi
         const actionButtons = canEdit ? `
             <div style="display:flex; gap:5px;">
                 <button class="btn primary small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>
-                
                 <button class="btn warning small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>
-                
                 <button class="btn btn-tag small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>
-                
                 <button class="btn btn-history small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar">
                     <i class="bi bi-list-ul"></i>
                 </button>
@@ -82,10 +87,8 @@ function renderTable() {
         }
 
         const ipDisplay = a.ip || "-";
-
         const cpuLimit = a.cpuThreshold || 90;
         const ramLimit = a.ramThreshold || 90;
-
         const cpuColor = (a.cpuUsage > cpuLimit) ? "#ef4444" : "var(--text-main)";
         const ramColor = (a.ramUsage > ramLimit) ? "#ef4444" : "var(--text-main)";
 
@@ -100,7 +103,7 @@ function renderTable() {
                 <td style="font-weight:bold; color:${cpuColor};">${Math.round(a.cpuUsage)}%</td>
                 <td style="font-weight:bold; color:${ramColor};">${Math.round(a.ramUsage)}%</td>
                 <td style="color: var(--text-main) !important;">${diskContent}</td>
-                <td><small style="color:var(--text-muted);">Aktif</small></td>
+                <td><span class="badge bg-success">Aktif</span></td>
                 ${canEdit ? `<td>${actionButtons}</td>` : ''}
             </tr>
         `;
@@ -125,7 +128,8 @@ window.saveComputerName = async () => {
         await api.put(`/api/Computer/update-display-name`, { id: parseInt(id), newDisplayName: newName });
         const modal = bootstrap.Modal.getInstance(document.getElementById("renameModal"));
         modal.hide();
-        loadAgents();
+        loadAgents();// DOĞRU SATIR:
+        if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert(e.message); }
 };
 
@@ -133,7 +137,10 @@ window.openTagModal = async (id) => {
     document.getElementById("tagModalComputerId").value = id;
     const modal = new bootstrap.Modal(document.getElementById("tagsModal"));
 
-    const agent = allAgents.find(a => a.computerId == id);
+    // DEĞİŞİKLİK BURADA: Cihazı her iki listede de ara
+    let agent = allAgents.find(a => a.computerId == id);
+    if (!agent) agent = allSystemComputers.find(c => c.id == id); // Eğer canlıda yoksa tüm cihazlarda bul
+
     const existingTags = agent ? (agent.tags || []) : [];
     $('#modalTagSelect').val(existingTags).trigger('change');
 
@@ -148,7 +155,8 @@ window.saveTags = async () => {
         await api.put(`/api/Computer/${id}/tags`, { tags: selectedTags });
         const modal = bootstrap.Modal.getInstance(document.getElementById("tagsModal"));
         modal.hide();
-        loadAgents();
+        loadAgents();// DOĞRU SATIR:
+        if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert(e.message); }
 };
 
@@ -226,6 +234,8 @@ window.saveThresholdsWithValidation = async () => {
         const modal = bootstrap.Modal.getInstance(document.getElementById("thresholdModal"));
         modal.hide();
         loadAgents();
+        // DOĞRU SATIR:
+        if (typeof loadAllComputers === "function") loadAllComputers();
     } catch (e) { alert("Hata: " + e.message); }
 };
 
@@ -298,7 +308,90 @@ window.fetchHistoryMetrics = async () => {
         container.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-5"><i class="bi bi-exclamation-triangle me-2"></i> ${e.message}</td></tr>`;
     }
 };
+// --- 4. TÜM BİLGİSAYARLAR SEKMESİ ---
 
+window.loadAllComputers = async () => {
+    try {
+        const res = await fetch("/api/Computer", {
+            headers: { "Authorization": `Bearer ${auth.getToken()}` }
+        });
+        if (!res.ok) throw new Error("Cihazlar çekilemedi");
+        allSystemComputers = await res.json();
+        renderAllComputersTable();
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+window.renderAllComputersTable = () => {
+    const tbody = document.getElementById("allComputersRows");
+    if (!tbody) return;
+
+    const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
+
+    const filtered = selectedTags.length === 0
+        ? allSystemComputers
+        : allSystemComputers.filter(a => selectedTags.every(t => a.tags && a.tags.includes(t)));
+
+    tbody.innerHTML = filtered.map(c => {
+        const lastSeen = new Date(c.lastSeen).toLocaleString();
+        const tags = (c.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
+
+        let statusBadge = "";
+        if (c.isDeleted) {
+            statusBadge = `<span class="badge bg-danger">Silinmiş</span>`;
+        } else if (c.isActive) {
+            statusBadge = `<span class="badge bg-success">Aktif</span>`;
+        } else {
+            statusBadge = `<span class="badge bg-secondary">Pasif</span>`;
+        }
+
+        // 2. ve 3. İSTEK: Buton görünürlük kuralları
+        const actionButtons = canEdit ? `
+            <div style="display:flex; gap:5px;">
+                
+                ${!c.isDeleted ? `
+                    <button class="btn primary small" onclick="handleRename(${c.id}, '${c.displayName || c.machineName}')" title="İsim Değiştir">✏️</button>
+                    <button class="btn warning small" onclick="openThresholdSettings(${c.id})" title="Limit Ayarları">⚙️</button>
+                    <button class="btn btn-tag small" onclick="openTagModal(${c.id})" title="Etiketle">🏷️</button>
+                ` : ""}
+
+                <button class="btn btn-history small" onclick="openHistoryModal(${c.id})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>
+                
+                ${(!c.isActive && !c.isDeleted) ? `
+                    <button class="btn danger small" onclick="deleteComputer(${c.id})" title="Sil">🗑️</button>
+                ` : ""}
+                
+            </div>` : "";
+
+        return `
+            <tr style="color: var(--text-main) !important; ${c.isDeleted ? 'opacity: 0.6;' : ''}">
+                <td>
+                    <div class="fw-bold" style="color:var(--text-title); ${c.isDeleted ? 'text-decoration: line-through;' : ''}">${c.displayName || c.machineName}</div>
+                    <div style="margin-top:2px;">${tags}</div>
+                </td>
+                <td style="color:var(--text-muted); font-family:monospace;">${c.ipAddress || "-"}</td>
+                <td style="font-size:0.85rem; color:var(--text-muted);">${lastSeen}</td>
+                <td>${statusBadge}</td>
+                ${canEdit ? `<td>${actionButtons}</td>` : ''}
+            </tr>
+        `;
+    }).join("");
+};
+
+window.deleteComputer = async (id) => {
+    if (!confirm("Bu bilgisayarı silmek istediğinize emin misiniz? (Geçmiş metrikleri filtrelenerek bulunmaya devam edecektir)")) return;
+
+    try {
+        await api.del(`/api/Computer/${id}`);
+        // Listeleri yenile
+        loadAllComputers();
+        loadAgents();// DOĞRU SATIR:
+        if (typeof loadAllComputers === "function") loadAllComputers();
+    } catch (e) {
+        alert(e.message);
+    }
+};
 // --- BAŞLATMA ---
 $(document).ready(function () {
     $('#modalTagSelect').select2({

@@ -34,10 +34,16 @@
         if (!nav) return;
         const isAdmin = roles.includes("Yönetici");
 
+        // YENİ: Bilgisayarlar menüsü ikiye ayrıldı
         let html = `
             <li class="nav-item">
                 <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
-                    <i class="bi bi-cpu"></i> <span>Bilgisayarlar</span>
+                    <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="javascript:void(0)" id="nav-all-computers" class="nav-link" onclick="ui.switchView('all-computers')">
+                    <i class="bi bi-pc-display"></i> <span>Tüm Bilgisayarlar</span>
                 </a>
             </li>`;
 
@@ -79,20 +85,20 @@
 
         switch (view) {
             case 'computers':
-                title.innerText = "Bilgisayarlar";
-                subtitle.innerText = "Sistemdeki tüm cihazların canlı performansı.";
+                title.innerText = "Canlı İzleme";
+                subtitle.innerText = "Sistemdeki cihazların canlı performansı.";
                 content.innerHTML = `
-                    <div class="card shadow-sm">
+                    <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                         <div class="table-responsive">
                             <table class="table table-hover align-middle mb-0">
                                 <thead>
-                                    <tr>
+                                    <tr style="color:var(--text-muted);">
                                         <th>Cihaz & Etiketler</th>
                                         <th>IP</th>
                                         <th>CPU</th>
                                         <th>RAM</th>
                                         <th>Diskler</th>
-                                        <th>Güncelleme</th>
+                                        <th>Durum</th>
                                         ${canEdit ? '<th>İşlemler</th>' : ''} 
                                     </tr>
                                 </thead>
@@ -102,6 +108,30 @@
                     </div>`;
                 if (window.loadAgents) loadAgents();
                 break;
+
+            case 'all-computers': // YENİ EKLENEN SAYFA
+                title.innerText = "Tüm Bilgisayarlar";
+                subtitle.innerText = "Sisteme kayıtlı aktif ve pasif tüm cihazlar.";
+                content.innerHTML = `
+                    <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr style="color:var(--text-muted);">
+                                        <th>Cihaz & Etiketler</th>
+                                        <th>IP</th>
+                                        <th>Son Görülme</th>
+                                        <th>Durum</th>
+                                        ${canEdit ? '<th>İşlemler</th>' : ''}
+                                    </tr>
+                                </thead>
+                                <tbody id="allComputersRows"></tbody>
+                            </table>
+                        </div>
+                    </div>`;
+                if (window.loadAllComputers) loadAllComputers();
+                break;
+
             case 'requests':
                 title.innerText = "Kayıt Talepleri";
                 subtitle.innerText = "Onay bekleyen yeni kullanıcılar.";
@@ -126,32 +156,25 @@
         try {
             const reqs = await api.get("/api/Admin/requests");
 
-            // DÜZELTME: map(r => ...) kullandığın için aşağıda 'req' değil 'r' kullandık.
-            // DÜZELTME: onclick fonksiyonlarını 'ui.approveRequest' olarak güncelledik.
             let rows = reqs.map(r => `
                 <tr>
                     <td class="fw-bold">${r.username}</td>
                     <td>
-                        <select id="reqRole_${r.id}" class="form-select form-select-sm small-select" style="max-width: 150px;">
+                        <select id="reqRole_${r.id}" class="form-select form-select-sm small-select" style="max-width: 150px; background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
                             ${systemRoles.map(x => `<option value="${x.id}" ${x.id == 3 ? 'selected' : ''}>${x.name}</option>`).join("")}
                         </select>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-success" onclick="ui.approveRequest(${r.id})">
-                            Onayla
-                        </button>
-                        
-                        <button class="btn btn-sm btn-danger" onclick="ui.rejectRequest(${r.id})">
-                            Reddet
-                        </button>
+                        <button class="btn btn-sm btn-success" onclick="ui.approveRequest(${r.id})">Onayla</button>
+                        <button class="btn btn-sm btn-danger" onclick="ui.rejectRequest(${r.id})">Reddet</button>
                     </td>
                 </tr>`).join("");
 
             container.innerHTML = `
-                <div class="card">
+                <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
-                            <thead><tr><th>Kullanıcı</th><th>Atanacak Rol</th><th class="text-end">İşlem</th></tr></thead>
+                            <thead><tr style="color:var(--text-muted);"><th>Kullanıcı</th><th>Atanacak Rol</th><th class="text-end">İşlem</th></tr></thead>
                             <tbody>${rows || '<tr><td colspan="3" class="text-center text-muted py-4">Bekleyen kayıt talebi yok.</td></tr>'}</tbody>
                         </table>
                     </div>
@@ -179,10 +202,10 @@
                     </tr>`;
             }).join("");
             container.innerHTML = `
-                <div class="card">
+                <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
-                            <thead><tr><th>Kullanıcı Adı</th><th>Yetkiler</th><th class="text-end">İşlemler</th></tr></thead>
+                            <thead><tr style="color:var(--text-muted);"><th>Kullanıcı Adı</th><th>Yetkiler</th><th class="text-end">İşlemler</th></tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
                     </div>
@@ -199,7 +222,7 @@
                     <i class="bi bi-x-circle-fill text-danger" style="cursor:pointer" onclick="ui.deleteTag(${t.id})"></i>
                 </div>`).join("");
             container.innerHTML = `
-                <div class="card p-4">
+                <div class="card p-4 border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="input-group mb-4" style="max-width: 500px;">
                         <input type="text" id="newTagName" class="form-control" placeholder="Yeni etiket adı giriniz..." style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
                         <button class="btn btn-primary fw-bold" onclick="ui.createNewTag()">Ekle</button>
@@ -215,69 +238,40 @@
         show, hide, setText, backOrHome,
         renderSidebar, switchView, toggleTheme,
 
-        // --- ONAYLAMA ---
         approveRequest: async (id) => {
             if (!confirm("Bu kullanıcıyı onaylamak istiyor musunuz?")) return;
             try {
                 const roleId = document.getElementById(`reqRole_${id}`).value;
                 await api.post(`/api/admin/requests/approve/${id}`, { newRoleId: parseInt(roleId) });
-
                 alert("Kullanıcı onaylandı.");
-
-                // EKRANI YENİLEME TAKTİĞİ:
-                // Önce içeriği temizle, kullanıcı yenilendiğini hissetsin
                 document.getElementById('dynamic-content').innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
-                // Sonra sayfayı tekrar çağır
                 setTimeout(() => ui.switchView('requests'), 100);
-
-            } catch (e) {
-                alert(e.message || "Bir hata oluştu.");
-            }
+            } catch (e) { alert(e.message || "Bir hata oluştu."); }
         },
 
-        // --- REDDETME ---
         rejectRequest: async (id) => {
             const reason = prompt("Lütfen ret sebebini giriniz:");
             if (reason === null) return;
-
-            if (reason.length > 200) {
-                alert("Ret sebebi 200 karakterden uzun olamaz.");
-                return;
-            }
-
+            if (reason.length > 200) { alert("Ret sebebi 200 karakterden uzun olamaz."); return; }
             try {
-                await api.post(`/api/admin/requests/reject`, {
-                    requestId: id,
-                    rejectionReason: reason
-                });
-
+                await api.post(`/api/admin/requests/reject`, { requestId: id, rejectionReason: reason });
                 alert("Talep reddedildi.");
-
-                // EKRANI YENİLEME TAKTİĞİ:
                 document.getElementById('dynamic-content').innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
                 setTimeout(() => ui.switchView('requests'), 100);
-
-            } catch (e) {
-                alert(e.message || "Bir hata oluştu.");
-            }
+            } catch (e) { alert(e.message || "Bir hata oluştu."); }
         },
 
-        // --- KULLANICI GÜNCELLEME ---
         updateUserRoles: async (userId) => {
             const container = document.querySelector(`.user-role-group-${userId}`);
             const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
             const roleIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
             try {
                 await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: roleIds });
                 alert("Roller güncellendi.");
                 ui.switchView('users');
-            } catch (e) {
-                alert(e.message);
-            }
+            } catch (e) { alert(e.message); }
         },
 
-        // --- KULLANICI SİLME ---
         deleteUser: async (id) => {
             if (confirm("Kullanıcı silinsin mi?")) {
                 await api.del(`/api/Admin/users/${id}`);
@@ -285,7 +279,6 @@
             }
         },
 
-        // --- ETİKET İŞLEMLERİ ---
         createNewTag: async () => {
             const name = document.getElementById("newTagName").value.trim();
             if (name) { await api.post("/api/Admin/tags", { name }); ui.switchView('tags'); }

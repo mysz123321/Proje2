@@ -139,4 +139,46 @@ public class ComputerController : ControllerBase
             Disks = diskMetrics
         });
     }
+    [HttpGet]
+    public async Task<IActionResult> GetAllComputers()
+    {
+        // DİKKAT: IgnoreQueryFilters() eklendi! Artık soft-delete olanlar da gelecek.
+        var computers = await _db.Computers.IgnoreQueryFilters().Include(c => c.Tags).ToListAsync();
+        
+        var result = computers.Select(c => new
+        {
+            id = c.Id,
+            machineName = c.MachineName,
+            displayName = c.DisplayName,
+            ipAddress = c.IpAddress,
+            lastSeen = c.LastSeen,
+            tags = c.Tags.Select(t => t.Name).ToList(),
+            isDeleted = c.IsDeleted, // Yeni gönderdiğimiz silinmiş bayrağı
+            isActive = (DateTime.Now - c.LastSeen).TotalSeconds <= 150
+        })
+        // Önce aktifler, sonra pasifler, en son silinmişler görünecek şekilde sıralandı
+        .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen);
+
+        return Ok(result);
+    }
+
+    // 8. Cihaz Silme (Sadece Pasif Olanlar İçin Soft Delete)
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteComputer(int id)
+    {
+        var computer = await _db.Computers.FindAsync(id);
+        if (computer == null) return NotFound(new { message = "Bilgisayar bulunamadı." });
+
+        bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= 90;
+        if (isActive)
+        {
+            return BadRequest(new { message = "Aktif olan bir bilgisayarı silemezsiniz. Lütfen önce ajanı durdurun." });
+        }
+
+        // Soft delete (Bir önceki adımda eklemiştik)
+        computer.IsDeleted = true;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Bilgisayar başarıyla silindi." });
+    }
 }
