@@ -22,7 +22,6 @@ public class UsersController : ControllerBase
         return Ok(list);
     }
 
-    // --- YENİ: Etiketleri herkesin görebilmesi için buraya ekledik ---
     [HttpGet("tags")]
     public async Task<IActionResult> GetTags()
     {

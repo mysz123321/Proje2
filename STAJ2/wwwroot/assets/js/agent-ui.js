@@ -10,6 +10,11 @@ let selectedAllTags = [];
 let allAgents = [];
 let allSystemComputers = [];
 
+// --- PAGINATION İÇİN EKLENEN DEĞİŞKENLER ---
+let currentLivePage = 1;
+let currentAllPage = 1;
+const itemsPerPage = 2;
+
 // --- 1. ANA TABLO VE FİLTRELEME ---
 
 window.applyFilter = () => {
@@ -20,9 +25,11 @@ window.applyFilter = () => {
 
     if (isLiveTab) {
         selectedLiveTags = tags;
+        currentLivePage = 1; // Filtre değişince ilk sayfaya dön
         renderTable();
     } else if (isAllTab) {
         selectedAllTags = tags;
+        currentAllPage = 1; // Filtre değişince ilk sayfaya dön
         if (typeof renderAllComputersTable === "function") renderAllComputersTable();
     }
 };
@@ -79,8 +86,14 @@ function renderTable() {
         const agentTime = new Date(a.ts).getTime();
         return (now - agentTime) <= 90000;
     });
+    // --- PAGINATION MANTIĞI ---
+    const totalPages = Math.ceil(liveAndFilteredAgents.length / itemsPerPage);
+    if (currentLivePage > totalPages && totalPages > 0) currentLivePage = totalPages;
 
-    tbody.innerHTML = liveAndFilteredAgents.map(a => {
+    const startIndex = (currentLivePage - 1) * itemsPerPage;
+    const paginatedAgents = liveAndFilteredAgents.slice(startIndex, startIndex + itemsPerPage);
+
+    tbody.innerHTML = paginatedAgents.map(a => {
         const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
         const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
@@ -121,6 +134,7 @@ function renderTable() {
             </tr>
         `;
     }).join("");
+    renderPaginationControls('livePagination', currentLivePage, totalPages, 'changeLivePage');
 }
 
 // --- 2. YÖNETİM FONKSİYONLARI ---
@@ -493,8 +507,14 @@ window.renderAllComputersTable = () => {
     const filtered = selectedAllTags.length === 0
         ? allSystemComputers
         : allSystemComputers.filter(a => selectedAllTags.every(t => a.tags && a.tags.includes(t)));
+        // --- PAGINATION MANTIĞI ---
+        const totalPages = Math.ceil(filtered.length / itemsPerPage);
+        if (currentAllPage > totalPages && totalPages > 0) currentAllPage = totalPages;
 
-    tbody.innerHTML = filtered.map(c => {
+        const startIndex = (currentAllPage - 1) * itemsPerPage;
+    const paginatedComputers = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+    tbody.innerHTML = paginatedComputers.map(c => {
         const lastSeen = new Date(c.lastSeen).toLocaleString();
         const tags = (c.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
@@ -533,6 +553,7 @@ window.renderAllComputersTable = () => {
             </tr>
         `;
     }).join("");
+    renderPaginationControls('allPagination', currentAllPage, totalPages, 'changeAllPage');
 };
 
 window.deleteComputer = async (id) => {
@@ -547,7 +568,47 @@ window.deleteComputer = async (id) => {
         alert(e.message);
     }
 };
+window.changeLivePage = (page) => {
+    currentLivePage = page;
+    renderTable();
+};
 
+window.changeAllPage = (page) => {
+    currentAllPage = page;
+    renderAllComputersTable();
+};
+
+function renderPaginationControls(containerId, currentPage, totalPages, changeFnName) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '<ul class="pagination pagination-sm mb-0 shadow-sm">';
+
+    // Önceki butonu
+    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${currentPage - 1})">Önceki</a>
+             </li>`;
+
+    // Sayfa numaraları
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${currentPage === i ? 'active' : ''}">
+                    <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${i})">${i}</a>
+                 </li>`;
+    }
+
+    // Sonraki butonu
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${currentPage + 1})">Sonraki</a>
+             </li>`;
+
+    html += '</ul>';
+    container.innerHTML = html;
+}
 // --- BAŞLATMA ---
 $(document).ready(function () {
     $('#modalTagSelect').select2({

@@ -13,7 +13,6 @@
     function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
     function backOrHome() { if (window.history.length > 1) window.history.back(); else window.location.href = "/login.html"; }
 
-    // --- Tema Yönetimi ---
     function toggleTheme() {
         const html = document.documentElement;
         const currentTheme = html.getAttribute('data-theme');
@@ -24,7 +23,18 @@
 
         const icon = document.getElementById('theme-icon');
         if (icon) {
-            icon.className = newTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+            // Animasyon sınıflarını ekle
+            icon.classList.add('icon-spin-out');
+
+            // Animasyonun yarısında ikonu değiştir ve geri getir
+            setTimeout(() => {
+                icon.className = newTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+                icon.classList.remove('icon-spin-out');
+                icon.classList.add('icon-spin-in');
+
+                // Temizlik
+                setTimeout(() => icon.classList.remove('icon-spin-in'), 400);
+            }, 200);
         }
     }
 
@@ -105,6 +115,7 @@
                                 <tbody id="agentRows"></tbody>
                             </table>
                         </div>
+                        <div id="livePagination" class="d-flex justify-content-center mt-3 pb-2"></div>
                     </div>`;
                 if (window.loadAgents) loadAgents();
                 break;
@@ -128,6 +139,7 @@
                                 <tbody id="allComputersRows"></tbody>
                             </table>
                         </div>
+                        <div id="allPagination" class="d-flex justify-content-center mt-3 pb-2"></div>
                     </div>`;
                 if (window.loadAllComputers) loadAllComputers();
                 break;

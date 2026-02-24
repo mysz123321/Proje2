@@ -471,3 +471,49 @@ input, select, .small-select {
         box-shadow: 0 6px 15px rgba(6, 182, 212, 0.5);
         transform: translateY(-1px);
     }
+
+/* --- TEMA İKONU ANİMASYONU --- */
+#theme-icon {
+    display: inline-block;
+    transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.3s ease;
+}
+
+.icon-spin-out {
+    transform: rotate(90deg) scale(0.5);
+    opacity: 0;
+}
+
+.icon-spin-in {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+}
+/* --- PAGINATION TEMA UYUMU --- */
+.pagination {
+    margin-bottom: 0;
+}
+
+.page-link {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-main) !important;
+    transition: all 0.2s ease;
+}
+
+    .page-link:hover {
+        background-color: var(--bg-hover) !important;
+        color: #38bdf8 !important; /* Vurgu rengi */
+    }
+
+.page-item.active .page-link {
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #020617 !important; /* Koyu metin rengi (okunabilirlik için) */
+    font-weight: bold;
+}
+
+.page-item.disabled .page-link {
+    background-color: var(--bg-card-muted) !important;
+    color: var(--text-muted) !important;
+    opacity: 0.6;
+    cursor: not-allowed;
+}

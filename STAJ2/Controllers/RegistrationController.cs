@@ -57,7 +57,7 @@ public class RegistrationController : ControllerBase
             Email = email,
             RequestedRoleId = viewerRoleId,
             Status = RegistrationStatus.Pending,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.Now
         };
 
         _db.RegistrationRequests.Add(rr);

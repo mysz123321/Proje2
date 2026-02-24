@@ -7,7 +7,7 @@ using STAJ2.Models;
 using STAJ2.Services;
 using System.Security.Claims;
 using System.Text;
-using System.Security.Cryptography; // <--- BU SATIR EKSİKTİ, EKLENDİ
+using System.Security.Cryptography; 
 
 namespace STAJ2.Controllers;
 
