@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Staj2.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using Staj2.Infrastructure.Data;
 namespace Staj2.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260224075011_AddDynamicRoleSystem")]
+    partial class AddDynamicRoleSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -277,6 +280,21 @@ namespace Staj2.Infrastructure.Migrations
                     b.ToTable("Roles");
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.RoleComputerAccess", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ComputerId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RoleId", "ComputerId");
+
+                    b.HasIndex("ComputerId");
+
+                    b.ToTable("RoleComputerAccesses");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.RolePermission", b =>
                 {
                     b.Property<int>("RoleId")
@@ -290,6 +308,21 @@ namespace Staj2.Infrastructure.Migrations
                     b.HasIndex("PermissionId");
 
                     b.ToTable("RolePermissions");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.RoleTagAccess", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RoleId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("RoleTagAccesses");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.Tag", b =>
@@ -351,21 +384,6 @@ namespace Staj2.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Staj2.Domain.Entities.UserComputerAccess", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ComputerId")
-                        .HasColumnType("int");
-
-                    b.HasKey("UserId", "ComputerId");
-
-                    b.HasIndex("ComputerId");
-
-                    b.ToTable("UserComputerAccesses");
-                });
-
             modelBuilder.Entity("Staj2.Domain.Entities.UserRegistrationRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -415,21 +433,6 @@ namespace Staj2.Infrastructure.Migrations
                     b.HasIndex("Username");
 
                     b.ToTable("RegistrationRequests");
-                });
-
-            modelBuilder.Entity("Staj2.Domain.Entities.UserTagAccess", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TagId")
-                        .HasColumnType("int");
-
-                    b.HasKey("UserId", "TagId");
-
-                    b.HasIndex("TagId");
-
-                    b.ToTable("UserTagAccesses");
                 });
 
             modelBuilder.Entity("ComputerTag", b =>
@@ -506,6 +509,25 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("RegistrationRequest");
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.RoleComputerAccess", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.Computer", "Computer")
+                        .WithMany("RoleComputerAccesses")
+                        .HasForeignKey("ComputerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Staj2.Domain.Entities.Role", "Role")
+                        .WithMany("RoleComputerAccesses")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Computer");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.RolePermission", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.Permission", "Permission")
@@ -525,23 +547,23 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("Staj2.Domain.Entities.UserComputerAccess", b =>
+            modelBuilder.Entity("Staj2.Domain.Entities.RoleTagAccess", b =>
                 {
-                    b.HasOne("Staj2.Domain.Entities.Computer", "Computer")
-                        .WithMany("UserAccesses")
-                        .HasForeignKey("ComputerId")
+                    b.HasOne("Staj2.Domain.Entities.Role", "Role")
+                        .WithMany("RoleTagAccesses")
+                        .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Staj2.Domain.Entities.User", "User")
-                        .WithMany("ComputerAccesses")
-                        .HasForeignKey("UserId")
+                    b.HasOne("Staj2.Domain.Entities.Tag", "Tag")
+                        .WithMany("RoleTagAccesses")
+                        .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Computer");
+                    b.Navigation("Role");
 
-                    b.Navigation("User");
+                    b.Navigation("Tag");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.UserRegistrationRequest", b =>
@@ -561,32 +583,13 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("RequestedRole");
                 });
 
-            modelBuilder.Entity("Staj2.Domain.Entities.UserTagAccess", b =>
-                {
-                    b.HasOne("Staj2.Domain.Entities.Tag", "Tag")
-                        .WithMany("UserAccesses")
-                        .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Staj2.Domain.Entities.User", "User")
-                        .WithMany("TagAccesses")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tag");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Staj2.Domain.Entities.Computer", b =>
                 {
                     b.Navigation("Disks");
 
                     b.Navigation("Metrics");
 
-                    b.Navigation("UserAccesses");
+                    b.Navigation("RoleComputerAccesses");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.ComputerDisk", b =>
@@ -601,19 +604,16 @@ namespace Staj2.Infrastructure.Migrations
 
             modelBuilder.Entity("Staj2.Domain.Entities.Role", b =>
                 {
+                    b.Navigation("RoleComputerAccesses");
+
                     b.Navigation("RolePermissions");
+
+                    b.Navigation("RoleTagAccesses");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.Tag", b =>
                 {
-                    b.Navigation("UserAccesses");
-                });
-
-            modelBuilder.Entity("Staj2.Domain.Entities.User", b =>
-                {
-                    b.Navigation("ComputerAccesses");
-
-                    b.Navigation("TagAccesses");
+                    b.Navigation("RoleTagAccesses");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.UserRegistrationRequest", b =>

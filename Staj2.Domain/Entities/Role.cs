@@ -7,4 +7,5 @@ public class Role
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public ICollection<User> Users { get; set; } = new List<User>();
+    public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
 }

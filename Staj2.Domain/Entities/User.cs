@@ -12,4 +12,6 @@ public class User
 
     // Tekil RoleId ve Role kalktı, liste geldi:
     public ICollection<Role> Roles { get; set; } = new List<Role>();
+    public ICollection<UserComputerAccess> ComputerAccesses { get; set; } = new List<UserComputerAccess>();
+    public ICollection<UserTagAccess> TagAccesses { get; set; } = new List<UserTagAccess>();
 }

@@ -58,7 +58,7 @@ public sealed class AgentTelemetryController : ControllerBase
                     MachineName = dto.MachineName,
                     DisplayName = dto.MachineName, // İlk kayıtta agent'tan gelen isim
                     IpAddress = dto.Ip,
-                    CpuModel = dto.CpuModel,
+                    CpuModel = dto.CpuModel,//********
                     TotalRamMb = dto.TotalRamMb,
                     LastSeen = DateTime.Now,
                     // TotalDiskGb SİLİNDİ

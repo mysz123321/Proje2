@@ -7,4 +7,5 @@ public class Tag
     public bool IsDeleted { get; set; } = false;
     // Many-to-Many ilişki için Computer listesi
     public List<Computer> Computers { get; set; } = new();
+    public ICollection<UserTagAccess> UserAccesses { get; set; } = new List<UserTagAccess>();
 }

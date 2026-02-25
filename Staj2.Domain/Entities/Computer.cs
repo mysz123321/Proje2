@@ -30,5 +30,6 @@ namespace Staj2.Domain.Entities
         // İlişkiler
         public List<ComputerDisk> Disks { get; set; } = new();
         public List<ComputerMetric> Metrics { get; set; } = new();
+        public ICollection<UserComputerAccess> UserAccesses { get; set; } = new List<UserComputerAccess>();
     }
 }

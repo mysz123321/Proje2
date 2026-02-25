@@ -72,7 +72,6 @@ public class AuthController : ControllerBase
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
 
-        // --- DÜZELTİLEN KISIM BURASI ---
         var newUser = new User
         {
             Username = rr.Username,

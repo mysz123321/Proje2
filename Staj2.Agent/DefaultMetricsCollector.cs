@@ -104,7 +104,7 @@ public sealed class DefaultMetricsCollector : IMetricsCollector
         return 0;
     }
 
-    private string GetCpuModelName()
+    private string GetCpuModelName()//***
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {

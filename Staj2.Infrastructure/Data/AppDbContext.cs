@@ -19,6 +19,12 @@ namespace Staj2.Infrastructure.Data
         public DbSet<ComputerDisk> ComputerDisks { get; set; }
         public DbSet<DiskMetric> DiskMetrics { get; set; }
         public DbSet<Tag> Tags { get; set; }
+        public DbSet<Permission> Permissions { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
+
+        // YENİ: Kullanıcı - Cihaz/Etiket Erişim Tabloları
+        public DbSet<UserComputerAccess> UserComputerAccesses { get; set; }
+        public DbSet<UserTagAccess> UserTagAccesses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -34,6 +40,26 @@ namespace Staj2.Infrastructure.Data
 
 
             // --- İLİŞKİLER VE ARA TABLOLAR ---
+            // RolePermission Composite Key
+            modelBuilder.Entity<RolePermission>()
+                .HasKey(rp => new { rp.RoleId, rp.PermissionId });
+
+            // YENİ: UserComputerAccess Composite Key
+            modelBuilder.Entity<UserComputerAccess>()
+                .HasKey(uc => new { uc.UserId, uc.ComputerId });
+
+            // YENİ: UserTagAccess Composite Key
+            modelBuilder.Entity<UserTagAccess>()
+                .HasKey(ut => new { ut.UserId, ut.TagId });
+
+            // Permission Tablosu Kısıtlamaları
+            modelBuilder.Entity<Permission>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Description).HasMaxLength(200);
+            });
 
             // Tag - Computer (Many-to-Many)
             modelBuilder.Entity<Computer>()
@@ -66,12 +92,8 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.Id);
-
-                // DİKKAT: .IsUnique() BURADAN KALDIRILDI. 
-                // Böylece IsDeleted olan bir kullanıcı adı, yeni bir kullanıcı tarafından tekrar alınabilir.
                 entity.HasIndex(e => e.Username);
 
-                // Kısıtlamalar
                 entity.Property(e => e.Email).HasMaxLength(200);
                 entity.Property(e => e.PasswordHash).HasMaxLength(200);
             });
@@ -92,13 +114,9 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<Computer>(entity =>
             {
                 entity.HasKey(e => e.Id);
-
-                // DİKKAT: .IsUnique() BURADAN DA KALDIRILDI.
-                // Böylece eski silinmiş (IsDeleted=true) cihazın MAC adresiyle, tekrar yeni bir cihaz (Insert) eklenebilir.
                 entity.HasIndex(e => e.MacAddress);
-                entity.Property(e => e.MacAddress).IsRequired().HasMaxLength(50); // Mac genelde kısadır ama 50 kalsın
+                entity.Property(e => e.MacAddress).IsRequired().HasMaxLength(50);
 
-                // Kısıtlamalar
                 entity.Property(e => e.MachineName).HasMaxLength(200);
                 entity.Property(e => e.DisplayName).HasMaxLength(200);
                 entity.Property(e => e.IpAddress).HasMaxLength(200);
@@ -126,11 +144,8 @@ namespace Staj2.Infrastructure.Data
             // 7. REGISTRATION REQUEST
             modelBuilder.Entity<UserRegistrationRequest>(entity =>
             {
-                // YENİ HALİ (Unique YOK):
                 entity.HasIndex(e => e.Email);
                 entity.HasIndex(e => e.Username);
-
-                // Kısıtlamalar
                 entity.Property(e => e.RejectionReason).HasMaxLength(200);
             });
 
