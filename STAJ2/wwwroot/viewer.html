@@ -161,6 +161,28 @@
         .form-check-input.custom-toggle {
             cursor: pointer;
         }
+
+        /* Modal İçi Kaydırılabilir Alanlar İçin */
+        .modal-body-scrollable {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 10px;
+        }
+
+        /* Yeni Şık Checkbox'lar İçin (Arayüzde Listeleme Yaparken) */
+        .permission-card {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 15px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+            .permission-card:hover {
+                border-color: #38bdf8;
+            }
     </style>
 </head>
 <body>
@@ -360,6 +382,100 @@
         </div>
     </div>
 
+    <div id="rolePermissionsModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header border-bottom border-secondary" style="border-color:var(--border-color) !important;">
+                    <h5 class="modal-title fw-bold" style="color:var(--text-title);">
+                        <i class="bi bi-shield-lock text-warning me-2"></i> Rol Yetkileri: <span id="modalRoleNameText" class="text-info">Yükleniyor...</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="editRoleIdInput">
+                    <p class="text-muted small mb-4">Bu role atanacak yetkileri (permissions) aşağıdan seçebilirsiniz.</p>
+
+                    <div class="row g-3 modal-body-scrollable" id="permissionsCheckboxContainer">
+                        <div class="text-center py-4"><div class="spinner-border text-info"></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary" style="border-color:var(--border-color) !important;">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button class="btn btn-primary fw-bold" onclick="ui.saveRolePermissions()"><i class="bi bi-save me-1"></i> Yetkileri Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="userRolesModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header border-bottom border-secondary" style="border-color:var(--border-color) !important;">
+                    <h5 class="modal-title fw-bold" style="color:var(--text-title);"><i class="bi bi-person-badge text-primary me-2"></i> Roller: <span id="roleModalUserName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="editUserRole_UserId">
+                    <div class="d-flex flex-column gap-2" id="userRolesCheckboxContainer">
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary" style="border-color:var(--border-color) !important;">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button class="btn btn-primary" onclick="ui.saveUserRoles()"><i class="bi bi-save me-1"></i> Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="userComputerAccessModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header border-bottom border-secondary" style="border-color:var(--border-color) !important;">
+                    <h5 class="modal-title fw-bold" style="color:var(--text-title);"><i class="bi bi-pc-display text-success me-2"></i> Cihaz Erişimi: <span id="computerAccessUserName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="accessModal_UserId">
+                    <p class="text-muted small mb-3">Bu kullanıcının sistemde görebileceği cihazları seçin. (Yöneticiler ve Filter yetkisi olanlar tüm cihazları varsayılan olarak görür).</p>
+
+                    <div class="input-group mb-3">
+                        <span class="input-group-text" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-muted);"><i class="bi bi-search"></i></span>
+                        <input type="text" id="computerSearchInput" class="form-control" placeholder="Cihaz ara..." onkeyup="ui.filterComputerCheckboxes()" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-main);">
+                    </div>
+
+                    <div class="row g-2 modal-body-scrollable" id="userComputerCheckboxContainer">
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary" style="border-color:var(--border-color) !important;">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button class="btn btn-success" onclick="ui.saveUserComputerAccess()"><i class="bi bi-save me-1"></i> Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="userTagAccessModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header border-bottom border-secondary" style="border-color:var(--border-color) !important;">
+                    <h5 class="modal-title fw-bold" style="color:var(--text-title);"><i class="bi bi-tags text-warning me-2"></i> Etiket Erişimi: <span id="tagAccessUserName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="tagAccessModal_UserId">
+                    <p class="text-muted small mb-3">Kullanıcı, seçtiğiniz etiketlere sahip tüm cihazları görebilecektir.</p>
+
+                    <div class="d-flex flex-wrap gap-2 modal-body-scrollable" id="userTagCheckboxContainer">
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary" style="border-color:var(--border-color) !important;">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button class="btn btn-warning text-dark fw-bold" onclick="ui.saveUserTagAccess()"><i class="bi bi-save me-1"></i> Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -385,7 +501,8 @@
             document.getElementById("userWelcome").textContent = username;
             document.getElementById("userRoles").textContent = roles.join(", ");
 
-            ui.renderSidebar(roles);
+            // DÜZELTME: renderSidebar parametresiz çağrılıyor.
+            ui.renderSidebar();
             ui.switchView('computers');
 
             $('#tagSelect').select2({ placeholder: "Etiketle filtrele...", tags: false });

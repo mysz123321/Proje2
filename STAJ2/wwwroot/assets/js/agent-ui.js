@@ -25,21 +25,27 @@ window.applyFilter = () => {
 
     if (isLiveTab) {
         selectedLiveTags = tags;
-        currentLivePage = 1; // Filtre değişince ilk sayfaya dön
+        currentLivePage = 1;
         renderTable();
     } else if (isAllTab) {
         selectedAllTags = tags;
-        currentAllPage = 1; // Filtre değişince ilk sayfaya dön
+        currentAllPage = 1;
         if (typeof renderAllComputersTable === "function") renderAllComputersTable();
     }
 };
 
-async function loadFilterTags() {
+
+
+window.loadFilterTags = async () => {
     try {
-        const tags = await api.get("/api/Users/tags");
+        const tags = await api.get("/api/Computer/tags");
 
         const $filterSelect = $('#tagSelect');
         const $modalSelect = $('#modalTagSelect');
+
+        // YENİ: Listeyi temizlemeden önce halihazırda seçili olan etiketleri hafızaya al
+        const currentFilterVals = $filterSelect.val();
+        const currentModalVals = $modalSelect.val();
 
         $filterSelect.empty();
         $modalSelect.empty();
@@ -49,13 +55,18 @@ async function loadFilterTags() {
             $modalSelect.append(new Option(t.name, t.name, false, false));
         });
 
-        $filterSelect.trigger('change');
-        $modalSelect.trigger('change');
+        // YENİ: Hafızaya alınan seçimleri geri yükle (Eğer silinmemişlerse)
+        if (currentFilterVals) $filterSelect.val(currentFilterVals);
+        if (currentModalVals) $modalSelect.val(currentModalVals);
+
+        $filterSelect.trigger('change.select2');
+        $modalSelect.trigger('change.select2');
 
     } catch (e) {
         console.error("Filtre etiketleri yüklenemedi", e);
     }
-}
+};
+
 
 async function loadAgents() {
     try {
@@ -75,7 +86,13 @@ function renderTable() {
     const tbody = document.getElementById("agentRows");
     if (!tbody) return;
 
-    const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
+    // YENİ: Tek bir rol kontrolü yerine spesifik yetkileri (Permissions) alıyoruz
+    const canRename = window.auth.hasPermission("Computer.Rename");
+    const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
+    const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
+    const canFilterHistory = window.auth.hasPermission("Computer.Filter");
+
+    const canEdit = canRename || canSetThreshold || canAssignTag || canFilterHistory;
     const now = new Date().getTime();
 
     const liveAndFilteredAgents = allAgents.filter(a => {
@@ -86,6 +103,7 @@ function renderTable() {
         const agentTime = new Date(a.ts).getTime();
         return (now - agentTime) <= 90000;
     });
+
     // --- PAGINATION MANTIĞI ---
     const totalPages = Math.ceil(liveAndFilteredAgents.length / itemsPerPage);
     if (currentLivePage > totalPages && totalPages > 0) currentLivePage = totalPages;
@@ -97,15 +115,13 @@ function renderTable() {
         const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
         const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
-        const actionButtons = canEdit ? `
-            <div style="display:flex; gap:5px;">
-                <button class="btn primary small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>
-                <button class="btn warning small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>
-                <button class="btn btn-tag small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>
-                <button class="btn btn-history small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar">
-                    <i class="bi bi-list-ul"></i>
-                </button>
-            </div>` : "";
+        // YENİ: Butonları sadece o yetkiye sahipse HTML'e ekle
+        let actionButtons = `<div style="display:flex; gap:5px;">`;
+        if (canRename) actionButtons += `<button class="btn primary small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>`;
+        if (canSetThreshold) actionButtons += `<button class="btn warning small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>`;
+        if (canAssignTag) actionButtons += `<button class="btn btn-tag small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>`;
+        if (canFilterHistory) actionButtons += `<button class="btn btn-history small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>`;
+        actionButtons += `</div>`;
 
         let diskContent = "-";
         if (a.diskUsage) {
@@ -269,13 +285,11 @@ window.saveThresholdsWithValidation = async () => {
 window.openHistoryModal = (id) => {
     document.getElementById("historyComputerId").value = id;
 
-    // Eski grafikleri yok et
     if (historyCharts.cpu) historyCharts.cpu.destroy();
     if (historyCharts.ram) historyCharts.ram.destroy();
     Object.values(historyCharts.disks).forEach(chart => chart.destroy());
     historyCharts.disks = {};
 
-    // HTML containerlarını temizle
     const dynamicDiskCharts = document.getElementById("dynamicDiskCharts");
     if (dynamicDiskCharts) dynamicDiskCharts.innerHTML = "";
 
@@ -286,7 +300,6 @@ window.openHistoryModal = (id) => {
     if (diskFiltersContainer) diskFiltersContainer.style.display = "none";
 
     document.getElementById("historyResults").style.display = "none";
-    // DİKKAT: Burada flex yerine block kullanıyoruz
     document.getElementById("historyPlaceholder").style.display = "block";
 
     const now = new Date();
@@ -328,7 +341,6 @@ window.fetchHistoryMetrics = async () => {
 
         currentHistoryData = data;
 
-        // ÇÖZÜM 1: TARİH SIRALAMASINI DÜZELTME (Eskiden -> Yeniye)
         if (currentHistoryData.cpuRam) {
             currentHistoryData.cpuRam.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         }
@@ -351,7 +363,6 @@ window.fetchHistoryMetrics = async () => {
 };
 
 function renderBaseCharts(cpuRamData) {
-    // ÇÖZÜM: toLocaleTimeString() yerine formatChartDate fonksiyonumuzu kullanıyoruz
     const labels = cpuRamData.map(m => formatChartDate(m.createdAt));
     const cpuData = cpuRamData.map(m => m.cpuUsage);
     const ramData = cpuRamData.map(m => m.ramUsage);
@@ -362,10 +373,9 @@ function renderBaseCharts(cpuRamData) {
     historyCharts.cpu = createLineChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuData, '#38bdf8');
     historyCharts.ram = createLineChart('ramChart', 'RAM Kullanımı (%)', labels, ramData, '#facc15');
 }
-// --- YENİ: Tarih ve Saati Okunaklı Formata Çeviren Fonksiyon ---
+
 function formatChartDate(dateString) {
     const d = new Date(dateString);
-    // Örn: "19 Şub 14:30" formatında çıktı verir
     return d.toLocaleDateString('tr-TR', {
         day: 'numeric',
         month: 'short',
@@ -373,6 +383,7 @@ function formatChartDate(dateString) {
         minute: '2-digit'
     });
 }
+
 function generateDiskFilters(disksData) {
     const diskNames = [...new Set(disksData.map(d => d.diskName))];
 
@@ -386,7 +397,6 @@ function generateDiskFilters(disksData) {
     historyCharts.disks = {};
 
     diskNames.forEach(diskName => {
-        // ÇÖZÜM: col-4 ile yan yana 3'lü dizilim. İçi dikey hizalı ve oldukça minimal!
         const checkboxHtml = `
             <div class="col-4">
                 <div class="form-check form-switch p-2 border rounded d-flex flex-column align-items-center justify-content-center text-center shadow-sm h-100" style="background: var(--bg-card); border-color: var(--border-color) !important; margin: 0; padding-left: 0 !important;">
@@ -424,7 +434,6 @@ function toggleDiskChart(isVisible, diskName, chartId) {
 
         const diskData = currentHistoryData.disks.filter(d => d.diskName === diskName);
 
-        // ÇÖZÜM: Burada da formatChartDate fonksiyonunu kullanıyoruz
         const labels = diskData.map(d => formatChartDate(d.createdAt));
         const diskUsageData = diskData.map(d => d.usedPercent);
 
@@ -441,10 +450,9 @@ function toggleDiskChart(isVisible, diskName, chartId) {
 function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
-    // ÇÖZÜM 2: TEMA KONTROLÜ VE DİNAMİK RENKLER
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const textColor = isLight ? '#334155' : '#e2e8f0'; // Açık temada koyu gri, koyu temada açık gri
-    const gridColor = isLight ? '#cbd5e1' : '#334155'; // Arka plan çizgileri için uyumlu renk
+    const textColor = isLight ? '#334155' : '#e2e8f0';
+    const gridColor = isLight ? '#cbd5e1' : '#334155';
 
     return new Chart(ctx, {
         type: 'line',
@@ -470,7 +478,6 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
                 intersect: false,
             },
             plugins: {
-                // Başlık rengi temanıza göre değişecek
                 legend: { labels: { color: textColor, font: { weight: 'bold' } } },
                 tooltip: {
                     mode: 'index',
@@ -478,13 +485,13 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
                 }
             },
             scales: {
-                // X ve Y eksenindeki yazılar ve çizgiler temaya göre değişecek
                 x: { ticks: { color: textColor, maxTicksLimit: 10 }, grid: { color: gridColor } },
                 y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
             }
         }
     });
 }
+
 window.loadAllComputers = async () => {
     try {
         const res = await fetch("/api/Computer", {
@@ -502,16 +509,24 @@ window.renderAllComputersTable = () => {
     const tbody = document.getElementById("allComputersRows");
     if (!tbody) return;
 
-    const canEdit = auth.hasRole("Yönetici") || auth.hasRole("Denetleyici");
+    // YENİ: Tüm bilgisayarlar sekmesi için de ayrı yetki kontrolleri
+    const canRename = window.auth.hasPermission("Computer.Rename");
+    const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
+    const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
+    const canFilterHistory = window.auth.hasPermission("Computer.Filter");
+    const canDelete = window.auth.hasPermission("Computer.Delete");
+
+    const canEdit = canRename || canSetThreshold || canAssignTag || canFilterHistory || canDelete;
 
     const filtered = selectedAllTags.length === 0
         ? allSystemComputers
         : allSystemComputers.filter(a => selectedAllTags.every(t => a.tags && a.tags.includes(t)));
-        // --- PAGINATION MANTIĞI ---
-        const totalPages = Math.ceil(filtered.length / itemsPerPage);
-        if (currentAllPage > totalPages && totalPages > 0) currentAllPage = totalPages;
 
-        const startIndex = (currentAllPage - 1) * itemsPerPage;
+    // --- PAGINATION MANTIĞI ---
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    if (currentAllPage > totalPages && totalPages > 0) currentAllPage = totalPages;
+
+    const startIndex = (currentAllPage - 1) * itemsPerPage;
     const paginatedComputers = filtered.slice(startIndex, startIndex + itemsPerPage);
 
     tbody.innerHTML = paginatedComputers.map(c => {
@@ -527,18 +542,20 @@ window.renderAllComputersTable = () => {
             statusBadge = `<span class="badge bg-secondary">Pasif</span>`;
         }
 
-        const actionButtons = canEdit ? `
-            <div style="display:flex; gap:5px;">
-                ${!c.isDeleted ? `
-                    <button class="btn primary small" onclick="handleRename(${c.id}, '${c.displayName || c.machineName}')" title="İsim Değiştir">✏️</button>
-                    <button class="btn warning small" onclick="openThresholdSettings(${c.id})" title="Limit Ayarları">⚙️</button>
-                    <button class="btn btn-tag small" onclick="openTagModal(${c.id})" title="Etiketle">🏷️</button>
-                ` : ""}
-                <button class="btn btn-history small" onclick="openHistoryModal(${c.id})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>
-                ${(!c.isActive && !c.isDeleted) ? `
-                    <button class="btn danger small" onclick="deleteComputer(${c.id})" title="Sil">🗑️</button>
-                ` : ""}
-            </div>` : "";
+        // YENİ: Butonları o işleme özel yetkiye göre ekliyoruz
+        let actionButtons = `<div style="display:flex; gap:5px;">`;
+        if (!c.isDeleted) {
+            if (canRename) actionButtons += `<button class="btn primary small" onclick="handleRename(${c.id}, '${c.displayName || c.machineName}')" title="İsim Değiştir">✏️</button>`;
+            if (canSetThreshold) actionButtons += `<button class="btn warning small" onclick="openThresholdSettings(${c.id})" title="Limit Ayarları">⚙️</button>`;
+            if (canAssignTag) actionButtons += `<button class="btn btn-tag small" onclick="openTagModal(${c.id})" title="Etiketle">🏷️</button>`;
+        }
+
+        if (canFilterHistory) actionButtons += `<button class="btn btn-history small" onclick="openHistoryModal(${c.id})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>`;
+
+        if (!c.isActive && !c.isDeleted && canDelete) {
+            actionButtons += `<button class="btn danger small" onclick="deleteComputer(${c.id})" title="Sil">🗑️</button>`;
+        }
+        actionButtons += `</div>`;
 
         return `
             <tr style="color: var(--text-main) !important; ${c.isDeleted ? 'opacity: 0.6;' : ''}">
@@ -568,6 +585,7 @@ window.deleteComputer = async (id) => {
         alert(e.message);
     }
 };
+
 window.changeLivePage = (page) => {
     currentLivePage = page;
     renderTable();
@@ -589,19 +607,16 @@ function renderPaginationControls(containerId, currentPage, totalPages, changeFn
 
     let html = '<ul class="pagination pagination-sm mb-0 shadow-sm">';
 
-    // Önceki butonu
     html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
                 <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${currentPage - 1})">Önceki</a>
              </li>`;
 
-    // Sayfa numaraları
     for (let i = 1; i <= totalPages; i++) {
         html += `<li class="page-item ${currentPage === i ? 'active' : ''}">
                     <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${i})">${i}</a>
                  </li>`;
     }
 
-    // Sonraki butonu
     html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
                 <a class="page-link" href="javascript:void(0)" onclick="window.${changeFnName}(${currentPage + 1})">Sonraki</a>
              </li>`;
@@ -609,6 +624,7 @@ function renderPaginationControls(containerId, currentPage, totalPages, changeFn
     html += '</ul>';
     container.innerHTML = html;
 }
+
 // --- BAŞLATMA ---
 $(document).ready(function () {
     $('#modalTagSelect').select2({
@@ -637,7 +653,7 @@ $(document).ready(function () {
         }, 50);
     });
 
-    loadFilterTags();
+    window.loadFilterTags();
     loadAgents();
     setInterval(loadAgents, 5000);
 });

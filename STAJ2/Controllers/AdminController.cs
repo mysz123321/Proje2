@@ -7,13 +7,14 @@ using STAJ2.Models;
 using STAJ2.Services;
 using System.Security.Claims;
 using System.Text;
-using System.Security.Cryptography; 
+using System.Security.Cryptography;
+using STAJ2.Authorization;
 
 namespace STAJ2.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Yönetici")]
+[Authorize]
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -24,9 +25,13 @@ public class AdminController : ControllerBase
         _db = db;
         _mail = mail;
     }
-
+    public class UpdateRolePermissionsRequest
+    {
+        public List<int> PermissionIds { get; set; } = new();
+    }
     // --- KULLANICI YÖNETİMİ ---
     [HttpGet("users")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> GetAllUsers() =>
         Ok(await _db.Users.Include(u => u.Roles)
                           .OrderBy(u => u.Username)
@@ -34,6 +39,7 @@ public class AdminController : ControllerBase
                           .ToListAsync());
 
     [HttpDelete("users/{id:int}")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> DeleteUser(int id)
     {
         var user = await _db.Users.FindAsync(id);
@@ -42,6 +48,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("users/{userId}/change-roles")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
@@ -60,11 +67,13 @@ public class AdminController : ControllerBase
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
 
     [HttpGet("requests")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> PendingRequests() =>
         Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
 
     // REDDETME İŞLEMİ
     [HttpPost("requests/reject")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> RejectRequest([FromBody] RejectRegistrationRequest request)
     {
         if (!string.IsNullOrEmpty(request.RejectionReason) && request.RejectionReason.Length > 200)
@@ -99,6 +108,7 @@ public class AdminController : ControllerBase
 
     // ONAYLAMA İŞLEMİ (DÜZELTİLMİŞ HALİ)
     [HttpPost("requests/approve/{id}")]
+    [HasPermission("User.Manage")]
     public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest? req)
     {
         var request = await _db.RegistrationRequests.FindAsync(id);
@@ -174,10 +184,12 @@ public class AdminController : ControllerBase
 
     // --- ETİKET YÖNETİMİ ---
     [HttpGet("tags")]
-    [Authorize(Roles = "Yönetici,Görüntüleyici,Denetleyici")]
+    [Authorize]
+    //[HasPermission("Tag.Manage")]
     public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
 
     [HttpPost("tags")]
+    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -198,6 +210,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("tags/{id:int}")]
+    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> DeleteTag(int id)
     {
         var tag = await _db.Tags.FindAsync(id);
@@ -206,5 +219,143 @@ public class AdminController : ControllerBase
         tag.IsDeleted = true;
         await _db.SaveChangesAsync();
         return Ok(new { message = "Etiket silindi." });
+    }
+
+    // --- ROL VE YETKİ YÖNETİMİ ---
+
+    // 1. Sistemdeki tüm rolleri getir
+    [HttpGet("roles")]
+    //[HasPermission("Role.Manage")]
+    public async Task<IActionResult> GetRoles()
+    {
+        var roles = await _db.Roles.Select(r => new { r.Id, r.Name }).ToListAsync();
+        return Ok(roles);
+    }
+
+    // 2. Sistemdeki tüm olası yetkileri (Permissions) getir (Arayüzde checkbox listesi oluşturmak için)
+    [HttpGet("permissions")]
+    [HasPermission("Role.Manage")]
+    public async Task<IActionResult> GetAllPermissions()
+    {
+        var permissions = await _db.Permissions
+            .Select(p => new { p.Id, p.Name, p.Description })
+            .ToListAsync();
+        return Ok(permissions);
+    }
+
+    // 3. Belirli bir rolün sahip olduğu yetkilerin ID'lerini getir (Hangi checkbox'lar seçili olacak?)
+    [HttpGet("roles/{roleId:int}/permissions")]
+    [HasPermission("Role.Manage")]
+    public async Task<IActionResult> GetRolePermissions(int roleId)
+    {
+        var permissionIds = await _db.RolePermissions
+            .Where(rp => rp.RoleId == roleId)
+            .Select(rp => rp.PermissionId)
+            .ToListAsync();
+
+        return Ok(permissionIds);
+    }
+
+    // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
+    [HttpPost("roles/{roleId:int}/permissions")]
+    [HasPermission("Role.Manage")]
+    public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
+    {
+        var role = await _db.Roles.Include(r => r.RolePermissions).FirstOrDefaultAsync(r => r.Id == roleId);
+        if (role == null) return NotFound(new { message = "Rol bulunamadı." });
+
+        // Eski yetkileri tamamen temizle
+        role.RolePermissions.Clear();
+
+        // Gelen yeni yetki ID'lerini veritabanından doğrula ve ekle
+        var validPermissions = await _db.Permissions.Where(p => request.PermissionIds.Contains(p.Id)).ToListAsync();
+
+        foreach (var perm in validPermissions)
+        {
+            role.RolePermissions.Add(new RolePermission
+            {
+                RoleId = role.Id,
+                PermissionId = perm.Id
+            });
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Rol yetkileri başarıyla güncellendi." });
+    }
+    // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
+
+    // 1. Kullanıcının mevcut atamalarını getir (Arayüzde checkbox/liste doldurmak için)
+    [HttpGet("users/{userId:int}/access")]
+    [HasPermission("User.Manage")]
+    public async Task<IActionResult> GetUserAccess(int userId)
+    {
+        var computerIds = await _db.UserComputerAccesses
+            .Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+
+        var tagIds = await _db.UserTagAccesses
+            .Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+
+        return Ok(new { computerIds, tagIds });
+    }
+
+    // 2. Kullanıcıya doğrudan cihaz atama
+    [HttpPost("users/{userId:int}/assign-computers")]
+    [HasPermission("User.Manage")]
+    public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+
+        // Eski atamaları sil
+        var existing = await _db.UserComputerAccesses.Where(x => x.UserId == userId).ToListAsync();
+        _db.UserComputerAccesses.RemoveRange(existing);
+
+        // Yenileri ekle
+        foreach (var cid in req.ComputerIds)
+            _db.UserComputerAccesses.Add(new UserComputerAccess { UserId = userId, ComputerId = cid });
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Cihaz atamaları güncellendi." });
+    }
+
+    // 3. Kullanıcıya etiket atama
+    [HttpPost("users/{userId:int}/assign-tags")]
+    [HasPermission("User.Manage")]
+    public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+
+        // Eski atamaları sil
+        var existing = await _db.UserTagAccesses.Where(x => x.UserId == userId).ToListAsync();
+        _db.UserTagAccesses.RemoveRange(existing);
+
+        // Yenileri ekle
+        foreach (var tid in req.TagIds)
+            _db.UserTagAccesses.Add(new UserTagAccess { UserId = userId, TagId = tid });
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Etiket atamaları güncellendi." });
+    }
+
+    // Sadece atama ekranında tüm cihazları getirmesi için özel endpoint
+    [HttpGet("computers/all")]
+    [HasPermission("User.Manage")]
+    public async Task<IActionResult> GetAllComputersForAssignment()
+    {
+        // IgnoreQueryFilters() ekliyoruz ki silinmiş cihazları da atama ekranında görebilelim (gerekirse yetkisini almak için)
+        var computers = await _db.Computers.IgnoreQueryFilters()
+            .Select(c => new
+            {
+                id = c.Id,
+                displayName = c.DisplayName,
+                machineName = c.MachineName,
+                ipAddress = c.IpAddress,
+                lastSeen = c.LastSeen, // YENİ
+                isDeleted = c.IsDeleted // YENİ
+            })
+            .IgnoreQueryFilters().ToListAsync();
+
+        return Ok(computers);
     }
 }

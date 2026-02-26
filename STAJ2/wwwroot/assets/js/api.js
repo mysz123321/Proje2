@@ -1,16 +1,18 @@
 ﻿// STAJ2/wwwroot/assets/js/api.js
 (function () {
+    // auth.js'teki metodumuzu kullanıyoruz ki her yerde aynı isimle okunsun
     function getToken() {
-        // Auth.js veya Login.js ile tutarlı olduğundan emin olun
-        return localStorage.getItem("staj2_token");
+        return window.auth.getToken();
     }
+
     // Cihazın disklerini ve mevcut eşiklerini getirir
     async function openThresholdSettings(computerId) {
         document.getElementById('modalComputerId').value = computerId;
 
-        // API'den disk bilgilerini çek (Yeni yazdığımız GetComputerDisks endpoint'i)
-        const response = await fetch(`/api/Admin/computers/${computerId}/disks`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        // DÜZELTME: /api/Admin/ yerine /api/Computer/ kullanıldı
+        // DÜZELTME: Token okuma işlemi window.auth üzerinden yapıldı
+        const response = await fetch(`/api/Computer/${computerId}/disks`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         const disks = await response.json();
 
@@ -51,22 +53,26 @@
             diskThresholds: diskThresholds
         };
 
-        const response = await fetch(`/api/Admin/update-thresholds/${computerId}`, {
+        // DÜZELTME: /api/Admin/ yerine /api/Computer/ kullanıldı
+        const response = await fetch(`/api/Computer/update-thresholds/${computerId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${getToken()}`
             },
             body: JSON.stringify(body)
         });
 
         if (response.ok) {
             alert("Eşik değerleri güncellendi!");
-            closeModal();
+            // closeModal() fonksiyonu nerede tanımlıysa oradan çalışacaktır
+            if (typeof closeModal === "function") closeModal();
         } else {
             alert("Hata oluştu.");
         }
     }
+
+    // Sistemin genel Fetch Wrapper'ı
     async function request(path, options = {}) {
         const base = window.APP_CONFIG?.API_BASE ?? "";
         const url = base + path;
@@ -92,11 +98,13 @@
         return data;
     }
 
-    // Bu nesnenin içinde 'put' anahtarı MUTLAKA olmalı
     window.api = {
         get: (path) => request(path),
         post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
         put: (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) }),
-        del: (path) => request(path, { method: "DELETE" })
+        del: (path) => request(path, { method: "DELETE" }),
+        // modal işlemleri arayüzden çağırılabilsin diye global scope'a ekliyoruz:
+        openThresholdSettings: openThresholdSettings,
+        saveThresholds: saveThresholds
     };
 })();

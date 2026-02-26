@@ -26,8 +26,11 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+        // 1. DEĞİŞİKLİK: Rollerle birlikte RolePermissions ve Permission tablolarını da çekiyoruz.
         var user = await _db.Users
-            .Include(x => x.Roles) // Çoklu rol desteği için Roles eklendi
+            .Include(x => x.Roles)
+                .ThenInclude(r => r.RolePermissions)
+                    .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -35,12 +38,19 @@ public class AuthController : ControllerBase
 
         var token = CreateJwtToken(user);
 
+        // Kullanıcının sahip olduğu tüm benzersiz yetkileri frontend için bir listeye alalım
+        var userPermissions = user.Roles
+            .SelectMany(r => r.RolePermissions)
+            .Select(rp => rp.Permission.Name)
+            .Distinct()
+            .ToList();
+
         return Ok(new
         {
             token,
             user.Username,
-            // Frontend'e tüm rolleri liste olarak dönüyoruz
-            roles = user.Roles.Select(r => r.Name).ToList()
+            roles = user.Roles.Select(r => r.Name).ToList(),
+            permissions = userPermissions // Frontend arayüzde (UI) yetki kontrolü yapmak için faydalı olacaktır
         });
     }
 
@@ -80,7 +90,6 @@ public class AuthController : ControllerBase
             IsApproved = true
         };
 
-        // Kayıt isteğindeki rolü bulup listeye ekliyoruz
         var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
         if (requestedRole != null)
         {
@@ -88,7 +97,6 @@ public class AuthController : ControllerBase
         }
 
         _db.Users.Add(newUser);
-        // -------------------------------
 
         tokenRow.IsUsed = true;
         tokenRow.UsedAt = DateTime.UtcNow;
@@ -116,10 +124,22 @@ public class AuthController : ControllerBase
             new Claim(ClaimTypes.Name, user.Username)
         };
 
-        // Tüm rolleri token içerisine ClaimTypes.Role olarak ekle
+        // Rolleri token içerisine ekle
         foreach (var role in user.Roles)
         {
             claims.Add(new Claim(ClaimTypes.Role, role.Name));
+        }
+
+        // 2. DEĞİŞİKLİK: Yetkileri (Permissions) token içerisine ekle
+        var userPermissions = user.Roles
+            .SelectMany(r => r.RolePermissions)
+            .Select(rp => rp.Permission.Name)
+            .Distinct()
+            .ToList();
+
+        foreach (var permission in userPermissions)
+        {
+            claims.Add(new Claim("Permission", permission));
         }
 
         var token = new JwtSecurityToken(
