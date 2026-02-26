@@ -2,9 +2,12 @@
 (function () {
     // auth.js'teki metodumuzu kullanıyoruz ki her yerde aynı isimle okunsun
     function getToken() {
-        return window.auth.getToken();
+        // Eğer sayfada auth.js yüklüyse onu kullan, yüklü değilse çökme ve doğrudan localStorage'a bak
+        if (window.auth && typeof window.auth.getToken === 'function') {
+            return window.auth.getToken();
+        }
+        return localStorage.getItem("staj2_token");
     }
-
     // Cihazın disklerini ve mevcut eşiklerini getirir
     async function openThresholdSettings(computerId) {
         document.getElementById('modalComputerId').value = computerId;
