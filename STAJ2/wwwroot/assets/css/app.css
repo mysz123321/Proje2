@@ -517,3 +517,76 @@ input, select, .small-select {
     opacity: 0.6;
     cursor: not-allowed;
 }
+/* --- PRTG Tarzı Canlı İzleme Kartları --- */
+.prtg-card {
+    border-radius: 14px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Durum İndikatörü (Yuvarlak Işık) */
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px currentColor; /* Dışarıya hafif parlama efekti */
+}
+
+    .status-indicator.bg-success {
+        color: #22c55e;
+    }
+
+    .status-indicator.bg-secondary {
+        color: #64748b;
+    }
+
+    .status-indicator.bg-danger {
+        color: #ef4444;
+    }
+
+/* Disk Kutucukları Hover */
+.disk-box {
+    transition: background 0.2s ease;
+}
+
+    .disk-box:hover {
+        background: rgba(56, 189, 248, 0.1) !important;
+    }
+
+/* Kart içi Dropdown (Ayarlar Butonu) Düzeltmesi */
+.prtg-card .dropdown-item:hover {
+    background-color: var(--bg-hover) !important;
+    color: #38bdf8 !important;
+}
+
+/* --- PRTG Tarzı Dairesel Göstergeler (Donut) --- */
+.prtg-donut {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* CSS Değişkenleri ile doluluk oranını ve rengi dinamik alıyoruz */
+    background: conic-gradient(var(--donut-color) calc(var(--val) * 1%), var(--bg-input) 0);
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+    .prtg-donut::before {
+        content: "";
+        position: absolute;
+        inset: 4px; /* Halkanın kalınlığını belirler (4px boşluk bırakır) */
+        border-radius: 50%;
+        background: var(--bg-card); /* İçinin delik görünmesi için kart arka planı rengi */
+    }
+
+    .prtg-donut span {
+        position: relative;
+        z-index: 1;
+        font-size: 0.7rem;
+        font-weight: bold;
+        font-family: monospace;
+    }
+

@@ -188,6 +188,8 @@ public class AdminController : ControllerBase
     //[HasPermission("Tag.Manage")]
     public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
 
+
+
     [HttpPost("tags")]
     [HasPermission("Tag.Manage")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
@@ -203,10 +205,30 @@ public class AdminController : ControllerBase
         if (await _db.Tags.AnyAsync(t => t.Name == request.Name))
             return BadRequest(new { message = "Bu etiket zaten var." });
 
+        // 1. Etiketi oluştur
         var tag = new Tag { Name = request.Name.Trim() };
         _db.Tags.Add(tag);
-        await _db.SaveChangesAsync();
-        return Ok(tag);
+        await _db.SaveChangesAsync(); // Id'nin oluşması için önce kaydediyoruz
+
+        // 2. OTOMATİK ATAMA: Etiketi oluşturan kullanıcıyı bul ve yetki ver
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(userIdString, out int userId))
+        {
+            // Kullanıcıya bu etiket için erişim yetkisi tanımla
+            _db.UserTagAccesses.Add(new UserTagAccess
+            {
+                UserId = userId,
+                TagId = tag.Id
+            });
+
+            await _db.SaveChangesAsync();
+        }
+
+        return Ok(new
+        {
+            id = tag.Id,
+            name = tag.Name
+        });
     }
 
     [HttpDelete("tags/{id:int}")]
@@ -338,24 +360,57 @@ public class AdminController : ControllerBase
         return Ok(new { message = "Etiket atamaları güncellendi." });
     }
 
-    // Sadece atama ekranında tüm cihazları getirmesi için özel endpoint
+    [HttpPost("tags/{tagId:int}/assign-computers")]
+    [HasPermission("Tag.Manage")]
+    public async Task<IActionResult> AssignComputersToTag(int tagId, [FromBody] AssignComputersToTagRequest req)
+    {
+        var tag = await _db.Tags.Include(t => t.Computers).FirstOrDefaultAsync(t => t.Id == tagId);
+        if (tag == null) return NotFound(new { message = "Etiket bulunamadı." });
+
+        // Mevcut ilişkileri temizle
+        tag.Computers.Clear();
+
+        // Seçilen bilgisayarları bul ve ekle
+        var computers = await _db.Computers.Where(c => req.ComputerIds.Contains(c.Id)).ToListAsync();
+        foreach (var c in computers) tag.Computers.Add(c);
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Cihaz atamaları başarıyla güncellendi." });
+    }
+
+    // Request modeli
+    public class AssignComputersToTagRequest
+    {
+        public List<int> ComputerIds { get; set; } = new();
+    }
+
     [HttpGet("computers/all")]
     [HasPermission("User.Manage")]
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
-        // IgnoreQueryFilters() ekliyoruz ki silinmiş cihazları da atama ekranında görebilelim (gerekirse yetkisini almak için)
-        var computers = await _db.Computers.IgnoreQueryFilters()
+        // .IgnoreQueryFilters() kaldırıldı, böylece IsDeleted=true olanlar gelmeyecek
+        var computers = await _db.Computers
             .Select(c => new
             {
                 id = c.Id,
                 displayName = c.DisplayName,
                 machineName = c.MachineName,
-                ipAddress = c.IpAddress,
-                lastSeen = c.LastSeen, // YENİ
-                isDeleted = c.IsDeleted // YENİ
+                ipAddress = c.IpAddress
             })
-            .IgnoreQueryFilters().ToListAsync();
+            .ToListAsync();
 
         return Ok(computers);
+    }
+
+    [HttpGet("tags/{tagId:int}/assigned-computer-ids")]
+    [HasPermission("Tag.Manage")]
+    public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
+    {
+        var assignedIds = await _db.Tags
+            .Where(t => t.Id == tagId)
+            .SelectMany(t => t.Computers.Select(c => c.Id))
+            .ToListAsync();
+
+        return Ok(assignedIds);
     }
 }

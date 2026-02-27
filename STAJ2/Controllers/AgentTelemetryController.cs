@@ -5,6 +5,8 @@ using Staj2.Infrastructure.Data;
 using STAJ2.Models.Agent;
 using STAJ2.Services;
 using System.Globalization;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 // --- EKSİK OLAN SATIRLAR EKLENDİ ---
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -286,26 +288,62 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
-
     [HttpGet("latest")]
+    [Authorize] // Sadece giriş yapmış kullanıcılar istek atabilir
     public async Task<IActionResult> Latest()
     {
         List<AgentTelemetryDto> list;
         lock (_latestData) { list = _latestData.Values.OrderByDescending(x => x.Ts).ToList(); }
 
         var macs = list.Select(x => x.MacAddress).ToList();
-        var computers = await _context.Computers.Include(c => c.Tags).Where(c => macs.Contains(c.MacAddress)).ToListAsync();
+        var computersQuery = _context.Computers.Include(c => c.Tags).Where(c => macs.Contains(c.MacAddress));
+
+        // --- GÜVENLİK/FİLTRELEME MANTIĞI EKLENDİ ---
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int userId = int.TryParse(userIdString, out int id) ? id : 0;
+
+        // Kullanıcı Yönetici değilse filtreleri uygula
+        bool canSeeAll = User.IsInRole("Yönetici");
+
+        if (!canSeeAll)
+        {
+            var accessibleComputerIds = await _context.UserComputerAccesses
+                .Where(uca => uca.UserId == userId)
+                .Select(uca => uca.ComputerId)
+                .ToListAsync();
+
+            var accessibleTagIds = await _context.UserTagAccesses
+                .Where(uta => uta.UserId == userId)
+                .Select(uta => uta.TagId)
+                .ToListAsync();
+
+            // Cihaz kullanıcıya doğrudan atanmış veya üzerindeki bir etiket atanmış olmalı
+            computersQuery = computersQuery.Where(c =>
+                accessibleComputerIds.Contains(c.Id) ||
+                c.Tags.Any(t => accessibleTagIds.Contains(t.Id)));
+        }
+        // ------------------------------------------
+
+        var computers = await computersQuery.ToListAsync();
+
+        // Sadece kullanıcının görmeye yetkili olduğu cihazların MAC adreslerini al
+        var allowedMacs = computers.Select(c => c.MacAddress).ToHashSet();
+
+        var filteredList = new List<AgentTelemetryDto>();
 
         foreach (var dto in list)
         {
-            var comp = computers.FirstOrDefault(c => c.MacAddress == dto.MacAddress);
-            if (comp != null)
+            // Eğer telemetri verisi kullanıcının yetki listesinde (allowedMacs) varsa ekrana gönder
+            if (allowedMacs.Contains(dto.MacAddress))
             {
+                var comp = computers.First(c => c.MacAddress == dto.MacAddress);
                 dto.ComputerId = comp.Id;
                 dto.DisplayName = comp.DisplayName;
-                dto.Tags = comp.Tags.Select(t => t.Name).ToList(); // Etiketleri aktar
+                dto.Tags = comp.Tags.Select(t => t.Name).ToList();
+                filteredList.Add(dto);
             }
         }
-        return Ok(list);
+
+        return Ok(filteredList);
     }
 }

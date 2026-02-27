@@ -112,25 +112,10 @@
                 title.innerText = "Canlı İzleme";
                 subtitle.innerText = "Sistemdeki cihazların canlı performansı.";
                 content.innerHTML = `
-                    <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead>
-                                    <tr style="color:var(--text-muted);">
-                                        <th>Cihaz & Etiketler</th>
-                                        <th>IP</th>
-                                        <th>CPU</th>
-                                        <th>RAM</th>
-                                        <th>Diskler</th>
-                                        <th>Durum</th>
-                                        ${canEdit ? '<th>İşlemler</th>' : ''} 
-                                    </tr>
-                                </thead>
-                                <tbody id="agentRows"></tbody>
-                            </table>
-                        </div>
-                        <div id="livePagination" class="d-flex justify-content-center mt-3 pb-2"></div>
-                    </div>`;
+        <div id="agentGrid" class="row row-cols-1 row-cols-lg-2 row-cols-xl-3 g-4">
+            </div>
+        <div id="livePagination" class="d-flex justify-content-center mt-4 pb-2"></div>
+    `;
                 if (window.loadAgents) loadAgents();
                 break;
 
@@ -175,8 +160,51 @@
                 break;
             case 'tags':
                 title.innerText = "Etiket Yönetimi";
-                subtitle.innerText = "Cihazları gruplandırmak için etiketler.";
-                await loadTagsView(content);
+                subtitle.innerText = "Sistemdeki etiketleri yönetin ve cihazlara atayın.";
+                content.innerHTML = `
+        <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+            <div class="card-body">
+                <div class="input-group mb-4">
+                    <input type="text" id="newTagName" class="form-control" placeholder="Yeni etiket adı..." style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
+                    <button class="btn btn-primary" onclick="ui.createNewTag()">+ Ekle</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table" style="color:var(--text-main);">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color);">
+                                <th>Etiket Adı</th>
+                                <th class="text-end">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tagTableBody">
+                            <tr><td colspan="2" class="text-center">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="tagAssignModal" tabindex="-1">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content" style="background:var(--bg-card); color:var(--text-main);">
+                    <div class="modal-header border-bottom border-secondary">
+                        <h5 class="modal-title">Etiketi Cihazlara Ata</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="assignTagId">
+                        <div id="assignComputerList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                            </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary">
+                        <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                        <button class="btn btn-success" onclick="ui.saveTagAssignments()">Kaydet</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+                ui.loadTagTable();
                 break;
         }
     }
@@ -343,14 +371,100 @@
                 } catch (e) { alert(e.message); }
             }
         },
+        // ui nesnesinin içine eklenecek yeni fonksiyonlar:
+
+loadTagTable: async () => {
+    try {
+        const tags = await api.get("/api/Admin/tags");
+        const tbody = document.getElementById("tagTableBody");
+        tbody.innerHTML = tags.map(t => `
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td class="align-middle fw-bold">${t.name}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-info me-2" onclick="ui.openAssignModal(${t.id}, '${t.name}')">
+                        <i class="bi bi-pc-display"></i> Cihaza Ata
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="ui.deleteTag(${t.id})">
+                        <i class="bi bi-trash"></i> Sil
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) { console.error(e); }
+},
+
+
+        openAssignModal: async (tagId, tagName) => {
+            document.getElementById("assignTagId").value = tagId;
+            const listContainer = document.getElementById("assignComputerList");
+            listContainer.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+
+            const modal = new bootstrap.Modal(document.getElementById("tagAssignModal"));
+            modal.show();
+
+            try {
+                // İki isteği aynı anda atıyoruz: Tüm aktif cihazlar ve mevcut atamalar
+                const [allComputers, assignedIds] = await Promise.all([
+                    api.get("/api/Admin/computers/all"),
+                    api.get(`/api/Admin/tags/${tagId}/assigned-computer-ids`)
+                ]);
+
+                listContainer.innerHTML = allComputers.map(c => {
+                    // Eğer cihazın ID'si atanmışlar listesinde varsa 'checked' ekle
+                    const isChecked = assignedIds.includes(c.id) ? 'checked' : '';
+
+                    return `
+                <label class="list-group-item d-flex justify-content-between align-items-center" style="background:transparent; color:var(--text-main); border-color:var(--border-color); cursor:pointer;">
+                    <div>
+                        <input class="form-check-input me-2 comp-check" type="checkbox" value="${c.id}" ${isChecked}>
+                        <span class="fw-bold">${c.displayName || c.machineName}</span>
+                    </div>
+                    <small class="text-muted" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
+                </label>
+            `;
+                }).join('');
+
+                if (allComputers.length === 0) {
+                    listContainer.innerHTML = '<div class="text-center p-3 text-muted">Atanabilecek aktif cihaz bulunamadı.</div>';
+                }
+
+            } catch (e) {
+                console.error(e);
+                listContainer.innerHTML = '<div class="text-danger p-3 text-center">Cihazlar yüklenirken bir hata oluştu.</div>';
+            }
+        },
+
+saveTagAssignments: async () => {
+    const tagId = document.getElementById("assignTagId").value;
+    const selectedIds = Array.from(document.querySelectorAll('.comp-check:checked')).map(cb => parseInt(cb.value));
+
+    try {
+        await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: selectedIds });
+        bootstrap.Modal.getInstance(document.getElementById("tagAssignModal")).hide();
+        alert("Atama işlemi başarılı!");
+    } catch (e) { alert("Hata: " + e.message); }
+},
 
         createNewTag: async () => {
-            const name = document.getElementById("newTagName").value.trim();
+            const nameInput = document.getElementById("newTagName");
+            const name = nameInput.value.trim();
+
             if (name) {
-                await api.post("/api/Admin/tags", { name });
-                ui.switchView('tags');
-                // YENİ: Etiket eklendikten sonra üst filtreyi güncelle
-                if (window.loadFilterTags) window.loadFilterTags();
+                try {
+                    await api.post("/api/Admin/tags", { name });
+
+                    // Giriş kutusunu temizle
+                    nameInput.value = "";
+
+                    // HATALI SATIR BURASIYDI: ui.switchView yerine doğrudan switchView çağırılmalı
+                    await switchView('tags');
+
+                    // Üst filtreyi ve seçim kutularını anında güncelle
+                    if (window.loadFilterTags) window.loadFilterTags();
+
+                } catch (e) {
+                    alert("Etiket eklenirken hata: " + e.message);
+                }
             }
         },
         deleteTag: async (id) => {

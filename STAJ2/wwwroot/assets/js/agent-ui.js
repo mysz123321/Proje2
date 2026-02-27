@@ -4,7 +4,7 @@
 let historyCharts = { cpu: null, ram: null, disks: {} };
 let currentHistoryData = { cpuRam: [], disks: [] };
 
-// --- DEĞİŞİKLİK 1: İki sekme için ayrı etiket dizileri ---
+// --- İki sekme için ayrı etiket dizileri ---
 let selectedLiveTags = [];
 let selectedAllTags = [];
 let allAgents = [];
@@ -13,7 +13,14 @@ let allSystemComputers = [];
 // --- PAGINATION İÇİN EKLENEN DEĞİŞKENLER ---
 let currentLivePage = 1;
 let currentAllPage = 1;
-const itemsPerPage = 2;
+const itemsPerPage = 6; // Kart yapısına geçildiği için sayfada gösterilecek sayıyı biraz artırabilirsin (Örn: 6)
+
+// --- YARDIMCI FONKSİYON: Dinamik Renk Hesaplama ---
+function getProgressBarColor(val, threshold) {
+    if (val >= threshold) return 'bg-danger';
+    if (val >= (threshold * 0.8)) return 'bg-warning'; // Sınıra %80 yaklaştıysa sarı olsun
+    return 'bg-success';
+}
 
 // --- 1. ANA TABLO VE FİLTRELEME ---
 
@@ -34,8 +41,6 @@ window.applyFilter = () => {
     }
 };
 
-
-
 window.loadFilterTags = async () => {
     try {
         const tags = await api.get("/api/Computer/tags");
@@ -43,7 +48,6 @@ window.loadFilterTags = async () => {
         const $filterSelect = $('#tagSelect');
         const $modalSelect = $('#modalTagSelect');
 
-        // YENİ: Listeyi temizlemeden önce halihazırda seçili olan etiketleri hafızaya al
         const currentFilterVals = $filterSelect.val();
         const currentModalVals = $modalSelect.val();
 
@@ -55,7 +59,6 @@ window.loadFilterTags = async () => {
             $modalSelect.append(new Option(t.name, t.name, false, false));
         });
 
-        // YENİ: Hafızaya alınan seçimleri geri yükle (Eğer silinmemişlerse)
         if (currentFilterVals) $filterSelect.val(currentFilterVals);
         if (currentModalVals) $modalSelect.val(currentModalVals);
 
@@ -66,7 +69,6 @@ window.loadFilterTags = async () => {
         console.error("Filtre etiketleri yüklenemedi", e);
     }
 };
-
 
 async function loadAgents() {
     try {
@@ -82,74 +84,127 @@ async function loadAgents() {
     }
 }
 
+// YENİ: PRTG KART YAPISI İLE RENDER
 function renderTable() {
-    const tbody = document.getElementById("agentRows");
-    if (!tbody) return;
+    const container = document.getElementById("agentGrid");
+    if (!container) return;
 
-    // YENİ: Tek bir rol kontrolü yerine spesifik yetkileri (Permissions) alıyoruz
     const canRename = window.auth.hasPermission("Computer.Rename");
     const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
     const canFilterHistory = window.auth.hasPermission("Computer.Filter");
-
     const canEdit = canRename || canSetThreshold || canAssignTag || canFilterHistory;
+
     const now = new Date().getTime();
 
     const liveAndFilteredAgents = allAgents.filter(a => {
         const matchesTags = selectedLiveTags.length === 0 || selectedLiveTags.every(t => a.tags && a.tags.includes(t));
         if (!matchesTags) return false;
-
         if (!a.ts) return false;
-        const agentTime = new Date(a.ts).getTime();
-        return (now - agentTime) <= 90000;
+        return (now - new Date(a.ts).getTime()) <= 90000;
     });
 
-    // --- PAGINATION MANTIĞI ---
     const totalPages = Math.ceil(liveAndFilteredAgents.length / itemsPerPage);
     if (currentLivePage > totalPages && totalPages > 0) currentLivePage = totalPages;
 
     const startIndex = (currentLivePage - 1) * itemsPerPage;
     const paginatedAgents = liveAndFilteredAgents.slice(startIndex, startIndex + itemsPerPage);
 
-    tbody.innerHTML = paginatedAgents.map(a => {
-        const ts = a.ts ? new Date(a.ts).toLocaleString() : "-";
-        const tags = (a.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
+    container.innerHTML = paginatedAgents.map(a => {
+        const ts = a.ts ? new Date(a.ts).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-";
+        const tags = (a.tags || []).map(t => `<span class="badge" style="background:var(--bg-hover); color:var(--text-main); border: 1px solid var(--border-color); margin-right:3px;">${t}</span>`).join("");
+        const statusClass = 'bg-success';
 
-        // YENİ: Butonları sadece o yetkiye sahipse HTML'e ekle
-        let actionButtons = `<div style="display:flex; gap:5px;">`;
-        if (canRename) actionButtons += `<button class="btn primary small" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir">✏️</button>`;
-        if (canSetThreshold) actionButtons += `<button class="btn warning small" onclick="openThresholdSettings(${a.computerId})" title="Limit Ayarları">⚙️</button>`;
-        if (canAssignTag) actionButtons += `<button class="btn btn-tag small" onclick="openTagModal(${a.computerId})" title="Etiketle">🏷️</button>`;
-        if (canFilterHistory) actionButtons += `<button class="btn btn-history small" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>`;
-        actionButtons += `</div>`;
-
-        let diskContent = "-";
-        if (a.diskUsage) {
-            diskContent = `<span style="font-size:0.8rem; color:var(--text-main);">${a.diskUsage}</span>`;
+        // 1. ÜÇ NOKTA YERİNE AÇIK AKSİYON BUTONLARI (Yan yana dizilmiş ikonlar)
+        let actionButtons = '';
+        if (canEdit) {
+            actionButtons = `<div class="d-flex align-items-center gap-1">`;
+            if (canFilterHistory) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Analizi"><i class="bi bi-clock-history fs-6 text-info"></i></button>`;
+            if (canSetThreshold) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openThresholdSettings(${a.computerId})" title="Sınırları Düzenle"><i class="bi bi-sliders fs-6 text-warning"></i></button>`;
+            if (canAssignTag) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openTagModal(${a.computerId})" title="Etiketle"><i class="bi bi-tags fs-6 text-success"></i></button>`;
+            if (canRename) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir"><i class="bi bi-pencil fs-6 text-primary"></i></button>`;
+            actionButtons += `</div>`;
         }
 
-        const ipDisplay = a.ip || "-";
+        // 2. CPU VE RAM İÇİN DAİRESEL (DONUT) SENSÖRLER
         const cpuLimit = a.cpuThreshold || 90;
         const ramLimit = a.ramThreshold || 90;
-        const cpuColor = (a.cpuUsage > cpuLimit) ? "#ef4444" : "var(--text-main)";
-        const ramColor = (a.ramUsage > ramLimit) ? "#ef4444" : "var(--text-main)";
+        const cpuUsage = Math.round(a.cpuUsage || 0);
+        const ramUsage = Math.round(a.ramUsage || 0);
+        const cpuColor = getDonutColor(cpuUsage, cpuLimit);
+        const ramColor = getDonutColor(ramUsage, ramLimit);
+
+        let sensorsHtml = `
+            <div class="col">
+                <div class="p-2 rounded border disk-box d-flex flex-column align-items-center justify-content-center text-center h-100" style="background:var(--bg-hover); border-color:var(--border-color)!important;">
+                    <span class="small fw-bold mb-2 text-truncate w-100" style="color:var(--text-main); font-size:0.75rem;"><i class="bi bi-cpu text-primary"></i> CPU</span>
+                    <div class="prtg-donut" style="--val: ${cpuUsage}; --donut-color: ${cpuColor};">
+                        <span style="color:var(--text-main);">%${cpuUsage}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="p-2 rounded border disk-box d-flex flex-column align-items-center justify-content-center text-center h-100" style="background:var(--bg-hover); border-color:var(--border-color)!important;">
+                    <span class="small fw-bold mb-2 text-truncate w-100" style="color:var(--text-main); font-size:0.75rem;"><i class="bi bi-memory text-success"></i> RAM</span>
+                    <div class="prtg-donut" style="--val: ${ramUsage}; --donut-color: ${ramColor};">
+                        <span style="color:var(--text-main);">%${ramUsage}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 3. DİSKLER İÇİN DAİRESEL (DONUT) SENSÖRLER
+        if (a.diskUsage && a.diskUsage !== "-") {
+            let regex = /([A-Za-z]:[\\/]?)[^\d]*(\d+)[^\d]*/g;
+            let match;
+            while ((match = regex.exec(a.diskUsage)) !== null) {
+                let dName = match[1].replace(/[\\/]/g, '');
+                let dUsage = parseInt(match[2]);
+                let dColor = getDonutColor(dUsage, 90); // Disklere varsayılan limit %90 baz alındı
+
+                sensorsHtml += `
+                <div class="col">
+                    <div class="p-2 rounded border disk-box d-flex flex-column align-items-center justify-content-center text-center h-100" style="background:var(--bg-hover); border-color:var(--border-color)!important;">
+                        <span class="small fw-bold mb-2 text-truncate w-100" style="color:var(--text-main); font-size:0.75rem;"><i class="bi bi-device-hdd text-info"></i> ${dName}</span>
+                        <div class="prtg-donut" style="--val: ${dUsage}; --donut-color: ${dColor};">
+                            <span style="color:var(--text-main);">%${dUsage}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }
+        }
 
         return `
-            <tr style="color: var(--text-main) !important;">
-                <td>
-                    <div class="fw-bold" style="color:var(--text-title);">${a.displayName || a.machineName}</div>
-                    <div style="margin-top:2px;">${tags}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">${ts}</div>
-                </td>
-                <td style="color:var(--text-muted); font-family:monospace;">${ipDisplay}</td>
-                <td style="font-weight:bold; color:${cpuColor};">${Math.round(a.cpuUsage)}%</td>
-                <td style="font-weight:bold; color:${ramColor};">${Math.round(a.ramUsage)}%</td>
-                <td style="color: var(--text-main) !important;">${diskContent}</td>
-                <td><span class="badge bg-success">Aktif</span></td>
-                ${canEdit ? `<td>${actionButtons}</td>` : ''}
-            </tr>
+            <div class="col">
+                <div class="card h-100 prtg-card border shadow-sm" style="background:var(--bg-card); border-color:var(--border-color)!important;">
+                    
+                    <div class="card-header border-bottom border-secondary d-flex justify-content-between align-items-center mb-0" style="border-color:var(--border-color)!important; background: transparent; padding-bottom: 0.75rem;">
+                        <div class="d-flex align-items-center gap-2" style="overflow:hidden;">
+                            <span class="status-indicator ${statusClass}"></span>
+                            <div class="text-truncate">
+                                <h6 class="mb-0 fw-bold" style="color:var(--text-title);">${a.displayName || a.machineName}</h6>
+                                <small style="color:var(--text-muted); font-family:monospace; font-size: 0.75rem;">${a.ip || 'IP Yok'}</small>
+                            </div>
+                        </div>
+                        ${actionButtons}
+                    </div>
+
+                    <div class="card-body p-3">
+                        <div class="mb-3 d-flex flex-wrap gap-1">${tags}</div>
+                        
+                        <div class="row row-cols-2 row-cols-sm-3 g-2">
+                            ${sensorsHtml}
+                        </div>
+
+                        <div class="text-end mt-3">
+                            <small style="font-size: 0.65rem; color:var(--text-muted);">Son Veri: ${ts}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
     }).join("");
+
     renderPaginationControls('livePagination', currentLivePage, totalPages, 'changeLivePage');
 }
 
@@ -492,6 +547,7 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
     });
 }
 
+// ----------------- TÜM CİHAZLAR SEKMESİ (TABLO OLARAK KALACAK) -----------------
 window.loadAllComputers = async () => {
     try {
         const res = await fetch("/api/Computer", {
@@ -509,7 +565,6 @@ window.renderAllComputersTable = () => {
     const tbody = document.getElementById("allComputersRows");
     if (!tbody) return;
 
-    // YENİ: Tüm bilgisayarlar sekmesi için de ayrı yetki kontrolleri
     const canRename = window.auth.hasPermission("Computer.Rename");
     const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
@@ -522,7 +577,6 @@ window.renderAllComputersTable = () => {
         ? allSystemComputers
         : allSystemComputers.filter(a => selectedAllTags.every(t => a.tags && a.tags.includes(t)));
 
-    // --- PAGINATION MANTIĞI ---
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
     if (currentAllPage > totalPages && totalPages > 0) currentAllPage = totalPages;
 
@@ -542,7 +596,6 @@ window.renderAllComputersTable = () => {
             statusBadge = `<span class="badge bg-secondary">Pasif</span>`;
         }
 
-        // YENİ: Butonları o işleme özel yetkiye göre ekliyoruz
         let actionButtons = `<div style="display:flex; gap:5px;">`;
         if (!c.isDeleted) {
             if (canRename) actionButtons += `<button class="btn primary small" onclick="handleRename(${c.id}, '${c.displayName || c.machineName}')" title="İsim Değiştir">✏️</button>`;
@@ -595,7 +648,11 @@ window.changeAllPage = (page) => {
     currentAllPage = page;
     renderAllComputersTable();
 };
-
+function getDonutColor(val, threshold) {
+    if (val >= threshold) return '#ef4444'; // Sınırı aştıysa Kırmızı
+    if (val >= (threshold * 0.8)) return '#eab308'; // Sınıra yaklaştıysa Sarı
+    return '#22c55e'; // Normalse Yeşil
+}
 function renderPaginationControls(containerId, currentPage, totalPages, changeFnName) {
     const container = document.getElementById(containerId);
     if (!container) return;
