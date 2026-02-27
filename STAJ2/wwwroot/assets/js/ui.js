@@ -222,28 +222,39 @@
         try {
             const users = await api.get("/api/Admin/users");
 
-            let rows = users.map(u => {
-                const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
+            // Sisteme giriş yapmış olan kullanıcının kullanıcı adını alıyoruz
+            const currentUsername = localStorage.getItem("staj2_username") || "";
 
-                return `
-                    <tr>
-                        <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
-                        <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
-                        <td class="text-end">
-                            <button class="btn btn-outline-primary btn-sm me-1 mb-1" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>
-                            <button class="btn btn-outline-success btn-sm me-1 mb-1" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
-                            <button class="btn btn-outline-warning btn-sm me-2 mb-1" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
-                            ${!u.roles.includes("Yönetici") ? `<button class="btn btn-outline-danger btn-sm mb-1" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>` : ""}
-                        </td>
-                    </tr>`;
-            }).join("");
+            let rows = users
+                // 1. KENDİSİNİ GİZLE: Giriş yapan kullanıcı listede görünmesin
+                .filter(u => u.username !== currentUsername)
+                .map(u => {
+                    const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
+
+                    // 2. YÖNETİCİ KONTROLÜ: Kullanıcı Yönetici mi?
+                    const isAdmin = u.roles.includes("Yönetici");
+
+                    return `
+                        <tr>
+                            <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
+                            <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
+                            <td class="text-end">
+                                ${!isAdmin ? `
+                                    <button class="btn btn-outline-primary btn-sm me-1 mb-1" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>
+                                    <button class="btn btn-outline-success btn-sm me-1 mb-1" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
+                                    <button class="btn btn-outline-warning btn-sm me-2 mb-1" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
+                                    <button class="btn btn-outline-danger btn-sm mb-1" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>
+                                ` : `<span class="text-muted small fst-italic"><i class="bi bi-shield-lock-fill text-warning"></i> &emsp;&emsp;&emsp;</span>`}
+                            </td>
+                        </tr>`;
+                }).join("");
 
             container.innerHTML = `
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead><tr style="color:var(--text-muted);"><th>Kullanıcı Adı</th><th>Sahip Olduğu Roller</th><th class="text-end">İşlemler</th></tr></thead>
-                            <tbody>${rows}</tbody>
+                            <tbody>${rows || '<tr><td colspan="3" class="text-center text-muted py-4">Listelenecek başka kullanıcı bulunamadı.</td></tr>'}</tbody>
                         </table>
                     </div>
                 </div>`;
@@ -414,7 +425,10 @@
                 ]);
                 const user = users.find(u => u.id === userId);
 
-                container.innerHTML = allRoles.map(r => `
+                // YENİ: "Yönetici" rolünü ekrana basılacak listeden çıkarıyoruz
+                const assignableRoles = allRoles.filter(r => r.name !== "Yönetici");
+
+                container.innerHTML = assignableRoles.map(r => `
                     <label class="permission-card d-flex align-items-center w-100" for="urole_${r.id}">
                         <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="urole_${r.id}" value="${r.id}" ${(user && user.roles.includes(r.name)) ? 'checked' : ''}>
                         <div class="fw-bold" style="color:var(--text-title);">${r.name}</div>

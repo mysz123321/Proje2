@@ -67,8 +67,9 @@
             try {
                 const res = await api.post("/api/Auth/login", { email, password });
 
-                // DÜZELTME BURADA: res.permissions parametresini de ekledik!
-                auth.saveAuth(res.token, res.roles, res.permissions);
+                // DÜZELTME: API'den gelen kullanıcı adını yakalayıp saveAuth'a 4. parametre olarak gönderiyoruz
+                const activeUsername = res.username || res.Username || "";
+                auth.saveAuth(res.token, res.roles, res.permissions, activeUsername);
 
                 window.location.href = "/viewer.html";
             } catch (e) {
