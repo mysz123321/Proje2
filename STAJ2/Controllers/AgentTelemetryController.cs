@@ -288,52 +288,44 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
+   
     [HttpGet("latest")]
-    [Authorize] // Sadece giriş yapmış kullanıcılar istek atabilir
+    [Authorize]
     public async Task<IActionResult> Latest()
     {
         List<AgentTelemetryDto> list;
         lock (_latestData) { list = _latestData.Values.OrderByDescending(x => x.Ts).ToList(); }
 
         var macs = list.Select(x => x.MacAddress).ToList();
-        var computersQuery = _context.Computers.Include(c => c.Tags).Where(c => macs.Contains(c.MacAddress));
 
-        // --- GÜVENLİK/FİLTRELEME MANTIĞI EKLENDİ ---
+        // 1. ADIM: Diskleri de Include ediyoruz ki bildirim zamanlarına bakabilelim
+        var computersQuery = _context.Computers
+            .Include(c => c.Tags)
+            .Include(c => c.Disks)
+            .Where(c => macs.Contains(c.MacAddress));
+
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int userId = int.TryParse(userIdString, out int id) ? id : 0;
-
-        // Kullanıcı Yönetici değilse filtreleri uygula
         bool canSeeAll = User.IsInRole("Yönetici");
 
         if (!canSeeAll)
         {
             var accessibleComputerIds = await _context.UserComputerAccesses
-                .Where(uca => uca.UserId == userId)
-                .Select(uca => uca.ComputerId)
-                .ToListAsync();
-
+                .Where(uca => uca.UserId == userId).Select(uca => uca.ComputerId).ToListAsync();
             var accessibleTagIds = await _context.UserTagAccesses
-                .Where(uta => uta.UserId == userId)
-                .Select(uta => uta.TagId)
-                .ToListAsync();
+                .Where(uta => uta.UserId == userId).Select(uta => uta.TagId).ToListAsync();
 
-            // Cihaz kullanıcıya doğrudan atanmış veya üzerindeki bir etiket atanmış olmalı
             computersQuery = computersQuery.Where(c =>
                 accessibleComputerIds.Contains(c.Id) ||
                 c.Tags.Any(t => accessibleTagIds.Contains(t.Id)));
         }
-        // ------------------------------------------
 
         var computers = await computersQuery.ToListAsync();
-
-        // Sadece kullanıcının görmeye yetkili olduğu cihazların MAC adreslerini al
         var allowedMacs = computers.Select(c => c.MacAddress).ToHashSet();
-
         var filteredList = new List<AgentTelemetryDto>();
 
         foreach (var dto in list)
         {
-            // Eğer telemetri verisi kullanıcının yetki listesinde (allowedMacs) varsa ekrana gönder
             if (allowedMacs.Contains(dto.MacAddress))
             {
                 var comp = computers.First(c => c.MacAddress == dto.MacAddress);
@@ -344,6 +336,32 @@ public sealed class AgentTelemetryController : ControllerBase
             }
         }
 
-        return Ok(filteredList);
+        // 2. ADIM: SIRALAMA MANTIĞI
+        // Cihazın herhangi bir bileşeninden (CPU, RAM, DISK) giden son mail zamanına göre sırala
+        var sortedResult = filteredList.OrderByDescending(dto =>
+        {
+            var comp = computers.First(c => c.MacAddress == dto.MacAddress);
+
+            // Cihazın tüm bildirim zamanlarını topla
+            var notifyTimes = new List<DateTime>();
+            if (comp.CpuLastNotifyTime.HasValue) notifyTimes.Add(comp.CpuLastNotifyTime.Value);
+            if (comp.RamLastNotifyTime.HasValue) notifyTimes.Add(comp.RamLastNotifyTime.Value);
+
+            // Disk bildirimlerini de ekle
+            var lastDiskNotify = comp.Disks
+                .Where(d => d.LastNotifyTime.HasValue)
+                .Select(d => d.LastNotifyTime!.Value)
+                .OrderByDescending(t => t)
+                .FirstOrDefault();
+
+            if (lastDiskNotify != default) notifyTimes.Add(lastDiskNotify);
+
+            // Eğer hiç bildirim gitmemişse en sona at (DateTime.MinValue), gitmişse en güncelini al
+            return notifyTimes.Any() ? notifyTimes.Max() : DateTime.MinValue;
+        })
+        .ThenByDescending(dto => dto.Ts) // Bildirim zamanları eşitse veya yoksa son veri zamanına göre sırala
+        .ToList();
+
+        return Ok(sortedResult);
     }
 }
