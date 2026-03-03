@@ -3,7 +3,7 @@ using Staj2.Domain.Entities;
 
 namespace Staj2.Domain.Entities
 {
-    public class Computer 
+    public class Computer : IUpdatableEntity
     {
         public int Id { get; set; }
         public string MacAddress { get; set; } = null!;
@@ -23,7 +23,8 @@ namespace Staj2.Domain.Entities
         public DateTime? RamLastNotifyTime { get; set; } // YENİ: RAM için son bildirim
 
         public DateTime LastSeen { get; set; }
-
+        public DateTime? UpdatedAt { get; set; }
+        public int? UpdatedBy { get; set; }
         // İlişkiler
         public List<ComputerDisk> Disks { get; set; } = new();
         public List<ComputerMetric> Metrics { get; set; } = new();

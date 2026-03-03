@@ -10,7 +10,6 @@ namespace Staj2.Domain.Entities
         public int ComputerId { get; set; }
         public string DiskName { get; set; } = null!;
         public double TotalSizeGb { get; set; }
-        public double? FreeSpaceThresholdGb { get; set; }
         public DateTime? LastNotifyTime { get; set; }
         public double? ThresholdPercent { get; set; }
         public DateTime? UpdatedAt { get; set; }
