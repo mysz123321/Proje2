@@ -17,6 +17,7 @@ public class AgentTelemetryDto
     public double CpuUsage { get; set; }
     public double RamUsage { get; set; }
     public required string DiskUsage { get; set; }
-
+    public double? CpuThreshold { get; set; } // YENİ: Köprünün ilk ayağı
+    public double? RamThreshold { get; set; } // YENİ: Köprünün ikinci ayağı
     public DateTime Ts { get; set; }
 }

@@ -157,42 +157,28 @@ public class ComputerController : ControllerBase
     [HasPermission("Computer.Read")]
     public async Task<IActionResult> GetAllComputers()
     {
-        // 1. İsteği yapan kullanıcının ID'sini JWT'den alıyoruz
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int userId = int.TryParse(userIdString, out int id) ? id : 0;
+        bool isAdmin = User.IsInRole("Yönetici");
 
-        // 2. Kullanıcının tüm cihazları görme yetkisi var mı? 
-        // (Yönetici rolü veya "Computer.Filter" yetkisi gibi bir üst yetki belirleyebilirsiniz)
-        bool canSeeAll = User.IsInRole("Yönetici");
+        // 1. Mevcut erişimleri çek
+        var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+        var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
-        // 3. Sorguyu başlatıyoruz
         var query = _db.Computers.IgnoreQueryFilters().Include(c => c.Tags).AsQueryable();
 
-        // 4. Eğer tümünü görme yetkisi YOKSA, sorguyu filtreliyoruz
-        if (!canSeeAll)
+        // 2. Admin olsa bile eğer bir kısıtlama listesi varsa onu uygula!
+        bool isRestricted = !isAdmin || (accCompIds.Count > 0 || accTagIds.Count > 0);
+
+        if (isRestricted)
         {
-            // Kullanıcının DOĞRUDAN erişimi olan cihaz ID'leri
-            var accessibleComputerIds = await _db.UserComputerAccesses
-                .Where(uca => uca.UserId == userId)
-                .Select(uca => uca.ComputerId)
-                .ToListAsync();
-
-            // Kullanıcının ETİKET ÜZERİNDEN erişimi olan etiket ID'leri
-            var accessibleTagIds = await _db.UserTagAccesses
-                .Where(uta => uta.UserId == userId)
-                .Select(uta => uta.TagId)
-                .ToListAsync();
-
-            // Sorguya filtreyi ekle: Cihaz doğrudan atanmış VEYA cihazın üzerindeki bir etiket kullanıcıya atanmış olmalı
-            query = query.Where(c =>
-                accessibleComputerIds.Contains(c.Id) ||
-                c.Tags.Any(t => accessibleTagIds.Contains(t.Id)));
+            query = query.Where(c => accCompIds.Contains(c.Id) || c.Tags.Any(t => accTagIds.Contains(t.Id)));
         }
 
         var computers = await query.ToListAsync();
+        var now = DateTime.Now; // UTC kullanımı şart
 
-        var result = computers.Select(c => new
-        {
+        var result = computers.Select(c => new {
             id = c.Id,
             machineName = c.MachineName,
             displayName = c.DisplayName,
@@ -200,7 +186,8 @@ public class ComputerController : ControllerBase
             lastSeen = c.LastSeen,
             tags = c.Tags.Select(t => t.Name).ToList(),
             isDeleted = c.IsDeleted,
-            isActive = (DateTime.Now - c.LastSeen).TotalSeconds <= 150
+            // UI ile tam uyumlu 90 saniye kuralı
+            isActive = (now - c.LastSeen).TotalSeconds <= 90
         })
         .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen);
 

@@ -258,23 +258,40 @@
                 .filter(u => u.username !== currentUsername)
                 .map(u => {
                     const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
-
-                    // 2. YÖNETİCİ KONTROLÜ: Kullanıcı Yönetici mi?
-                    const isAdmin = u.roles.includes("Yönetici");
+                    const isAdmin = u.roles.includes("Yönetici"); // Kullanıcının yönetici olup olmadığını anlıyoruz
 
                     return `
-                        <tr>
-                            <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
-                            <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
-                            <td class="text-end">
-                                ${!isAdmin ? `
-                                    <button class="btn btn-outline-primary btn-sm me-1 mb-1" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>
-                                    <button class="btn btn-outline-success btn-sm me-1 mb-1" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
-                                    <button class="btn btn-outline-warning btn-sm me-2 mb-1" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
-                                    <button class="btn btn-outline-danger btn-sm mb-1" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>
-                                ` : `<span class="text-muted small fst-italic"><i class="bi bi-shield-lock-fill text-warning"></i> &emsp;&emsp;&emsp;</span>`}
-                            </td>
-                        </tr>`;
+        <tr>
+            <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
+            <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
+            <td class="text-end">
+                <div class="d-flex justify-content-end gap-1 flex-wrap">
+                    
+                    ${!isAdmin ? `
+                        <button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri">
+                            <i class="bi bi-shield-check"></i> Roller
+                        </button>
+                    ` : ''}
+
+                    <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri">
+                        <i class="bi bi-pc-display"></i> Cihazlar
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri">
+                        <i class="bi bi-tags"></i> Etiketler
+                    </button>
+
+                    ${!isAdmin ? `
+                        <button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    ` : `
+                        <span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez">
+                            <i class="bi bi-shield-lock-fill"></i>
+                        </span>
+                    `}
+                </div>
+            </td>
+        </tr>`;
                 }).join("");
 
             container.innerHTML = `
@@ -574,39 +591,43 @@ saveTagAssignments: async () => {
             new bootstrap.Modal(document.getElementById('userComputerAccessModal')).show();
 
             try {
-                // DÜZELTME: /api/Computer yerine, az önce yazdığımız kısıtlamasız endpoint'i çağırıyoruz.
                 const [allComputers, accessInfo] = await Promise.all([
-                    api.get('/api/Admin/computers/all'), // BURASI DEĞİŞTİ
+                    api.get('/api/Admin/computers/all'),
                     api.get(`/api/Admin/users/${userId}/access`)
                 ]);
 
+                const now = new Date().getTime(); //
+
                 container.innerHTML = allComputers.map(c => {
-                    // YENİ: Cihazın durumunu hesapla ve HTML rozetini (badge) oluştur
+                    // 1. AKTİFLİK HESABI: 150 saniye kuralı
+                    // lastSeen UTC geldiği için new Date(...) bunu doğru çevirecektir.
+                    const lastSeenTime = new Date(c.lastSeen).getTime(); //
+                    const isOnline = (now - lastSeenTime) <= 150000; //
+
                     let statusHtml = "";
-                    const isPassive = (new Date() - new Date(c.lastSeen)) > 150000; // 2.5 dakikadan eskiyse pasif
                     if (c.isDeleted) {
                         statusHtml = `<span class="badge bg-danger ms-2" style="font-size:0.65rem;">Silinmiş</span>`;
-                    } else if (!isPassive) {
+                    } else if (isOnline) {
                         statusHtml = `<span class="badge bg-success ms-2" style="font-size:0.65rem;">Aktif</span>`;
                     } else {
                         statusHtml = `<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">Pasif</span>`;
                     }
 
                     return `
-                    <div class="col-md-6 computer-access-item">
-                        <label class="permission-card d-flex align-items-center w-100" for="ucomp_${c.id}" style="${c.isDeleted ? 'opacity:0.6;' : ''}">
-                            <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="ucomp_${c.id}" value="${c.id}" ${accessInfo.computerIds.includes(c.id) ? 'checked' : ''}>
-                            <div>
-                                <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">
-                                    ${c.displayName || c.machineName} ${statusHtml}
-                                </div>
-                                <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${c.ipAddress || '-'}</div>
-                            </div>
-                        </label>
+            <div class="col-md-6 computer-access-item">
+                <label class="permission-card d-flex align-items-center w-100" for="ucomp_${c.id}" style="${c.isDeleted ? 'opacity:0.6;' : ''}">
+                    <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="ucomp_${c.id}" value="${c.id}" ${accessInfo.computerIds.includes(c.id) ? 'checked' : ''}>
+                    <div>
+                        <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">
+                            ${c.displayName || c.machineName} ${statusHtml}
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${c.ipAddress || '-'}</div>
                     </div>
-                    `;
+                </label>
+            </div>`;
                 }).join('');
             } catch (e) { container.innerHTML = `<div class="text-danger w-100 px-3">${e.message}</div>`; }
+        
         },
 
         filterComputerCheckboxes: () => {

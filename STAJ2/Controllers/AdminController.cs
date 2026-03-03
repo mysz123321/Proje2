@@ -316,16 +316,26 @@ public class AdminController : ControllerBase
     }
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
 
-    // 1. Kullanıcının mevcut atamalarını getir (Arayüzde checkbox/liste doldurmak için)
     [HttpGet("users/{userId:int}/access")]
     [HasPermission("User.Manage")]
     public async Task<IActionResult> GetUserAccess(int userId)
     {
-        var computerIds = await _db.UserComputerAccesses
-            .Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null) return NotFound();
 
-        var tagIds = await _db.UserTagAccesses
-            .Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+        // 1. Veritabanındaki gerçek kayıtları çek
+        var computerIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+        var tagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+
+        // 2. KRİTİK MANTIK: 
+        // Eğer listeler boşsa VE kullanıcı yöneticiyse, "hiç kısıtlanmamış" demektir, hepsini seçili getir.
+        // Ama eğer listeler DOLUYSA (admin olsa bile), sadece o listeyi getir. 
+        // Böylece 4 cihazdan 1'ini çıkarıp kaydedersen, artık sadece o 3 cihaz tikli gelir.
+        if (computerIds.Count == 0 && tagIds.Count == 0 && user.Roles.Any(r => r.Name == "Yönetici"))
+        {
+            computerIds = await _db.Computers.Select(x => x.Id).ToListAsync();
+            tagIds = await _db.Tags.Select(x => x.Id).ToListAsync();
+        }
 
         return Ok(new { computerIds, tagIds });
     }
@@ -398,14 +408,17 @@ public class AdminController : ControllerBase
     [HasPermission("User.Manage")]
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
-        // .IgnoreQueryFilters() kaldırıldı, böylece IsDeleted=true olanlar gelmeyecek
+        // .IgnoreQueryFilters() ekleyerek silinmiş cihazların da gelmesini sağlıyoruz
         var computers = await _db.Computers
+            .IgnoreQueryFilters() // KRİTİK: Silinmişleri de getir
             .Select(c => new
             {
                 id = c.Id,
                 displayName = c.DisplayName,
                 machineName = c.MachineName,
-                ipAddress = c.IpAddress
+                ipAddress = c.IpAddress,
+                isDeleted = c.IsDeleted, // JS tarafı için gerekli
+                lastSeen = c.LastSeen    // JS tarafı için gerekli
             })
             .ToListAsync();
 

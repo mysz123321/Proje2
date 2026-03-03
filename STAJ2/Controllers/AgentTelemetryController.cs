@@ -288,7 +288,6 @@ public sealed class AgentTelemetryController : ControllerBase
         }
     }
 
-   
     [HttpGet("latest")]
     [Authorize]
     public async Task<IActionResult> Latest()
@@ -298,68 +297,64 @@ public sealed class AgentTelemetryController : ControllerBase
 
         var macs = list.Select(x => x.MacAddress).ToList();
 
-        // 1. ADIM: Diskleri de Include ediyoruz ki bildirim zamanlarına bakabilelim
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int userId = int.TryParse(userIdString, out int id) ? id : 0;
+        bool isAdmin = User.IsInRole("Yönetici");
+
+        // Erişim kontrolü (Eski kodundaki gibi ama daha temiz)
+        var accessibleCompIds = await _context.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+        var accessibleTagIds = await _context.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+
         var computersQuery = _context.Computers
             .Include(c => c.Tags)
             .Include(c => c.Disks)
             .Where(c => macs.Contains(c.MacAddress));
 
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        int userId = int.TryParse(userIdString, out int id) ? id : 0;
-        bool canSeeAll = User.IsInRole("Yönetici");
-
-        if (!canSeeAll)
+        // Admin kısıtlama mantığı
+        if (!isAdmin || accessibleCompIds.Any() || accessibleTagIds.Any())
         {
-            var accessibleComputerIds = await _context.UserComputerAccesses
-                .Where(uca => uca.UserId == userId).Select(uca => uca.ComputerId).ToListAsync();
-            var accessibleTagIds = await _context.UserTagAccesses
-                .Where(uta => uta.UserId == userId).Select(uta => uta.TagId).ToListAsync();
-
             computersQuery = computersQuery.Where(c =>
-                accessibleComputerIds.Contains(c.Id) ||
+                accessibleCompIds.Contains(c.Id) ||
                 c.Tags.Any(t => accessibleTagIds.Contains(t.Id)));
         }
 
         var computers = await computersQuery.ToListAsync();
-        var allowedMacs = computers.Select(c => c.MacAddress).ToHashSet();
+        // Performans için Dictionary kullanıyoruz:
+        var compMap = computers.ToDictionary(c => c.MacAddress);
+
         var filteredList = new List<AgentTelemetryDto>();
 
         foreach (var dto in list)
         {
-            if (allowedMacs.Contains(dto.MacAddress))
+            if (compMap.TryGetValue(dto.MacAddress, out var comp))
             {
-                var comp = computers.First(c => c.MacAddress == dto.MacAddress);
                 dto.ComputerId = comp.Id;
                 dto.DisplayName = comp.DisplayName;
                 dto.Tags = comp.Tags.Select(t => t.Name).ToList();
+                dto.CpuThreshold = comp.CpuThreshold;
+                dto.RamThreshold = comp.RamThreshold;
                 filteredList.Add(dto);
             }
         }
 
-        // 2. ADIM: SIRALAMA MANTIĞI
-        // Cihazın herhangi bir bileşeninden (CPU, RAM, DISK) giden son mail zamanına göre sırala
+        // Sıralama mantığın çok güzel, aynen kalsın
         var sortedResult = filteredList.OrderByDescending(dto =>
         {
-            var comp = computers.First(c => c.MacAddress == dto.MacAddress);
-
-            // Cihazın tüm bildirim zamanlarını topla
+            var comp = compMap[dto.MacAddress];
             var notifyTimes = new List<DateTime>();
             if (comp.CpuLastNotifyTime.HasValue) notifyTimes.Add(comp.CpuLastNotifyTime.Value);
             if (comp.RamLastNotifyTime.HasValue) notifyTimes.Add(comp.RamLastNotifyTime.Value);
 
-            // Disk bildirimlerini de ekle
             var lastDiskNotify = comp.Disks
                 .Where(d => d.LastNotifyTime.HasValue)
                 .Select(d => d.LastNotifyTime!.Value)
-                .OrderByDescending(t => t)
-                .FirstOrDefault();
+                .OrderByDescending(t => t).FirstOrDefault();
 
             if (lastDiskNotify != default) notifyTimes.Add(lastDiskNotify);
 
-            // Eğer hiç bildirim gitmemişse en sona at (DateTime.MinValue), gitmişse en güncelini al
             return notifyTimes.Any() ? notifyTimes.Max() : DateTime.MinValue;
         })
-        .ThenByDescending(dto => dto.Ts) // Bildirim zamanları eşitse veya yoksa son veri zamanına göre sırala
+        .ThenByDescending(dto => dto.Ts)
         .ToList();
 
         return Ok(sortedResult);

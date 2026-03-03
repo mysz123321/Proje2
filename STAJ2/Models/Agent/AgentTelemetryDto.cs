@@ -12,8 +12,9 @@
         public string? CpuModel { get; set; }
         public double TotalRamMb { get; set; }
         public required string TotalDiskGb { get; set; }
-
-        public double CpuUsage { get; set; }
+    public double? CpuThreshold { get; set; } //
+    public double? RamThreshold { get; set; } //
+    public double CpuUsage { get; set; }
         public double RamUsage { get; set; }
         public required string DiskUsage { get; set; }
         public List<string> Tags { get; set; } = new();
