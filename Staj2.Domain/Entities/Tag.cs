@@ -1,11 +1,23 @@
-﻿namespace Staj2.Domain.Entities;
+﻿using System;
+using System.Collections.Generic;
+using Staj2.Domain.Common;
 
-public class Tag
+namespace Staj2.Domain.Entities
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = null!; // Etiket adı (Örn: "Kritik", "Ofis-1")
-    public bool IsDeleted { get; set; } = false;
-    // Many-to-Many ilişki için Computer listesi
-    public List<Computer> Computers { get; set; } = new();
-    public ICollection<UserTagAccess> UserAccesses { get; set; } = new List<UserTagAccess>();
+    public class Tag : ICreatableEntity, ISoftDeletableEntity
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = null!;
+
+        // --- ICreatableEntity ---
+        public DateTime CreatedAt { get; set; }
+        public int? CreatedBy { get; set; }
+
+        // --- ISoftDeletableEntity ---
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+        public int? DeletedBy { get; set; }
+
+        public List<Computer> Computers { get; set; } = new();
+    }
 }

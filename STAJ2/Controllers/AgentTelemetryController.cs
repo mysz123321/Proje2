@@ -63,7 +63,7 @@ public sealed class AgentTelemetryController : ControllerBase
                     CpuModel = dto.CpuModel,//********
                     TotalRamMb = dto.TotalRamMb,
                     LastSeen = DateTime.Now,
-                    // TotalDiskGb SİLİNDİ
+                    CreatedAt = DateTime.Now
                 };
                 _context.Computers.Add(computer);
             }

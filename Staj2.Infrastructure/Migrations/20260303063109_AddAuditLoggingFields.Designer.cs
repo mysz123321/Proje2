@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Staj2.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using Staj2.Infrastructure.Data;
 namespace Staj2.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260303063109_AddAuditLoggingFields")]
+    partial class AddAuditLoggingFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,6 +24,36 @@ namespace Staj2.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("ComputerTag", b =>
+                {
+                    b.Property<int>("ComputersId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagsId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ComputersId", "TagsId");
+
+                    b.HasIndex("TagsId");
+
+                    b.ToTable("ComputerTags", (string)null);
+                });
+
+            modelBuilder.Entity("RoleUser", b =>
+                {
+                    b.Property<int>("RolesId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UsersId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RolesId", "UsersId");
+
+                    b.HasIndex("UsersId");
+
+                    b.ToTable("UserRoles", (string)null);
+                });
 
             modelBuilder.Entity("Staj2.Domain.Entities.Computer", b =>
                 {
@@ -42,6 +75,15 @@ namespace Staj2.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeletedBy")
+                        .HasColumnType("int");
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(200)
@@ -76,6 +118,12 @@ namespace Staj2.Infrastructure.Migrations
                     b.Property<double>("TotalRamMb")
                         .HasColumnType("float");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MacAddress");
@@ -99,9 +147,6 @@ namespace Staj2.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<double?>("FreeSpaceThresholdGb")
-                        .HasColumnType("float");
-
                     b.Property<DateTime?>("LastNotifyTime")
                         .HasColumnType("datetime2");
 
@@ -110,12 +155,6 @@ namespace Staj2.Infrastructure.Migrations
 
                     b.Property<double>("TotalSizeGb")
                         .HasColumnType("float");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -151,44 +190,6 @@ namespace Staj2.Infrastructure.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.ToTable("ComputerMetrics");
-                });
-
-            modelBuilder.Entity("Staj2.Domain.Entities.ComputerTag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ComputerId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("DeletedBy")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("TagId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ComputerId");
-
-                    b.HasIndex("TagId");
-
-                    b.ToTable("ComputerTags", (string)null);
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.DiskMetric", b =>
@@ -320,18 +321,6 @@ namespace Staj2.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("DeletedBy")
-                        .HasColumnType("int");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -356,6 +345,15 @@ namespace Staj2.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeletedBy")
+                        .HasColumnType("int");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -371,6 +369,12 @@ namespace Staj2.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -422,14 +426,11 @@ namespace Staj2.Infrastructure.Migrations
                     b.Property<DateTime?>("RejectedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("RejectedBy")
-                        .HasColumnType("int");
-
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("RequestedRoleId")
+                    b.Property<int>("RequestedRoleId")
                         .HasColumnType("int");
 
                     b.Property<int>("Status")
@@ -441,49 +442,15 @@ namespace Staj2.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApprovedByUserId");
+
                     b.HasIndex("Email");
+
+                    b.HasIndex("RequestedRoleId");
 
                     b.HasIndex("Username");
 
                     b.ToTable("RegistrationRequests");
-                });
-
-            modelBuilder.Entity("Staj2.Domain.Entities.UserRole", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("DeletedBy")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("RoleId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RoleId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserRoles", (string)null);
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.UserTagAccess", b =>
@@ -499,6 +466,36 @@ namespace Staj2.Infrastructure.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("UserTagAccesses");
+                });
+
+            modelBuilder.Entity("ComputerTag", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.Computer", null)
+                        .WithMany()
+                        .HasForeignKey("ComputersId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Staj2.Domain.Entities.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RoleUser", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RolesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Staj2.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UsersId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.ComputerDisk", b =>
@@ -523,25 +520,6 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("Computer");
                 });
 
-            modelBuilder.Entity("Staj2.Domain.Entities.ComputerTag", b =>
-                {
-                    b.HasOne("Staj2.Domain.Entities.Computer", "Computer")
-                        .WithMany()
-                        .HasForeignKey("ComputerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Staj2.Domain.Entities.Tag", "Tag")
-                        .WithMany()
-                        .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Computer");
-
-                    b.Navigation("Tag");
-                });
-
             modelBuilder.Entity("Staj2.Domain.Entities.DiskMetric", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.ComputerDisk", "ComputerDisk")
@@ -556,7 +534,7 @@ namespace Staj2.Infrastructure.Migrations
             modelBuilder.Entity("Staj2.Domain.Entities.PasswordSetupToken", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.UserRegistrationRequest", "RegistrationRequest")
-                        .WithMany()
+                        .WithMany("PasswordSetupTokens")
                         .HasForeignKey("RegistrationRequestId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -602,29 +580,27 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Staj2.Domain.Entities.UserRole", b =>
+            modelBuilder.Entity("Staj2.Domain.Entities.UserRegistrationRequest", b =>
                 {
-                    b.HasOne("Staj2.Domain.Entities.Role", "Role")
+                    b.HasOne("Staj2.Domain.Entities.User", "ApprovedByUser")
                         .WithMany()
-                        .HasForeignKey("RoleId")
+                        .HasForeignKey("ApprovedByUserId");
+
+                    b.HasOne("Staj2.Domain.Entities.Role", "RequestedRole")
+                        .WithMany()
+                        .HasForeignKey("RequestedRoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Staj2.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("ApprovedByUser");
 
-                    b.Navigation("Role");
-
-                    b.Navigation("User");
+                    b.Navigation("RequestedRole");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.UserTagAccess", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.Tag", "Tag")
-                        .WithMany()
+                        .WithMany("UserAccesses")
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -664,11 +640,21 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("RolePermissions");
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.Tag", b =>
+                {
+                    b.Navigation("UserAccesses");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.User", b =>
                 {
                     b.Navigation("ComputerAccesses");
 
                     b.Navigation("TagAccesses");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.UserRegistrationRequest", b =>
+                {
+                    b.Navigation("PasswordSetupTokens");
                 });
 #pragma warning restore 612, 618
         }

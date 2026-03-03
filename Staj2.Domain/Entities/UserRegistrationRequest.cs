@@ -1,24 +1,23 @@
-﻿namespace Staj2.Domain.Entities;
+﻿using System;
 
-public class UserRegistrationRequest
+namespace Staj2.Domain.Entities
 {
-    public int Id { get; set; }
+    public class UserRegistrationRequest
+    {
+        public int Id { get; set; }
+        public string Username { get; set; } = null!;
+        public string Email { get; set; } = null!;
+        public RegistrationStatus Status { get; set; } = RegistrationStatus.Pending;
 
-    public string Username { get; set; } = null!;
-    public string Email { get; set; } = null!;
-    public int RequestedRoleId { get; set; }
-    public Role RequestedRole { get; set; } = null!;
+        // --- Controller'ların çalışması için gereken temel alanlar ---
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // Kayıt tarihi
+        public string? RejectionReason { get; set; }               // Red sebebi
+        public int? RequestedRoleId { get; set; }                  // İstenen rol
+        public int? ApprovedByUserId { get; set; }                 // Onaylayan
+        public DateTime? ApprovedAt { get; set; }                  // Onay tarihi
+        public DateTime? RejectedAt { get; set; }                  // Red tarihi
 
-    public RegistrationStatus Status { get; set; } = RegistrationStatus.Pending;
-
-    public int? ApprovedByUserId { get; set; }
-    public User? ApprovedByUser { get; set; }
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? ApprovedAt { get; set; }
-
-    public DateTime? RejectedAt { get; set; }
-    public string? RejectionReason { get; set; }
-
-    public ICollection<PasswordSetupToken> PasswordSetupTokens { get; set; } = new List<PasswordSetupToken>();
+        // --- SENİN ÖZEL İSTEĞİN (TEK LOG ALANI) ---
+        public int? RejectedBy { get; set; }
+    }
 }

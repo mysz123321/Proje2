@@ -87,6 +87,16 @@ public class AdminController : ControllerBase
         if (registration.Status != RegistrationStatus.Pending)
             return BadRequest(new { message = "Bu talep zaten işleme alınmış." });
 
+        // İşlemi yapanın ID'sini alıyoruz ---
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst("id")?.Value;
+
+        if (int.TryParse(userIdClaim, out int adminId))
+        {
+            registration.RejectedBy = adminId;
+        }
+        // ----------------------------------------------------------
+
         registration.Status = RegistrationStatus.Rejected;
         registration.RejectedAt = DateTime.UtcNow;
         registration.RejectionReason = request.RejectionReason;
@@ -106,7 +116,7 @@ public class AdminController : ControllerBase
         return Ok(new { message = "Talep reddedildi." });
     }
 
-    // ONAYLAMA İŞLEMİ (DÜZELTİLMİŞ HALİ)
+    // ONAYLAMA İŞLEMİ
     [HttpPost("requests/approve/{id}")]
     [HasPermission("User.Manage")]
     public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest? req)

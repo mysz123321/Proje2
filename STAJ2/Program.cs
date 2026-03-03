@@ -12,7 +12,8 @@ builder.Services.AddControllers();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<STAJ2.Services.IMailSender, STAJ2.Services.MailKitMailSender>();
-
+// Program.cs içinde builder.Services ile baþlayan kodlarýn olduðu yere ekle:
+builder.Services.AddHttpContextAccessor();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
