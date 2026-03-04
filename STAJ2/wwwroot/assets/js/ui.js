@@ -1,6 +1,45 @@
 ﻿// STAJ2/wwwroot/assets/js/ui.js
 
 (function () {
+    // --- SAYFALAMA VE HAFIZA (STATE) YÖNETİMİ ---
+    const ITEMS_PER_PAGE = 7; // Ana tablolar için sayfadaki eleman sayısı
+    const MODAL_ITEMS_PER_PAGE = 6; // Modallar için sayfadaki eleman sayısı
+
+    let pgState = {
+        requests: { data: [], roles: [], page: 1 },
+        users: { data: [], page: 1 },
+        roles: { data: [], page: 1 },
+        tags: { data: [], page: 1 },
+        rolePerm: { data: [], assignedIds: [], page: 1 },
+        tagAssign: { data: [], assignedIds: [], page: 1 },
+        userRoles: { data: [], assignedIds: [], page: 1 },
+        userComp: { data: [], filtered: [], assignedIds: [], page: 1 },
+        userTag: { data: [], assignedIds: [], page: 1 }
+    };
+
+    function renderPagination(containerId, currentPage, totalItems, itemsPerPage, changePageFnString) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+        if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+        let html = '<ul class="pagination pagination-sm justify-content-center mt-3 mb-0 shadow-sm">';
+        html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" onclick="${changePageFnString}(${currentPage - 1})">Önceki</a>
+                 </li>`;
+        for (let i = 1; i <= totalPages; i++) {
+            html += `<li class="page-item ${currentPage === i ? 'active' : ''}">
+                        <a class="page-link" href="javascript:void(0)" onclick="${changePageFnString}(${i})">${i}</a>
+                     </li>`;
+        }
+        html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" onclick="${changePageFnString}(${currentPage + 1})">Sonraki</a>
+                 </li>`;
+        html += '</ul>';
+        container.innerHTML = html;
+    }
+
     // --- Görünürlük Yardımcıları ---
     function show(id) { const el = document.getElementById(id); if (el) el.style.display = "block"; }
     function hide(id) { const el = document.getElementById(id); if (el) el.style.display = "none"; }
@@ -35,7 +74,7 @@
         // Yetki kontrolleri
         const canManageUsers = window.auth.hasPermission("User.Manage");
         const canManageTags = window.auth.hasPermission("Tag.Manage");
-        const canManageRoles = window.auth.hasPermission("Role.Manage"); // YENİ EKLENDİ
+        const canManageRoles = window.auth.hasPermission("Role.Manage");
 
         const hasAdminPanel = canManageUsers || canManageTags || canManageRoles;
 
@@ -100,7 +139,7 @@
         const activeNav = document.getElementById(`nav-${view}`);
         if (activeNav) activeNav.classList.add('active');
 
-        // YENİ EKLENEN KISIM: Filtrenin Sadece Belirli Sayfalarda Görünmesi
+        // Filtrenin Sadece Belirli Sayfalarda Görünmesi
         const filterEl = document.getElementById('globalFilters');
         if (filterEl) {
             if (['computers', 'all-computers', 'tags'].includes(view)) {
@@ -193,6 +232,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="tagsPg" class="pb-3"></div>
             </div>
         </div>
 
@@ -205,8 +245,8 @@
                     </div>
                     <div class="modal-body">
                         <input type="hidden" id="assignTagId">
-                        <div id="assignComputerList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
-                            </div>
+                        <div id="assignComputerList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
+                        <div id="tagAssignPg" class="mt-2"></div>
                     </div>
                     <div class="modal-footer border-top border-secondary">
                         <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
@@ -221,155 +261,73 @@
         }
     }
 
-    // --- Alt Görünümler ---
+    // --- Alt Görünümler (Sayfalamaya Uygun Hale Getirildi) ---
 
     async function loadRequestsView(container) {
         try {
-            // YENİ: Artık rolleri statik diziden değil dinamik olarak API'den çekiyoruz
             const [reqs, roles] = await Promise.all([
                 api.get("/api/Admin/requests"),
                 api.get("/api/Admin/roles")
             ]);
-
-            let rows = reqs.map(r => `
-                <tr>
-                    <td class="fw-bold">${r.username}</td>
-                    <td>
-                        <select id="reqRole_${r.id}" class="form-select form-select-sm small-select" style="max-width: 150px; background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
-                            ${roles.map(x => `<option value="${x.id}" ${x.name === 'Görüntüleyici' ? 'selected' : ''}>${x.name}</option>`).join("")}
-                        </select>
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-success" onclick="ui.approveRequest(${r.id})">Onayla</button>
-                        <button class="btn btn-sm btn-danger" onclick="ui.rejectRequest(${r.id})">Reddet</button>
-                    </td>
-                </tr>`).join("");
+            pgState.requests.data = reqs;
+            pgState.requests.roles = roles;
+            pgState.requests.page = 1;
 
             container.innerHTML = `
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead><tr style="color:var(--text-muted);"><th>Kullanıcı</th><th>Atanacak Rol</th><th class="text-end">İşlem</th></tr></thead>
-                            <tbody>${rows || '<tr><td colspan="3" class="text-center text-muted py-4">Bekleyen kayıt talebi yok.</td></tr>'}</tbody>
+                            <tbody id="reqTbody"></tbody>
                         </table>
                     </div>
+                    <div id="reqPg" class="pb-3"></div>
                 </div>`;
+            ui.renderRequestsTable();
         } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
     }
 
-    // YENİDEN YAZILAN KULLANICILAR SAYFASI
     async function loadUsersView(container) {
         try {
             const users = await api.get("/api/Admin/users");
-
-            // Sisteme giriş yapmış olan kullanıcının kullanıcı adını alıyoruz
             const currentUsername = localStorage.getItem("staj2_username") || "";
 
-            let rows = users
-                // 1. KENDİSİNİ GİZLE: Giriş yapan kullanıcı listede görünmesin
-                .filter(u => u.username !== currentUsername)
-                .map(u => {
-                    const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
-                    const isAdmin = u.roles.includes("Yönetici"); // Kullanıcının yönetici olup olmadığını anlıyoruz
-
-                    return `
-        <tr>
-            <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
-            <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
-            <td class="text-end">
-                <div class="d-flex justify-content-end gap-1 flex-wrap">
-                    
-                    ${!isAdmin ? `
-                        <button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri">
-                            <i class="bi bi-shield-check"></i> Roller
-                        </button>
-                    ` : ''}
-
-                    <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri">
-                        <i class="bi bi-pc-display"></i> Cihazlar
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri">
-                        <i class="bi bi-tags"></i> Etiketler
-                    </button>
-
-                    ${!isAdmin ? `
-                        <button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    ` : `
-                        <span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez">
-                            <i class="bi bi-shield-lock-fill"></i>
-                        </span>
-                    `}
-                </div>
-            </td>
-        </tr>`;
-                }).join("");
+            pgState.users.data = users.filter(u => u.username !== currentUsername);
+            pgState.users.page = 1;
 
             container.innerHTML = `
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead><tr style="color:var(--text-muted);"><th>Kullanıcı Adı</th><th>Sahip Olduğu Roller</th><th class="text-end">İşlemler</th></tr></thead>
-                            <tbody>${rows || '<tr><td colspan="3" class="text-center text-muted py-4">Listelenecek başka kullanıcı bulunamadı.</td></tr>'}</tbody>
+                            <tbody id="usersTbody"></tbody>
                         </table>
                     </div>
+                    <div id="usersPg" class="pb-3"></div>
                 </div>`;
+            ui.renderUsersTable();
         } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
     }
 
-    // YENİ EKLENEN ROLLER SAYFASI
-    // YENİ EKLENEN ROLLER SAYFASI
     async function loadRolesView(container) {
         try {
             const roles = await api.get("/api/Admin/roles");
-
-            // "Yönetici" rolünü filtreleyerek listeden çıkarıyoruz
-            const editableRoles = roles.filter(r => r.name !== "Yönetici");
-
-            let rows = editableRoles.map(r => `
-                <tr>
-                    <td class="fw-bold" style="color:var(--text-main);"><i class="bi bi-shield-fill text-warning me-2"></i> ${r.name}</td>
-                    <td class="text-end">
-                        <button class="btn btn-primary btn-sm" onclick="ui.openRolePermissionsModal(${r.id}, '${r.name}')">
-                            <i class="bi bi-list-check"></i> Yetkileri Düzenle
-                        </button>
-                    </td>
-                </tr>
-            `).join("");
+            pgState.roles.data = roles.filter(r => r.name !== "Yönetici");
+            pgState.roles.page = 1;
 
             container.innerHTML = `
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card); max-width: 600px;">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead><tr style="color:var(--text-muted);"><th>Sistem Rolü</th><th class="text-end">İşlem</th></tr></thead>
-                            <tbody>${rows}</tbody>
+                            <tbody id="rolesTbody"></tbody>
                         </table>
                     </div>
+                    <div id="rolesPg" class="pb-3"></div>
                 </div>`;
+            ui.renderRolesTable();
         } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
     }
-
-    async function loadTagsView(container) {
-        try {
-            const tags = await api.get("/api/Admin/tags");
-            let tagPills = tags.map(t => `
-                <div class="badge p-2 d-flex align-items-center gap-2 border" style="font-size: 0.9rem; background:var(--bg-hover); color:var(--text-main); border-color:var(--border-color);">
-                    ${t.name}
-                    <i class="bi bi-x-circle-fill text-danger" style="cursor:pointer" onclick="ui.deleteTag(${t.id})"></i>
-                </div>`).join("");
-            container.innerHTML = `
-                <div class="card p-4 border-0 shadow-sm" style="background:var(--bg-card);">
-                    <div class="input-group mb-4" style="max-width: 500px;">
-                        <input type="text" id="newTagName" class="form-control" placeholder="Yeni etiket adı giriniz..." style="background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
-                        <button class="btn btn-primary fw-bold" onclick="ui.createNewTag()">Ekle</button>
-                    </div>
-                    <h6 class="text-uppercase small fw-bold mb-3" style="color:var(--text-muted);">Mevcut Etiketler</h6>
-                    <div class="d-flex flex-wrap gap-2">${tagPills || '<span class="text-muted fst-italic">Henüz etiket eklenmemiş.</span>'}</div>
-                </div>`;
-        } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
-    }
-
 
     // --- Fonksiyonları Dışarı Aç (Window.UI) ---
     window.ui = {
@@ -405,113 +363,130 @@
                 } catch (e) { alert(e.message); }
             }
         },
-        // ui nesnesinin içine eklenecek yeni fonksiyonlar:
 
+        // --- 1. KAYIT İSTEKLERİ RENDER & SAYFALAMA ---
+        renderRequestsTable: () => {
+            const tbody = document.getElementById('reqTbody'); if (!tbody) return;
+            const state = pgState.requests;
+            const start = (state.page - 1) * ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
+
+            let rows = paginated.map(r => `
+                <tr>
+                    <td class="fw-bold">${r.username}</td>
+                    <td>
+                        <select id="reqRole_${r.id}" class="form-select form-select-sm small-select" style="max-width: 150px; background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
+                            ${state.roles.map(x => `<option value="${x.id}" ${x.name === 'Görüntüleyici' ? 'selected' : ''}>${x.name}</option>`).join("")}
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-success" onclick="ui.approveRequest(${r.id})">Onayla</button>
+                        <button class="btn btn-sm btn-danger ms-1" onclick="ui.rejectRequest(${r.id})">Reddet</button>
+                    </td>
+                </tr>`).join("");
+
+            tbody.innerHTML = rows || '<tr><td colspan="3" class="text-center text-muted py-4">Bekleyen kayıt talebi yok.</td></tr>';
+            renderPagination('reqPg', state.page, state.data.length, ITEMS_PER_PAGE, 'ui.changeReqPage');
+        },
+        changeReqPage: (p) => { pgState.requests.page = p; ui.renderRequestsTable(); },
+
+        // --- 2. KULLANICILAR RENDER & SAYFALAMA ---
+        renderUsersTable: () => {
+            const tbody = document.getElementById('usersTbody'); if (!tbody) return;
+            const state = pgState.users;
+            const start = (state.page - 1) * ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
+
+            let rows = paginated.map(u => {
+                const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
+                const isAdmin = u.roles.includes("Yönetici");
+
+                return `<tr>
+                    <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
+                    <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
+                    <td class="text-end">
+                        <div class="d-flex justify-content-end gap-1 flex-wrap">
+                            ${!isAdmin ? `<button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>` : ''}
+                            <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
+                            ${!isAdmin ? `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>` : `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span>`}
+                        </div>
+                    </td>
+                </tr>`;
+            }).join("");
+
+            tbody.innerHTML = rows || '<tr><td colspan="3" class="text-center text-muted py-4">Listelenecek başka kullanıcı bulunamadı.</td></tr>';
+            renderPagination('usersPg', state.page, state.data.length, ITEMS_PER_PAGE, 'ui.changeUsersPage');
+        },
+        changeUsersPage: (p) => { pgState.users.page = p; ui.renderUsersTable(); },
+
+        // --- 3. ROLLER VE YETKİLER RENDER & SAYFALAMA ---
+        renderRolesTable: () => {
+            const tbody = document.getElementById('rolesTbody'); if (!tbody) return;
+            const state = pgState.roles;
+            const start = (state.page - 1) * ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
+
+            let rows = paginated.map(r => `<tr>
+                    <td class="fw-bold" style="color:var(--text-main);"><i class="bi bi-shield-fill text-warning me-2"></i> ${r.name}</td>
+                    <td class="text-end">
+                        <button class="btn btn-primary btn-sm" onclick="ui.openRolePermissionsModal(${r.id}, '${r.name}')"><i class="bi bi-list-check"></i> Yetkileri Düzenle</button>
+                    </td>
+                </tr>`).join("");
+
+            tbody.innerHTML = rows;
+            renderPagination('rolesPg', state.page, state.data.length, ITEMS_PER_PAGE, 'ui.changeRolesPage');
+        },
+        changeRolesPage: (p) => { pgState.roles.page = p; ui.renderRolesTable(); },
+
+        // --- ETİKETLER ANA TABLO ---
         loadTagTable: async () => {
             try {
                 const tags = await api.get("/api/Admin/tags");
-
-                // YENİ: Seçili filtreleri al ve tabloyu yerel olarak filtrele
                 const selectedFilters = $('#tagSelect').val() || [];
-                const filteredTags = selectedFilters.length > 0
+                pgState.tags.data = selectedFilters.length > 0
                     ? tags.filter(t => selectedFilters.includes(t.name))
                     : tags;
-
-                const tbody = document.getElementById("tagTableBody");
-                if (!tbody) return;
-
-                tbody.innerHTML = filteredTags.map(t => `
-                    <tr style="border-bottom: 1px solid var(--border-color);">
-                        <td class="align-middle fw-bold">${t.name}</td>
-                        <td class="text-end">
-                            <button class="btn btn-sm btn-outline-info me-2" onclick="ui.openAssignModal(${t.id}, '${t.name}')">
-                                <i class="bi bi-pc-display"></i> Cihaza Ata
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="ui.deleteTag(${t.id})">
-                                <i class="bi bi-trash"></i> Sil
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
-
-                if (filteredTags.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">Aranan kriterlere uygun etiket bulunamadı.</td></tr>';
-                }
+                pgState.tags.page = 1;
+                ui.renderTagsTable();
             } catch (e) { console.error(e); }
         },
+        renderTagsTable: () => {
+            const tbody = document.getElementById("tagTableBody"); if (!tbody) return;
+            const state = pgState.tags;
+            const start = (state.page - 1) * ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
 
+            tbody.innerHTML = paginated.map(t => `
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td class="align-middle fw-bold">${t.name}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-info me-2" onclick="ui.openAssignModal(${t.id}, '${t.name}')">
+                            <i class="bi bi-pc-display"></i> Cihaza Ata
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="ui.deleteTag(${t.id})">
+                            <i class="bi bi-trash"></i> Sil
+                        </button>
+                    </td>
+                </tr>`).join('');
 
-        openAssignModal: async (tagId, tagName) => {
-            document.getElementById("assignTagId").value = tagId;
-            const listContainer = document.getElementById("assignComputerList");
-            listContainer.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
-
-            const modal = new bootstrap.Modal(document.getElementById("tagAssignModal"));
-            modal.show();
-
-            try {
-                // İki isteği aynı anda atıyoruz: Tüm aktif cihazlar ve mevcut atamalar
-                const [allComputers, assignedIds] = await Promise.all([
-                    api.get("/api/Admin/computers/all"),
-                    api.get(`/api/Admin/tags/${tagId}/assigned-computer-ids`)
-                ]);
-
-                listContainer.innerHTML = allComputers.map(c => {
-                    // Eğer cihazın ID'si atanmışlar listesinde varsa 'checked' ekle
-                    const isChecked = assignedIds.includes(c.id) ? 'checked' : '';
-
-                    return `
-                <label class="list-group-item d-flex justify-content-between align-items-center" style="background:transparent; color:var(--text-main); border-color:var(--border-color); cursor:pointer;">
-                    <div>
-                        <input class="form-check-input me-2 comp-check" type="checkbox" value="${c.id}" ${isChecked}>
-                        <span class="fw-bold">${c.displayName || c.machineName}</span>
-                    </div>
-                    <small class="text-muted" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
-                </label>
-            `;
-                }).join('');
-
-                if (allComputers.length === 0) {
-                    listContainer.innerHTML = '<div class="text-center p-3 text-muted">Atanabilecek aktif cihaz bulunamadı.</div>';
-                }
-
-            } catch (e) {
-                console.error(e);
-                listContainer.innerHTML = '<div class="text-danger p-3 text-center">Cihazlar yüklenirken bir hata oluştu.</div>';
+            if (state.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">Aranan kriterlere uygun etiket bulunamadı.</td></tr>';
             }
+            renderPagination('tagsPg', state.page, state.data.length, ITEMS_PER_PAGE, 'ui.changeTagsPage');
         },
-
-saveTagAssignments: async () => {
-    const tagId = document.getElementById("assignTagId").value;
-    const selectedIds = Array.from(document.querySelectorAll('.comp-check:checked')).map(cb => parseInt(cb.value));
-
-    try {
-        await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: selectedIds });
-        bootstrap.Modal.getInstance(document.getElementById("tagAssignModal")).hide();
-        alert("Atama işlemi başarılı!");
-    } catch (e) { alert("Hata: " + e.message); }
-},
+        changeTagsPage: (p) => { pgState.tags.page = p; ui.renderTagsTable(); },
 
         createNewTag: async () => {
             const nameInput = document.getElementById("newTagName");
             const name = nameInput.value.trim();
-
             if (name) {
                 try {
                     await api.post("/api/Admin/tags", { name });
-
-                    // Giriş kutusunu temizle
                     nameInput.value = "";
-
-                    // HATALI SATIR BURASIYDI: ui.switchView yerine doğrudan switchView çağırılmalı
                     await switchView('tags');
-
-                    // Üst filtreyi ve seçim kutularını anında güncelle
                     if (window.loadFilterTags) window.loadFilterTags();
-
-                } catch (e) {
-                    alert("Etiket eklenirken hata: " + e.message);
-                }
+                } catch (e) { alert("Etiket eklenirken hata: " + e.message); }
             }
         },
         deleteTag: async (id) => {
@@ -519,20 +494,78 @@ saveTagAssignments: async () => {
                 try {
                     await api.del(`/api/Admin/tags/${id}`);
                     ui.switchView('tags');
-                    // YENİ: Etiket silindikten sonra üst filtreyi güncelle
                     if (window.loadFilterTags) window.loadFilterTags();
                 } catch (e) { alert(e.message); }
             }
         },
 
-        // --- YENİ MODAL İŞLEMLERİ BAŞLANGIÇ ---
+        // --- ETİKET ATA MODALI ---
+        openAssignModal: async (tagId, tagName) => {
+            document.getElementById("assignTagId").value = tagId;
+            const listContainer = document.getElementById("assignComputerList");
+            listContainer.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+            document.getElementById('tagAssignPg').innerHTML = '';
 
-        // 1. Rol Yetkileri Yönetimi
+            new bootstrap.Modal(document.getElementById("tagAssignModal")).show();
+
+            try {
+                const [allComputers, assignedIds] = await Promise.all([
+                    api.get("/api/Admin/computers/all"),
+                    api.get(`/api/Admin/tags/${tagId}/assigned-computer-ids`)
+                ]);
+                pgState.tagAssign.data = allComputers;
+                pgState.tagAssign.assignedIds = assignedIds;
+                pgState.tagAssign.page = 1;
+                ui.renderTagAssignList();
+            } catch (e) { listContainer.innerHTML = '<div class="text-danger p-3 text-center">Cihazlar yüklenirken bir hata oluştu.</div>'; }
+        },
+        renderTagAssignList: () => {
+            const listContainer = document.getElementById("assignComputerList"); if (!listContainer) return;
+            const state = pgState.tagAssign;
+            const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + MODAL_ITEMS_PER_PAGE);
+
+            if (state.data.length === 0) {
+                listContainer.innerHTML = '<div class="text-center p-3 text-muted">Atanabilecek aktif cihaz bulunamadı.</div>';
+                document.getElementById('tagAssignPg').innerHTML = '';
+                return;
+            }
+
+            listContainer.innerHTML = paginated.map(c => `
+                <label class="list-group-item d-flex justify-content-between align-items-center" style="background:transparent; color:var(--text-main); border-color:var(--border-color); cursor:pointer;">
+                    <div>
+                        <input class="form-check-input me-2 comp-check" type="checkbox" value="${c.id}" ${state.assignedIds.includes(c.id) ? 'checked' : ''} onchange="ui.toggleTagAssign(${c.id}, this.checked)">
+                        <span class="fw-bold">${c.displayName || c.machineName}</span>
+                    </div>
+                    <small class="text-muted" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
+                </label>`).join('');
+
+            renderPagination('tagAssignPg', state.page, state.data.length, MODAL_ITEMS_PER_PAGE, 'ui.changeTagAssignPage');
+        },
+        changeTagAssignPage: (p) => { pgState.tagAssign.page = p; ui.renderTagAssignList(); },
+        toggleTagAssign: (id, isChecked) => {
+            if (isChecked) pgState.tagAssign.assignedIds.push(id);
+            else pgState.tagAssign.assignedIds = pgState.tagAssign.assignedIds.filter(x => x !== id);
+        },
+        saveTagAssignments: async () => {
+            const tagId = document.getElementById("assignTagId").value;
+            try {
+                await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: pgState.tagAssign.assignedIds });
+                bootstrap.Modal.getInstance(document.getElementById("tagAssignModal")).hide();
+                alert("Atama işlemi başarılı!");
+            } catch (e) { alert("Hata: " + e.message); }
+        },
+
+        // --- ROL YETKİLERİ MODALI ---
         openRolePermissionsModal: async (roleId, roleName) => {
             document.getElementById('editRoleIdInput').value = roleId;
             document.getElementById('modalRoleNameText').innerText = roleName;
             const container = document.getElementById('permissionsCheckboxContainer');
             container.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-info"></div></div>';
+
+            let pgDiv = document.getElementById('rolePermPg');
+            if (!pgDiv) { pgDiv = document.createElement('div'); pgDiv.id = 'rolePermPg'; pgDiv.className = 'mt-3 w-100'; container.parentNode.appendChild(pgDiv); }
+            else { pgDiv.innerHTML = ''; }
 
             new bootstrap.Modal(document.getElementById('rolePermissionsModal')).show();
 
@@ -541,82 +574,104 @@ saveTagAssignments: async () => {
                     api.get('/api/Admin/permissions'),
                     api.get(`/api/Admin/roles/${roleId}/permissions`)
                 ]);
-
-                container.innerHTML = allPerms.map(p => `
-                    <div class="col-12">
-                        <label class="permission-card d-flex align-items-center w-100 py-2" for="perm_${p.id}">
-                            <input class="form-check-input custom-toggle m-0 me-3 flex-shrink-0" type="checkbox" id="perm_${p.id}" value="${p.id}" ${rolePerms.includes(p.id) ? 'checked' : ''}>
-                            <div class="flex-grow-1" style="min-width: 0;">
-                                <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem; white-space: normal; word-break: normal;">
-                                    ${p.description || p.name}
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                `).join('');
+                pgState.rolePerm.data = allPerms;
+                pgState.rolePerm.assignedIds = rolePerms;
+                pgState.rolePerm.page = 1;
+                ui.renderRolePermList();
             } catch (e) { container.innerHTML = `<div class="text-danger w-100 px-3">${e.message}</div>`; }
         },
+        renderRolePermList: () => {
+            const container = document.getElementById('permissionsCheckboxContainer'); if (!container) return;
+            const state = pgState.rolePerm;
+            const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
+            const paginated = state.data.slice(start, start + MODAL_ITEMS_PER_PAGE);
 
+            container.innerHTML = paginated.map(p => `
+                <div class="col-12">
+                    <label class="permission-card d-flex align-items-center w-100 py-2" for="perm_${p.id}">
+                        <input class="form-check-input custom-toggle m-0 me-3 flex-shrink-0" type="checkbox" id="perm_${p.id}" value="${p.id}" ${state.assignedIds.includes(p.id) ? 'checked' : ''} onchange="ui.toggleRolePerm(${p.id}, this.checked)">
+                        <div class="flex-grow-1" style="min-width: 0;">
+                            <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem; white-space: normal; word-break: normal;">${p.description || p.name}</div>
+                        </div>
+                    </label>
+                </div>`).join('');
+            renderPagination('rolePermPg', state.page, state.data.length, MODAL_ITEMS_PER_PAGE, 'ui.changeRolePermPage');
+        },
+        changeRolePermPage: (p) => { pgState.rolePerm.page = p; ui.renderRolePermList(); },
+        toggleRolePerm: (id, isChecked) => {
+            if (isChecked) pgState.rolePerm.assignedIds.push(id);
+            else pgState.rolePerm.assignedIds = pgState.rolePerm.assignedIds.filter(x => x !== id);
+        },
         saveRolePermissions: async () => {
             const roleId = document.getElementById('editRoleIdInput').value;
-            const checkedBoxes = document.querySelectorAll('#permissionsCheckboxContainer input[type="checkbox"]:checked');
-            const permIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
             try {
-                await api.post(`/api/Admin/roles/${roleId}/permissions`, { permissionIds: permIds });
+                await api.post(`/api/Admin/roles/${roleId}/permissions`, { permissionIds: pgState.rolePerm.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('rolePermissionsModal')).hide();
                 alert("Yetkiler başarıyla güncellendi. Değişikliklerin size yansıması için çıkış yapıp tekrar girmelisiniz.");
             } catch (e) { alert(e.message); }
         },
 
-        // 2. Kullanıcı Rol Yönetimi
+        // --- KULLANICI ROLLERİ MODALI ---
         openUserRolesModal: async (userId, username) => {
             document.getElementById('editUserRole_UserId').value = userId;
             document.getElementById('roleModalUserName').innerText = username;
             const container = document.getElementById('userRolesCheckboxContainer');
             container.innerHTML = '<div class="text-center"><div class="spinner-border text-info"></div></div>';
 
+            let pgDiv = document.getElementById('userRolesPg');
+            if (!pgDiv) { pgDiv = document.createElement('div'); pgDiv.id = 'userRolesPg'; pgDiv.className = 'mt-3'; container.parentNode.appendChild(pgDiv); }
+            else { pgDiv.innerHTML = ''; }
+
             new bootstrap.Modal(document.getElementById('userRolesModal')).show();
 
             try {
-                // Sadece seçili kullanıcının bilgilerini ve sistemdeki tüm rolleri çeker
-                const [users, allRoles] = await Promise.all([
-                    api.get('/api/Admin/users'),
-                    api.get('/api/Admin/roles')
-                ]);
+                const [users, allRoles] = await Promise.all([api.get('/api/Admin/users'), api.get('/api/Admin/roles')]);
                 const user = users.find(u => u.id === userId);
-
-                // YENİ: "Yönetici" rolünü ekrana basılacak listeden çıkarıyoruz
                 const assignableRoles = allRoles.filter(r => r.name !== "Yönetici");
 
-                container.innerHTML = assignableRoles.map(r => `
-                    <label class="permission-card d-flex align-items-center w-100" for="urole_${r.id}">
-                        <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="urole_${r.id}" value="${r.id}" ${(user && user.roles.includes(r.name)) ? 'checked' : ''}>
-                        <div class="fw-bold" style="color:var(--text-title);">${r.name}</div>
-                    </label>
-                `).join('');
+                pgState.userRoles.data = assignableRoles;
+                pgState.userRoles.assignedIds = assignableRoles.filter(r => user && user.roles.includes(r.name)).map(r => r.id);
+                pgState.userRoles.page = 1;
+                ui.renderUserRolesList();
             } catch (e) { container.innerHTML = `<div class="text-danger">${e.message}</div>`; }
         },
+        renderUserRolesList: () => {
+            const container = document.getElementById('userRolesCheckboxContainer'); if (!container) return;
+            const state = pgState.userRoles;
+            const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
 
+            container.innerHTML = state.data.slice(start, start + MODAL_ITEMS_PER_PAGE).map(r => `
+                <label class="permission-card d-flex align-items-center w-100" for="urole_${r.id}">
+                    <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="urole_${r.id}" value="${r.id}" ${state.assignedIds.includes(r.id) ? 'checked' : ''} onchange="ui.toggleUserRole(${r.id}, this.checked)">
+                    <div class="fw-bold" style="color:var(--text-title);">${r.name}</div>
+                </label>`).join('');
+            renderPagination('userRolesPg', state.page, state.data.length, MODAL_ITEMS_PER_PAGE, 'ui.changeUserRolesPage');
+        },
+        changeUserRolesPage: (p) => { pgState.userRoles.page = p; ui.renderUserRolesList(); },
+        toggleUserRole: (id, isChecked) => {
+            if (isChecked) pgState.userRoles.assignedIds.push(id);
+            else pgState.userRoles.assignedIds = pgState.userRoles.assignedIds.filter(x => x !== id);
+        },
         saveUserRoles: async () => {
             const userId = document.getElementById('editUserRole_UserId').value;
-            const checkedBoxes = document.querySelectorAll('#userRolesCheckboxContainer input[type="checkbox"]:checked');
-            const roleIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
             try {
-                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: roleIds });
+                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: pgState.userRoles.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userRolesModal')).hide();
                 ui.switchView('users');
             } catch (e) { alert(e.message); }
         },
 
-        // 3. Kullanıcı Cihaz Erişimi Yönetimi
+        // --- KULLANICI CİHAZ ERİŞİMİ MODALI (Arama Filtresi Dahil) ---
         openUserComputerAccessModal: async (userId, username) => {
             document.getElementById('accessModal_UserId').value = userId;
             document.getElementById('computerAccessUserName').innerText = username;
             document.getElementById('computerSearchInput').value = "";
             const container = document.getElementById('userComputerCheckboxContainer');
             container.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-info"></div></div>';
+
+            let pgDiv = document.getElementById('userCompPg');
+            if (!pgDiv) { pgDiv = document.createElement('div'); pgDiv.id = 'userCompPg'; pgDiv.className = 'mt-3 w-100'; container.parentNode.appendChild(pgDiv); }
+            else { pgDiv.innerHTML = ''; }
 
             new bootstrap.Modal(document.getElementById('userComputerAccessModal')).show();
 
@@ -626,66 +681,70 @@ saveTagAssignments: async () => {
                     api.get(`/api/Admin/users/${userId}/access`)
                 ]);
 
-                const now = new Date().getTime(); //
-
-                container.innerHTML = allComputers.map(c => {
-                    // 1. AKTİFLİK HESABI: 150 saniye kuralı
-                    // lastSeen UTC geldiği için new Date(...) bunu doğru çevirecektir.
-                    const lastSeenTime = new Date(c.lastSeen).getTime(); //
-                    const isOnline = (now - lastSeenTime) <= 150000; //
-
-                    let statusHtml = "";
-                    if (c.isDeleted) {
-                        statusHtml = `<span class="badge bg-danger ms-2" style="font-size:0.65rem;">Silinmiş</span>`;
-                    } else if (isOnline) {
-                        statusHtml = `<span class="badge bg-success ms-2" style="font-size:0.65rem;">Aktif</span>`;
-                    } else {
-                        statusHtml = `<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">Pasif</span>`;
-                    }
-
-                    return `
-            <div class="col-md-6 computer-access-item">
-                <label class="permission-card d-flex align-items-center w-100" for="ucomp_${c.id}" style="${c.isDeleted ? 'opacity:0.6;' : ''}">
-                    <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="ucomp_${c.id}" value="${c.id}" ${accessInfo.computerIds.includes(c.id) ? 'checked' : ''}>
-                    <div>
-                        <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">
-                            ${c.displayName || c.machineName} ${statusHtml}
-                        </div>
-                        <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${c.ipAddress || '-'}</div>
-                    </div>
-                </label>
-            </div>`;
-                }).join('');
+                pgState.userComp.data = allComputers;
+                pgState.userComp.filtered = allComputers;
+                pgState.userComp.assignedIds = accessInfo.computerIds;
+                pgState.userComp.page = 1;
+                ui.renderUserCompList();
             } catch (e) { container.innerHTML = `<div class="text-danger w-100 px-3">${e.message}</div>`; }
-        
         },
-
         filterComputerCheckboxes: () => {
             const input = document.getElementById('computerSearchInput').value.toLowerCase();
-            const items = document.querySelectorAll('.computer-access-item');
-            items.forEach(item => {
-                const text = item.innerText.toLowerCase();
-                item.style.display = text.includes(input) ? 'block' : 'none';
-            });
+            pgState.userComp.filtered = pgState.userComp.data.filter(c =>
+                ((c.displayName || c.machineName) + " " + (c.ipAddress || "")).toLowerCase().includes(input)
+            );
+            pgState.userComp.page = 1;
+            ui.renderUserCompList();
         },
+        renderUserCompList: () => {
+            const container = document.getElementById('userComputerCheckboxContainer'); if (!container) return;
+            const state = pgState.userComp;
+            const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
+            const now = new Date().getTime();
 
+            container.innerHTML = state.filtered.slice(start, start + MODAL_ITEMS_PER_PAGE).map(c => {
+                const lastSeenTime = new Date(c.lastSeen).getTime();
+                const isOnline = (now - lastSeenTime) <= 150000;
+
+                let statusHtml = c.isDeleted ? `<span class="badge bg-danger ms-2" style="font-size:0.65rem;">Silinmiş</span>` :
+                    (isOnline ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">Aktif</span>` :
+                        `<span class="badge bg-secondary ms-2" style="font-size:0.65rem;">Pasif</span>`);
+
+                return `<div class="col-md-6 computer-access-item">
+                    <label class="permission-card d-flex align-items-center w-100" for="ucomp_${c.id}" style="${c.isDeleted ? 'opacity:0.6;' : ''}">
+                        <input class="form-check-input custom-toggle m-0 me-3" type="checkbox" id="ucomp_${c.id}" value="${c.id}" ${state.assignedIds.includes(c.id) ? 'checked' : ''} onchange="ui.toggleUserComp(${c.id}, this.checked)">
+                        <div>
+                            <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">${c.displayName || c.machineName} ${statusHtml}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${c.ipAddress || '-'}</div>
+                        </div>
+                    </label>
+                </div>`;
+            }).join('');
+            renderPagination('userCompPg', state.page, state.filtered.length, MODAL_ITEMS_PER_PAGE, 'ui.changeUserCompPage');
+        },
+        changeUserCompPage: (p) => { pgState.userComp.page = p; ui.renderUserCompList(); },
+        toggleUserComp: (id, isChecked) => {
+            if (isChecked) pgState.userComp.assignedIds.push(id);
+            else pgState.userComp.assignedIds = pgState.userComp.assignedIds.filter(x => x !== id);
+        },
         saveUserComputerAccess: async () => {
             const userId = document.getElementById('accessModal_UserId').value;
-            const checkedBoxes = document.querySelectorAll('#userComputerCheckboxContainer input[type="checkbox"]:checked');
-            const compIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
             try {
-                await api.post(`/api/Admin/users/${userId}/assign-computers`, { computerIds: compIds });
+                await api.post(`/api/Admin/users/${userId}/assign-computers`, { computerIds: pgState.userComp.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userComputerAccessModal')).hide();
             } catch (e) { alert(e.message); }
         },
 
-        // 4. Kullanıcı Etiket Erişimi Yönetimi
+        // --- KULLANICI ETİKET ERİŞİMİ MODALI ---
         openUserTagAccessModal: async (userId, username) => {
             document.getElementById('tagAccessModal_UserId').value = userId;
             document.getElementById('tagAccessUserName').innerText = username;
             const container = document.getElementById('userTagCheckboxContainer');
             container.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-info"></div></div>';
+
+            let pgDiv = document.getElementById('userTagPg');
+            if (!pgDiv) { pgDiv = document.createElement('div'); pgDiv.id = 'userTagPg'; pgDiv.className = 'mt-3 w-100'; container.parentNode.appendChild(pgDiv); }
+            else { pgDiv.innerHTML = ''; }
 
             new bootstrap.Modal(document.getElementById('userTagAccessModal')).show();
 
@@ -695,35 +754,43 @@ saveTagAssignments: async () => {
                     api.get(`/api/Admin/users/${userId}/access`)
                 ]);
 
-                container.innerHTML = allTags.map(t => `
-                    <label class="permission-card d-flex align-items-center flex-grow-1" for="utag_${t.id}" style="min-width: 150px;">
-                        <input class="form-check-input custom-toggle m-0 me-2" type="checkbox" id="utag_${t.id}" value="${t.id}" ${accessInfo.tagIds.includes(t.id) ? 'checked' : ''}>
-                        <div class="fw-bold" style="color:var(--text-title);"><i class="bi bi-tag-fill text-secondary me-1"></i> ${t.name}</div>
-                    </label>
-                `).join('');
-
-                if (allTags.length === 0) {
-                    container.innerHTML = `<span class="text-muted small">Sistemde hiç etiket bulunamadı. Önce etiket oluşturun.</span>`;
-                }
-
+                pgState.userTag.data = allTags;
+                pgState.userTag.assignedIds = accessInfo.tagIds;
+                pgState.userTag.page = 1;
+                ui.renderUserTagList();
             } catch (e) { container.innerHTML = `<div class="text-danger w-100 px-3">${e.message}</div>`; }
         },
+        renderUserTagList: () => {
+            const container = document.getElementById('userTagCheckboxContainer'); if (!container) return;
+            const state = pgState.userTag;
+            const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
 
+            if (state.data.length === 0) {
+                container.innerHTML = `<span class="text-muted small">Sistemde hiç etiket bulunamadı. Önce etiket oluşturun.</span>`;
+                document.getElementById('userTagPg').innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = state.data.slice(start, start + MODAL_ITEMS_PER_PAGE).map(t => `
+                <label class="permission-card d-flex align-items-center flex-grow-1" for="utag_${t.id}" style="min-width: 150px;">
+                    <input class="form-check-input custom-toggle m-0 me-2" type="checkbox" id="utag_${t.id}" value="${t.id}" ${state.assignedIds.includes(t.id) ? 'checked' : ''} onchange="ui.toggleUserTag(${t.id}, this.checked)">
+                    <div class="fw-bold" style="color:var(--text-title);"><i class="bi bi-tag-fill text-secondary me-1"></i> ${t.name}</div>
+                </label>`).join('');
+            renderPagination('userTagPg', state.page, state.data.length, MODAL_ITEMS_PER_PAGE, 'ui.changeUserTagPage');
+        },
+        changeUserTagPage: (p) => { pgState.userTag.page = p; ui.renderUserTagList(); },
+        toggleUserTag: (id, isChecked) => {
+            if (isChecked) pgState.userTag.assignedIds.push(id);
+            else pgState.userTag.assignedIds = pgState.userTag.assignedIds.filter(x => x !== id);
+        },
         saveUserTagAccess: async () => {
             const userId = document.getElementById('tagAccessModal_UserId').value;
-            const checkedBoxes = document.querySelectorAll('#userTagCheckboxContainer input[type="checkbox"]:checked');
-            const tagIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
             try {
-                await api.post(`/api/Admin/users/${userId}/assign-tags`, { tagIds: tagIds });
+                await api.post(`/api/Admin/users/${userId}/assign-tags`, { tagIds: pgState.userTag.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userTagAccessModal')).hide();
-
-                // YENİ: Yetki değiştirildiğinde kullanıcının menüsündeki etiketleri anında yenile
                 if (window.loadFilterTags) window.loadFilterTags();
-
             } catch (e) { alert(e.message); }
         }
-        // --- YENİ MODAL İŞLEMLERİ BİTİŞ ---
     };
 
     // --- Tema Başlatma (Sayfa Yüklenince) ---
