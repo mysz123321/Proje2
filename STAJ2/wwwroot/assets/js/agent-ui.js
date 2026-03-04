@@ -7,6 +7,7 @@ let currentHistoryData = { cpuRam: [], disks: [] };
 // --- İki sekme için ayrı etiket dizileri ---
 let selectedLiveTags = [];
 let selectedAllTags = [];
+let selectedTagViewTags = [];
 let allAgents = [];
 let allSystemComputers = [];
 
@@ -29,6 +30,7 @@ window.applyFilter = () => {
 
     const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
     const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
+    const isTagsTab = document.getElementById('nav-tags') && document.getElementById('nav-tags').classList.contains('active'); // YENİ
 
     if (isLiveTab) {
         selectedLiveTags = tags;
@@ -37,7 +39,10 @@ window.applyFilter = () => {
     } else if (isAllTab) {
         selectedAllTags = tags;
         currentAllPage = 1;
-        if (typeof renderAllComputersTable === "function") renderAllComputersTable();
+        if (typeof window.renderAllComputersTable === "function") window.renderAllComputersTable();
+    } else if (isTagsTab) { // YENİ: Etiketler sayfasındaysak filtreyi tetikle
+        selectedTagViewTags = tags;
+        if (typeof window.ui !== "undefined" && typeof window.ui.loadTagTable === "function") window.ui.loadTagTable();
     }
 };
 
@@ -704,6 +709,8 @@ $(document).ready(function () {
                 $('#tagSelect').val(selectedLiveTags).trigger('change.select2');
             } else if (id === 'nav-all-computers') {
                 $('#tagSelect').val(selectedAllTags).trigger('change.select2');
+            } else if (id === 'nav-tags') { // YENİ EKLENDİ
+                $('#tagSelect').val(selectedTagViewTags).trigger('change.select2');
             } else {
                 $('#tagSelect').val([]).trigger('change.select2');
             }

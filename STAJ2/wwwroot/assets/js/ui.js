@@ -100,6 +100,18 @@
         const activeNav = document.getElementById(`nav-${view}`);
         if (activeNav) activeNav.classList.add('active');
 
+        // YENİ EKLENEN KISIM: Filtrenin Sadece Belirli Sayfalarda Görünmesi
+        const filterEl = document.getElementById('globalFilters');
+        if (filterEl) {
+            if (['computers', 'all-computers', 'tags'].includes(view)) {
+                filterEl.classList.remove('d-none');
+                filterEl.classList.add('d-flex');
+            } else {
+                filterEl.classList.remove('d-flex');
+                filterEl.classList.add('d-none');
+            }
+        }
+
         content.innerHTML = `<div class="d-flex justify-content-center p-5"><div class="spinner-border text-info" role="status"></div></div>`;
 
         const canEdit = window.auth.hasPermission('Computer.Delete') ||
@@ -307,10 +319,15 @@
     }
 
     // YENİ EKLENEN ROLLER SAYFASI
+    // YENİ EKLENEN ROLLER SAYFASI
     async function loadRolesView(container) {
         try {
             const roles = await api.get("/api/Admin/roles");
-            let rows = roles.map(r => `
+
+            // "Yönetici" rolünü filtreleyerek listeden çıkarıyoruz
+            const editableRoles = roles.filter(r => r.name !== "Yönetici");
+
+            let rows = editableRoles.map(r => `
                 <tr>
                     <td class="fw-bold" style="color:var(--text-main);"><i class="bi bi-shield-fill text-warning me-2"></i> ${r.name}</td>
                     <td class="text-end">
@@ -390,25 +407,38 @@
         },
         // ui nesnesinin içine eklenecek yeni fonksiyonlar:
 
-loadTagTable: async () => {
-    try {
-        const tags = await api.get("/api/Admin/tags");
-        const tbody = document.getElementById("tagTableBody");
-        tbody.innerHTML = tags.map(t => `
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td class="align-middle fw-bold">${t.name}</td>
-                <td class="text-end">
-                    <button class="btn btn-sm btn-outline-info me-2" onclick="ui.openAssignModal(${t.id}, '${t.name}')">
-                        <i class="bi bi-pc-display"></i> Cihaza Ata
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="ui.deleteTag(${t.id})">
-                        <i class="bi bi-trash"></i> Sil
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    } catch (e) { console.error(e); }
-},
+        loadTagTable: async () => {
+            try {
+                const tags = await api.get("/api/Admin/tags");
+
+                // YENİ: Seçili filtreleri al ve tabloyu yerel olarak filtrele
+                const selectedFilters = $('#tagSelect').val() || [];
+                const filteredTags = selectedFilters.length > 0
+                    ? tags.filter(t => selectedFilters.includes(t.name))
+                    : tags;
+
+                const tbody = document.getElementById("tagTableBody");
+                if (!tbody) return;
+
+                tbody.innerHTML = filteredTags.map(t => `
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td class="align-middle fw-bold">${t.name}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-info me-2" onclick="ui.openAssignModal(${t.id}, '${t.name}')">
+                                <i class="bi bi-pc-display"></i> Cihaza Ata
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="ui.deleteTag(${t.id})">
+                                <i class="bi bi-trash"></i> Sil
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                if (filteredTags.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">Aranan kriterlere uygun etiket bulunamadı.</td></tr>';
+                }
+            } catch (e) { console.error(e); }
+        },
 
 
         openAssignModal: async (tagId, tagName) => {

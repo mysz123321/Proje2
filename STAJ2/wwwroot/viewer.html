@@ -183,6 +183,31 @@
             .permission-card:hover {
                 border-color: #38bdf8;
             }
+
+        /* Select2 Açılır Menü Scroll Ayarı */
+        .select2-results__options {
+            max-height: 200px !important; /* Menünün maksimum yüksekliği (kendi tasarımınıza göre değiştirebilirsiniz) */
+            overflow-y: auto !important; /* Taşan kısımlar için scroll çıkarır */
+            overflow-x: hidden; /* Yatayda kaydırmayı gizler */
+        }
+
+            /* Scrollbar'ı temaya uygun ve daha şık yapmak isterseniz (Opsiyonel) */
+            .select2-results__options::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .select2-results__options::-webkit-scrollbar-track {
+                background: var(--bg-input, #1e293b);
+            }
+
+            .select2-results__options::-webkit-scrollbar-thumb {
+                background: #475569;
+                border-radius: 4px;
+            }
+
+                .select2-results__options::-webkit-scrollbar-thumb:hover {
+                    background: #64748b;
+                }
     </style>
 </head>
 <body>
