@@ -101,7 +101,7 @@ function renderTable() {
         const matchesTags = selectedLiveTags.length === 0 || selectedLiveTags.every(t => a.tags && a.tags.includes(t));
         if (!matchesTags) return false;
         if (!a.ts) return false;
-        return (now - new Date(a.ts).getTime()) <= 90000;
+        return (now - new Date(a.ts).getTime()) <= 150000;
     });
 
     const totalPages = Math.ceil(liveAndFilteredAgents.length / itemsPerPage);
@@ -711,6 +711,19 @@ $(document).ready(function () {
     });
 
     window.loadFilterTags();
+
+    // Uygulama ilk açıldığında çalıştır
     loadAgents();
-    setInterval(loadAgents, 5000);
+
+    // Her 5 saniyede bir kullanıcının bulunduğu aktif sekmeyi arka planda (F5 olmadan) yenile
+    setInterval(() => {
+        const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
+        const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
+
+        if (isLiveTab) {
+            loadAgents();
+        } else if (isAllTab) {
+            if (typeof loadAllComputers === "function") loadAllComputers();
+        }
+    }, 5000);
 });

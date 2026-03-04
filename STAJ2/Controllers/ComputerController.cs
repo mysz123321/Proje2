@@ -153,6 +153,7 @@ public class ComputerController : ControllerBase
             Disks = diskMetrics
         });
     }
+
     [HttpGet]
     [HasPermission("Computer.Read")]
     public async Task<IActionResult> GetAllComputers()
@@ -165,29 +166,43 @@ public class ComputerController : ControllerBase
         var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
-        var query = _db.Computers.IgnoreQueryFilters().Include(c => c.Tags).AsQueryable();
+        // DİKKAT: .Include(c => c.Tags) kısmını KALDIRDIK. Sadece AsQueryable yapıyoruz.
+        var query = _db.Computers.IgnoreQueryFilters().AsQueryable();
 
         // 2. Admin olsa bile eğer bir kısıtlama listesi varsa onu uygula!
         bool isRestricted = !isAdmin || (accCompIds.Count > 0 || accTagIds.Count > 0);
 
         if (isRestricted)
         {
-            query = query.Where(c => accCompIds.Contains(c.Id) || c.Tags.Any(t => accTagIds.Contains(t.Id)));
+            // GÜVENLİK FİXİ: Silinmiş etiket üzerinden yetki almasını da engelledik
+            query = query.Where(c =>
+                accCompIds.Contains(c.Id) ||
+                _db.ComputerTags.Any(ct => ct.ComputerId == c.Id && !ct.IsDeleted && accTagIds.Contains(ct.TagId))
+            );
         }
 
-        var computers = await query.ToListAsync();
-        var now = DateTime.Now; // UTC kullanımı şart
+        // 3. Veritabanından veriyi çekerken sadece "Aktif (Silinmemiş)" etiketleri listeye dahil et
+        var computersData = await query.Select(c => new {
+            Computer = c,
+            // YENİ: Sadece aradaki köprü tablosu silinmemiş olan etiketlerin isimlerini al
+            ActiveTags = _db.ComputerTags
+                            .Where(ct => ct.ComputerId == c.Id && !ct.IsDeleted && !ct.Tag.IsDeleted)
+                            .Select(ct => ct.Tag.Name)
+                            .ToList()
+        }).ToListAsync();
 
-        var result = computers.Select(c => new {
-            id = c.Id,
-            machineName = c.MachineName,
-            displayName = c.DisplayName,
-            ipAddress = c.IpAddress,
-            lastSeen = c.LastSeen,
-            tags = c.Tags.Select(t => t.Name).ToList(),
-            isDeleted = c.IsDeleted,
-            // UI ile tam uyumlu 90 saniye kuralı
-            isActive = (now - c.LastSeen).TotalSeconds <= 90
+        var now = DateTime.Now;
+
+        // 4. İstemciye (UI) gidecek modeli oluştur
+        var result = computersData.Select(x => new {
+            id = x.Computer.Id,
+            machineName = x.Computer.MachineName,
+            displayName = x.Computer.DisplayName,
+            ipAddress = x.Computer.IpAddress,
+            lastSeen = x.Computer.LastSeen,
+            tags = x.ActiveTags, // Yalnızca silinmemiş olan temiz liste
+            isDeleted = x.Computer.IsDeleted,
+            isActive = (now - x.Computer.LastSeen).TotalSeconds <= 150
         })
         .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen);
 
