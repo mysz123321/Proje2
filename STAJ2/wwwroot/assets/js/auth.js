@@ -1,47 +1,67 @@
 ﻿// STAJ2/wwwroot/assets/js/auth.js
 (function () {
     const TOKEN_KEY = "staj2_token";
-    const ROLES_KEY = "staj2_roles";
-    const PERMISSIONS_KEY = "staj2_permissions";
+
+    // JWT Token'ı güvenli okumak için yardımcı fonksiyon (hasPermission'daki mantığının aynısı, Türkçe karakter destekli)
+    function decodeTokenSafe() {
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (!token) return null;
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        } catch (e) {
+            return null;
+        }
+    }
 
     window.auth = {
-        // YENİ: 4. parametre olarak 'username' eklendi
         saveAuth: (token, roles, permissions, username) => {
             localStorage.setItem(TOKEN_KEY, token);
-            localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-            localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions || []));
 
-            // Kullanıcı adını da tam bu anda kaydediyoruz
+            // Kullanıcı adını kaydediyoruz
             if (username) {
                 localStorage.setItem("staj2_username", username);
             }
+
+            // F12'YE YAZMA KISIMLARI SİLİNDİ! 
+            // Eskiden kalanlar varsa temizliyoruz ki F12'de görünmesinler
+            localStorage.removeItem("staj2_roles");
+            localStorage.removeItem("staj2_permissions");
         },
         clearAuth: () => {
             localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(ROLES_KEY);
-            localStorage.removeItem(PERMISSIONS_KEY);
-            localStorage.removeItem("staj2_username"); // Çıkışta temizlenir
+            localStorage.removeItem("staj2_username");
+            localStorage.removeItem("staj2_roles");
+            localStorage.removeItem("staj2_permissions");
         },
         getToken: () => localStorage.getItem(TOKEN_KEY),
+
         getRoles: () => {
-            try {
-                const raw = localStorage.getItem(ROLES_KEY);
-                return raw ? JSON.parse(raw) : [];
-            } catch (e) { return []; }
+            // LocalStorage yerine direkt Token'dan okuyoruz
+            const decoded = decodeTokenSafe();
+            if (!decoded) return [];
+            let userRoles = decoded.role || decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || [];
+            return typeof userRoles === 'string' ? [userRoles] : userRoles;
         },
         hasRole: (roleName) => {
             const roles = window.auth.getRoles();
             return roles.includes(roleName);
         },
+
         getPermissions: () => {
-            try {
-                const raw = localStorage.getItem(PERMISSIONS_KEY);
-                return raw ? JSON.parse(raw) : [];
-            } catch (e) { return []; }
+            // LocalStorage yerine direkt Token'dan okuyoruz
+            const decoded = decodeTokenSafe();
+            if (!decoded) return [];
+            let userPermissions = decoded.Permission || decoded["Permission"] || [];
+            return typeof userPermissions === 'string' ? [userPermissions] : userPermissions;
         },
-        hasPermission: (permissionName) => {
+        hasPermission: function (requiredPermission) {
             const permissions = window.auth.getPermissions();
-            return permissions.includes(permissionName);
+            return permissions.includes(requiredPermission);
         },
         isLoggedIn: () => !!localStorage.getItem(TOKEN_KEY),
 

@@ -65,95 +65,61 @@
             }, 200);
         }
     }
-
+    
     // --- Sidebar ---
     async function renderSidebar() {
         const nav = document.getElementById('main-nav');
         if (!nav) return;
 
         try {
-            // 1. Veritabanından en güncel yetkileri çek
-            const permissions = await api.get('/api/Auth/my-permissions');
+            // Doğrudan dinamik menü elemanlarını API'den çek (Backend sadece yetkimiz olanları gönderir)
+            const sidebarItems = await api.get('/api/Ui/sidebar-items');
 
-            // Veritabanından gelen güncel yetkileri LocalStorage'a yaz!
-            // Böylece window.auth.hasPermission() fonksiyonu (tablo butonları vs.) da güncellenmiş olur.
-            localStorage.setItem("staj2_permissions", JSON.stringify(permissions));
+            let html = '';
 
-            // 2. Gelen yetki dizisine göre yetki kontrollerini yap
-            const canManageUsers = permissions.includes("User.Manage");
-            const canManageTags = permissions.includes("Tag.Manage");
-            const canManageRoles = permissions.includes("Role.Manage");
+            // Gelen menüleri "Genel" ve "Yönetim" olarak ikiye ayıralım
+            const mainItems = sidebarItems.filter(item => !item.requiredPermission);
+            const adminItems = sidebarItems.filter(item => item.requiredPermission);
 
-            const hasAdminPanel = canManageUsers || canManageTags || canManageRoles;
+            // 1. Herkese Açık / Temel Menüleri Oluştur
+            mainItems.forEach(item => {
+                const isActive = item.targetView === 'computers' ? 'active' : '';
 
-            // 3. Herkese açık/temel menüleri oluştur
-            let html = `
+                html += `
             <li class="nav-item">
-                <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
-                    <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="javascript:void(0)" id="nav-all-computers" class="nav-link" onclick="ui.switchView('all-computers')">
-                    <i class="bi bi-pc-display"></i> <span>Tüm Bilgisayarlar</span>
+                <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link ${isActive}" onclick="ui.switchView('${item.targetView}')">
+                    <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
                 </a>
             </li>`;
+            });
 
-            // 4. Veritabanından dönen yetkilere göre Admin menülerini oluştur
-            if (hasAdminPanel) {
+            // 2. Yönetim Paneli Menülerini Oluştur
+            if (adminItems.length > 0) {
                 html += `
-                <li class="px-4 mt-4 mb-2"><small class="text-uppercase fw-bold" style="font-size:0.7rem; letter-spacing:1px; color:var(--text-muted);">Yönetim Paneli</small></li>`;
+            <li class="px-4 mt-4 mb-2">
+                <small class="text-uppercase fw-bold" style="font-size:0.7rem; letter-spacing:1px; color:var(--text-muted);">Yönetim Paneli</small>
+            </li>`;
 
-                if (canManageUsers) {
+                adminItems.forEach(item => {
                     html += `
                 <li class="nav-item">
-                    <a href="javascript:void(0)" id="nav-requests" class="nav-link" onclick="ui.switchView('requests')">
-                        <i class="bi bi-envelope-paper"></i> <span>Kayıt İstekleri</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="javascript:void(0)" id="nav-users" class="nav-link" onclick="ui.switchView('users')">
-                        <i class="bi bi-people"></i> <span>Kullanıcılar</span>
+                    <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link" onclick="ui.switchView('${item.targetView}')">
+                        <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
                     </a>
                 </li>`;
-                }
-
-                if (canManageRoles) {
-                    html += `
-                <li class="nav-item">
-                    <a href="javascript:void(0)" id="nav-roles" class="nav-link" onclick="ui.switchView('roles')">
-                        <i class="bi bi-shield-lock"></i> <span>Roller ve Yetkiler</span>
-                    </a>
-                </li>`;
-                }
-
-                if (canManageTags) {
-                    html += `
-                <li class="nav-item">
-                    <a href="javascript:void(0)" id="nav-tags" class="nav-link" onclick="ui.switchView('tags')">
-                        <i class="bi bi-tags"></i> <span>Etiketler</span>
-                    </a>
-                </li>`;
-                }
+                });
             }
 
-            // HTML'i sayfaya bas
             nav.innerHTML = html;
 
         } catch (error) {
-            console.error("Menü yetkileri veritabanından çekilirken hata oluştu:", error);
-            // Hata durumunda sadece temel sayfaları göster
+            console.error("Menü veritabanından çekilirken hata oluştu:", error);
             nav.innerHTML = `
-            <li class="nav-item">
-                <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
-                    <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="javascript:void(0)" id="nav-all-computers" class="nav-link" onclick="ui.switchView('all-computers')">
-                    <i class="bi bi-pc-display"></i> <span>Tüm Bilgisayarlar</span>
-                </a>
-            </li>`;
+        <li class="nav-item">
+            <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
+                <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
+            </a>
+        </li>`;
         }
     }
 

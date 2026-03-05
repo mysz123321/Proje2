@@ -107,7 +107,19 @@ public class ComputerController : ControllerBase
         {
             return BadRequest(new { message = "Görünen isim 200 karakterden uzun olamaz." });
         }
-        // ----------------------------------
+
+        if (!string.IsNullOrWhiteSpace(request.NewDisplayName))
+        {
+            // Veritabanında aynı isimde BAŞKA bir cihaz var mı diye kontrol ediyoruz
+            // (c.Id != request.Id => Cihazın kendi ismini tekrar aynı isimle kaydetmesine izin veriyoruz)
+            bool isNameTaken = await _db.Computers
+                .AnyAsync(c => c.DisplayName == request.NewDisplayName && c.Id != request.Id);
+
+            if (isNameTaken)
+            {
+                return BadRequest(new { message = "Bu isim zaten başka bir cihaza ait. Lütfen farklı bir isim giriniz." });
+            }
+        }
 
         var computer = await _db.Computers.FindAsync(request.Id);
         if (computer == null) return NotFound(new { message = "Bilgisayar bulunamadı." });

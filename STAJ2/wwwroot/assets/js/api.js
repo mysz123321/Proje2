@@ -114,7 +114,7 @@
         }
         return data;
     }
-
+    /*
     // --- YENİ EKLENEN KISIM: SESSİZ ARKA PLAN DEVRİYESİ ---
     function startSilentPermissionPolling() {
         // Eğer kullanıcı giriş yapmamışsa (token yoksa) hiç başlatma
@@ -168,7 +168,7 @@
     // Devriyeyi başlat
     startSilentPermissionPolling();
     // -----------------------------------------------------
-
+    */
     window.api = {
         get: (path) => request(path),
         post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),

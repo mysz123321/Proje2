@@ -92,5 +92,25 @@ public static class DbSeeder
             await context.SaveChangesAsync();
             Console.WriteLine(">>> Yönetici rolüne tüm sistem yetkileri (Permissions) atandı.");
         }
+
+        if (!await context.SidebarItems.AnyAsync())
+        {
+            var sidebarItems = new List<SidebarItem>
+            {
+                // Herkese açık menüler (RequiredPermission = null)
+                new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", RequiredPermission = null, OrderIndex = 1 },
+                new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", RequiredPermission = null, OrderIndex = 2 },
+                
+                // Sadece yetkisi olanların görebileceği Admin (Yönetim Paneli) menüleri
+                new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", RequiredPermission = "User.Manage", OrderIndex = 3 },
+                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermission = "User.Manage", OrderIndex = 4 },
+                new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", RequiredPermission = "Role.Manage", OrderIndex = 5 },
+                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", RequiredPermission = "Tag.Manage", OrderIndex = 6 }
+            };
+
+            context.SidebarItems.AddRange(sidebarItems);
+            await context.SaveChangesAsync();
+            Console.WriteLine(">>> Dinamik Sidebar menü elemanları oluşturuldu.");
+        }
     }
 }
