@@ -2,23 +2,27 @@
 (function () {
     // auth.js'teki metodumuzu kullanıyoruz ki her yerde aynı isimle okunsun
     function getToken() {
-        // Eğer sayfada auth.js yüklüyse onu kullan, yüklü değilse çökme ve doğrudan localStorage'a bak
         if (window.auth && typeof window.auth.getToken === 'function') {
             return window.auth.getToken();
         }
         return localStorage.getItem("staj2_token");
     }
+
     // Cihazın disklerini ve mevcut eşiklerini getirir
     async function openThresholdSettings(computerId) {
         document.getElementById('modalComputerId').value = computerId;
 
-        // DÜZELTME: /api/Admin/ yerine /api/Computer/ kullanıldı
-        // DÜZELTME: Token okuma işlemi window.auth üzerinden yapıldı
         const response = await fetch(`/api/Computer/${computerId}/disks`, {
             headers: { 'Authorization': `Bearer ${getToken()}` }
         });
-        const disks = await response.json();
 
+        if (response.status === 403) {
+            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
+            window.location.reload();
+            return;
+        }
+
+        const disks = await response.json();
         const container = document.getElementById('diskThresholdsContainer');
         container.innerHTML = '<h4>Disk Sınırları</h4>';
 
@@ -56,7 +60,6 @@
             diskThresholds: diskThresholds
         };
 
-        // DÜZELTME: /api/Admin/ yerine /api/Computer/ kullanıldı
         const response = await fetch(`/api/Computer/update-thresholds/${computerId}`, {
             method: 'PUT',
             headers: {
@@ -66,9 +69,14 @@
             body: JSON.stringify(body)
         });
 
+        if (response.status === 403) {
+            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
+            window.location.reload();
+            return;
+        }
+
         if (response.ok) {
             alert("Eşik değerleri güncellendi!");
-            // closeModal() fonksiyonu nerede tanımlıysa oradan çalışacaktır
             if (typeof closeModal === "function") closeModal();
         } else {
             alert("Hata oluştu.");
@@ -88,6 +96,12 @@
 
         const res = await fetch(url, { ...options, headers });
 
+        if (res.status === 403) {
+            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
+            window.location.reload();
+            throw new Error("Yetkiler değiştirildiği için işlem iptal edildi.");
+        }
+
         const contentType = res.headers.get("content-type") || "";
         const isJson = contentType.includes("application/json");
         const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => "");
@@ -101,12 +115,65 @@
         return data;
     }
 
+    // --- YENİ EKLENEN KISIM: SESSİZ ARKA PLAN DEVRİYESİ ---
+    function startSilentPermissionPolling() {
+        // Eğer kullanıcı giriş yapmamışsa (token yoksa) hiç başlatma
+        if (!getToken()) return;
+
+        // Her 45 saniyede bir arka planda sessizce çalışır
+        setInterval(async () => {
+            try {
+                const token = getToken();
+                if (!token) return;
+
+                // Kendi wrapper'ımızı (request) kullanmıyoruz çünkü hata verip ekrana yansımasını istemiyoruz.
+                // Saf (raw) fetch ile sessizce soruyoruz.
+                const response = await fetch('/api/Auth/my-permissions', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                // Eğer sunucudan düzgün cevap gelmediyse (örn: token süresi dolduysa) sessizce çık, 
+                // ana sistem zaten başka bir işlemde kullanıcıyı login'e atacaktır.
+                if (!response.ok) return;
+
+                const newPermissions = await response.json();
+
+                // LocalStorage'daki eski yetkileri al
+                const oldPermissionsRaw = localStorage.getItem("staj2_permissions");
+                const oldPermissions = oldPermissionsRaw ? JSON.parse(oldPermissionsRaw) : [];
+
+                // Eski yetkiler ile Yeni yetkileri karşılaştır
+                // 1. Uzunlukları farklıysa KESİN değişmiştir
+                // 2. Uzunlukları aynı olsa bile içerikleri farklı olabilir (örn: biri silinip diğeri eklendiyse)
+                const isDifferent =
+                    newPermissions.length !== oldPermissions.length ||
+                    !newPermissions.every(perm => oldPermissions.includes(perm));
+
+                // Eğer veritabanındaki yetkilerle bizim hafızadakiler eşleşmiyorsa aksiyon al!
+                if (isDifferent) {
+                    // Hafızayı güncelle
+                    localStorage.setItem("staj2_permissions", JSON.stringify(newPermissions));
+
+                    // Kullanıcıya haber ver ve sayfayı yenileterek yeni butonların/menülerin gelmesini sağla
+                    alert("Hesap yetkileriniz yöneticiler tarafından güncellendi. Yeni özelliklerin aktif olması için sayfa yenileniyor...");
+                    window.location.reload();
+                }
+
+            } catch (error) {
+                // İnternet anlık koparsa vs. konsolu kırmızıya boyama, sessizce hatayı yut
+            }
+        }, 45000); // 45.000 milisaniye = 45 Saniye
+    }
+
+    // Devriyeyi başlat
+    startSilentPermissionPolling();
+    // -----------------------------------------------------
+
     window.api = {
         get: (path) => request(path),
         post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
         put: (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) }),
         del: (path) => request(path, { method: "DELETE" }),
-        // modal işlemleri arayüzden çağırılabilsin diye global scope'a ekliyoruz:
         openThresholdSettings: openThresholdSettings,
         saveThresholds: saveThresholds
     };

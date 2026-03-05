@@ -7,6 +7,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using STAJ2.Models.Auth;
+using Microsoft.AspNetCore.Authorization;
 
 namespace STAJ2.Controllers;
 
@@ -105,6 +106,36 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Şifre oluşturuldu. Giriş yapabilirsiniz." });
     }
 
+    [HttpGet("my-permissions")]
+    [Authorize]
+    public async Task<IActionResult> GetMyPermissions()
+    {
+        // ASP.NET Core "Sub" claim'ini otomatik olarak NameIdentifier'a dönüştürür.
+        // Garanti olması için hem NameIdentifier hem de Sub olarak arıyoruz.
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ??
+                          User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+
+        var user = await _db.Users
+            .AsNoTracking()
+            .Include(x => x.Roles)
+                .ThenInclude(r => r.RolePermissions)
+                    .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(x => x.Id == userId);
+
+        if (user == null)
+            return NotFound("Kullanıcı bulunamadı.");
+
+        var currentPermissions = user.Roles
+            .SelectMany(r => r.RolePermissions)
+            .Select(rp => rp.Permission.Name)
+            .Distinct()
+            .ToList();
+
+        return Ok(currentPermissions);
+    }
     private static string Sha256(string input)
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));

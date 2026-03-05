@@ -405,20 +405,20 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("computers/all")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.Manage,Tag.Manage")] // <-- İki yetkiyi araya virgül koyarak yazıyoruz
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
         // .IgnoreQueryFilters() ekleyerek silinmiş cihazların da gelmesini sağlıyoruz
         var computers = await _db.Computers
-            .IgnoreQueryFilters() // KRİTİK: Silinmişleri de getir
+            .IgnoreQueryFilters()
             .Select(c => new
             {
                 id = c.Id,
                 displayName = c.DisplayName,
                 machineName = c.MachineName,
                 ipAddress = c.IpAddress,
-                isDeleted = c.IsDeleted, // JS tarafı için gerekli
-                lastSeen = c.LastSeen    // JS tarafı için gerekli
+                isDeleted = c.IsDeleted,
+                lastSeen = c.LastSeen
             })
             .ToListAsync();
 
