@@ -127,7 +127,25 @@
                 color: #0f172a !important;
                 font-weight: bold;
             }
+        #sidebar {
+            transition: margin 0.3s ease;
+        }
 
+        #main-wrapper {
+            transition: margin 0.3s ease, width 0.3s ease;
+        }
+
+        /* Bilgisayar (PC) için Sidebar Kapanma Stilleri */
+        @media (min-width: 993px) {
+            #sidebar.collapsed {
+                margin-left: calc(-1 * var(--sidebar-width));
+            }
+
+            #main-wrapper.expanded {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
         @media (max-width: 992px) {
             #sidebar {
                 margin-left: calc(-1 * var(--sidebar-width));
@@ -257,7 +275,7 @@
         <header class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary gap-3" style="border-color:var(--border-color) !important;">
 
             <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-outline-secondary d-lg-none" type="button" onclick="document.getElementById('sidebar').classList.toggle('active')">
+                <button id="menuToggleBtn" class="btn btn-outline-secondary" type="button">
                     <i class="bi bi-list fs-4"></i>
                 </button>
 
@@ -540,47 +558,73 @@
     <script src="/assets/js/agent-ui.js"></script>
 
     <script>
-    $(document).ready(async function () {
-        const currentTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', currentTheme);
-        const icon = document.getElementById('theme-icon');
-        if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+$(document).ready(async function () {
+    const currentTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    const icon = document.getElementById('theme-icon');
+    if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
 
-        if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
+    if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
 
-        const username = localStorage.getItem("staj2_username") || "Kullanıcı";
-        const roles = auth.getRoles();
-        document.getElementById("userWelcome").textContent = username;
-        document.getElementById("userRoles").textContent = roles.join(", ");
+    const username = localStorage.getItem("staj2_username") || "Kullanıcı";
+    const roles = auth.getRoles();
+    document.getElementById("userWelcome").textContent = username;
+    document.getElementById("userRoles").textContent = roles.join(", ");
 
-        // Arayüz çizilmeden önce veritabanından canlı yetkileri bekle!
-        if (auth.loadLivePermissions) {
-            await auth.loadLivePermissions();
-        }
+    // Arayüz çizilmeden önce veritabanından canlı yetkileri bekle!
+    if (auth.loadLivePermissions) {
+        await auth.loadLivePermissions();
+    }
 
-        ui.renderSidebar();
-        ui.switchView('computers');
+    ui.renderSidebar();
+    ui.switchView('computers');
 
-        // KRİTİK DÜZELTME: width: '100%' eklendi. Flexbox içinde Select2'nin bozulmasını engeller.
-        $('#tagSelect').select2({
-            placeholder: "Etiketle filtrele...",
-            tags: false,
-            width: '100%'
-        });
+    // KRİTİK DÜZELTME: width: '100%' eklendi. Flexbox içinde Select2'nin bozulmasını engeller.
+    $('#tagSelect').select2({
+        placeholder: "Etiketle filtrele...",
+        tags: false,
+        width: '100%'
+    });
 
-        document.getElementById("btnLogout").addEventListener("click", () => {
-            auth.clearAuth();
-            window.location.href = "/login.html";
-        });
+    document.getElementById("btnLogout").addEventListener("click", () => {
+        auth.clearAuth();
+        window.location.href = "/login.html";
+    });
 
-        // Mobil menü kapatma tetiği
-        document.addEventListener('click', function(e) {
-            const sidebar = document.getElementById('sidebar');
-            if(window.innerWidth <= 992 && sidebar && e.target.closest('.nav-link')) {
-                sidebar.classList.remove('active');
+    // --- MENÜ AÇMA/KAPAMA (TOGGLE) İŞLEMLERİ ---
+    const menuBtn = document.getElementById('menuToggleBtn');
+    const sidebar = document.getElementById('sidebar');
+    const mainWrapper = document.getElementById('main-wrapper');
+
+    if (menuBtn && sidebar) {
+        menuBtn.addEventListener('click', function(e) {
+            e.stopPropagation(); // Butona tıklamanın sayfa geneline yayılıp menüyü geri kapatmasını engeller
+
+            if(window.innerWidth <= 992) {
+                // Mobil: Kapalıdır, 'active' ile açılır/kapanır
+                sidebar.classList.toggle('active');
+            } else {
+                // PC: Açıktır, 'collapsed' ile kapanır, 'expanded' ile içerik büyür
+                sidebar.classList.toggle('collapsed');
+                if(mainWrapper) mainWrapper.classList.toggle('expanded');
             }
         });
+    }
+
+    // --- MOBİLDE SAYFAYA VEYA LİNKE TIKLAYINCA OTOMATİK KAPANMA ---
+    document.addEventListener('click', function(e) {
+        if(window.innerWidth <= 992 && sidebar) {
+            // Eğer tıklanan yer menünün içi veya açma butonu DEĞİLSE menüyü kapat
+            if (!sidebar.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
+                sidebar.classList.remove('active');
+            }
+            // VEYA menünün içindeki bir sayfa linkine tıklandıysa menüyü kapat
+            else if (e.target.closest('.nav-link')) {
+                sidebar.classList.remove('active');
+            }
+        }
     });
+});
     </script>
 </body>
 </html>
