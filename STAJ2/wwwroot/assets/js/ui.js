@@ -11,7 +11,7 @@
         roles: { data: [], page: 1 },
         tags: { data: [], page: 1 },
         rolePerm: { data: [], assignedIds: [], page: 1 },
-        tagAssign: { data: [], assignedIds: [], page: 1 },
+        tagAssign: { data: [], filtered: [], assignedIds: [], page: 1 },
         userRoles: { data: [], assignedIds: [], page: 1 },
         userComp: { data: [], filtered: [], assignedIds: [], page: 1 },
         userTag: { data: [], assignedIds: [], page: 1 }
@@ -231,17 +231,22 @@
         </div>
 
         <div class="modal fade" id="tagAssignModal" tabindex="-1">
-            <div class="modal-dialog modal-md">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content" style="background:var(--bg-card); color:var(--text-main);">
                     <div class="modal-header border-bottom border-secondary">
                         <h5 class="modal-title">Etiketi Cihazlara Ata</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <input type="hidden" id="assignTagId">
-                        <div id="assignComputerList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
-                        <div id="tagAssignPg" class="mt-2"></div>
-                    </div>
+    <input type="hidden" id="assignTagId">
+
+    <div class="input-group mb-3">
+        <span class="input-group-text" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-muted);"><i class="bi bi-search"></i></span>
+        <input type="text" id="tagAssignSearchInput" class="form-control" placeholder="Cihaz adı veya IP ara..." onkeyup="ui.filterTagAssignComputers()" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-main);">
+    </div>
+    <div id="assignComputerList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
+    <div id="tagAssignPg" class="mt-2"></div>
+</div>
                     <div class="modal-footer border-top border-secondary">
                         <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
                         <button class="btn btn-success" onclick="ui.saveTagAssignments()">Kaydet</button>
@@ -282,12 +287,12 @@
     }
 
     async function loadUsersView(container) {
-        try {
-            const users = await api.get("/api/Admin/users");
-            const currentUsername = localStorage.getItem("staj2_username") || "";
+            try {
+                const users = await api.get("/api/Admin/users");
+                // currentUsername'i bulmaya veya filtrelemeye artık gerek yok
 
-            pgState.users.data = users.filter(u => u.username !== currentUsername);
-            pgState.users.page = 1;
+                pgState.users.data = users; // Tüm kullanıcıları doğrudan listeye aktarıyoruz
+                pgState.users.page = 1;
 
             container.innerHTML = `
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
@@ -396,17 +401,17 @@
                 const isAdmin = u.roles.includes("Yönetici");
 
                 return `<tr>
-                    <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
-                    <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
-                    <td class="text-end">
-                        <div class="d-flex justify-content-end gap-1 flex-wrap">
-                            ${!isAdmin ? `<button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>` : ''}
-                            <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
-                            <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
-                            ${!isAdmin ? `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>` : `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span>`}
-                        </div>
-                    </td>
-                </tr>`;
+    <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
+    <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
+    <td class="text-end">
+        <div class="d-flex justify-content-end gap-1 flex-wrap">
+            <button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>
+            <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
+            <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
+            ${!isAdmin ? `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>` : `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span>`}
+        </div>
+    </td>
+</tr>`;
             }).join("");
 
             tbody.innerHTML = rows || '<tr><td colspan="3" class="text-center text-muted py-4">Listelenecek başka kullanıcı bulunamadı.</td></tr>';
@@ -496,6 +501,11 @@
         // --- ETİKET ATA MODALI ---
         openAssignModal: async (tagId, tagName) => {
             document.getElementById("assignTagId").value = tagId;
+
+            // YENİ EKLENEN: Arama kutusunu sıfırla
+            const searchInput = document.getElementById("tagAssignSearchInput");
+            if (searchInput) searchInput.value = "";
+
             const listContainer = document.getElementById("assignComputerList");
             listContainer.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
             document.getElementById('tagAssignPg').innerHTML = '';
@@ -507,7 +517,9 @@
                     api.get("/api/Admin/computers/all"),
                     api.get(`/api/Admin/tags/${tagId}/assigned-computer-ids`)
                 ]);
-                pgState.tagAssign.data = allComputers;
+                const activeComputers = allComputers.filter(c => !c.isDeleted);
+                pgState.tagAssign.data = activeComputers;
+                pgState.tagAssign.filtered = activeComputers; // YENİ EKLENEN
                 pgState.tagAssign.assignedIds = assignedIds;
                 pgState.tagAssign.page = 1;
                 ui.renderTagAssignList();
@@ -517,24 +529,27 @@
             const listContainer = document.getElementById("assignComputerList"); if (!listContainer) return;
             const state = pgState.tagAssign;
             const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
-            const paginated = state.data.slice(start, start + MODAL_ITEMS_PER_PAGE);
 
-            if (state.data.length === 0) {
-                listContainer.innerHTML = '<div class="text-center p-3 text-muted">Atanabilecek aktif cihaz bulunamadı.</div>';
+            // YENİ EKLENEN: state.data yerine state.filtered kullanıyoruz
+            const paginated = state.filtered.slice(start, start + MODAL_ITEMS_PER_PAGE);
+
+            if (state.filtered.length === 0) {
+                listContainer.innerHTML = '<div class="text-center p-3 text-muted">Aramaya uygun aktif cihaz bulunamadı.</div>';
                 document.getElementById('tagAssignPg').innerHTML = '';
                 return;
             }
 
             listContainer.innerHTML = paginated.map(c => `
                 <label class="list-group-item d-flex justify-content-between align-items-center" style="background:transparent; color:var(--text-main); border-color:var(--border-color); cursor:pointer;">
-                    <div>
-                        <input class="form-check-input me-2 comp-check" type="checkbox" value="${c.id}" ${state.assignedIds.includes(c.id) ? 'checked' : ''} onchange="ui.toggleTagAssign(${c.id}, this.checked)">
-                        <span class="fw-bold">${c.displayName || c.machineName}</span>
+                    <div class="d-flex align-items-center overflow-hidden me-3" style="flex: 1;">
+                        <input class="form-check-input me-2 comp-check flex-shrink-0" type="checkbox" value="${c.id}" ${state.assignedIds.includes(c.id) ? 'checked' : ''} onchange="ui.toggleTagAssign(${c.id}, this.checked)">
+                        <span class="fw-bold text-truncate" title="${c.displayName || c.machineName}">${c.displayName || c.machineName}</span>
                     </div>
-                    <small class="text-muted" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
+                    <small class="text-muted flex-shrink-0" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
                 </label>`).join('');
 
-            renderPagination('tagAssignPg', state.page, state.data.length, MODAL_ITEMS_PER_PAGE, 'ui.changeTagAssignPage');
+            // YENİ EKLENEN: Sayfalama için de state.filtered.length kullanıyoruz
+            renderPagination('tagAssignPg', state.page, state.filtered.length, MODAL_ITEMS_PER_PAGE, 'ui.changeTagAssignPage');
         },
         changeTagAssignPage: (p) => { pgState.tagAssign.page = p; ui.renderTagAssignList(); },
         toggleTagAssign: (id, isChecked) => {
@@ -621,7 +636,7 @@
             try {
                 const [users, allRoles] = await Promise.all([api.get('/api/Admin/users'), api.get('/api/Admin/roles')]);
                 const user = users.find(u => u.id === userId);
-                const assignableRoles = allRoles.filter(r => r.name !== "Yönetici");
+                const assignableRoles = allRoles;
 
                 pgState.userRoles.data = assignableRoles;
                 pgState.userRoles.assignedIds = assignableRoles.filter(r => user && user.roles.includes(r.name)).map(r => r.id);
@@ -647,12 +662,36 @@
             else pgState.userRoles.assignedIds = pgState.userRoles.assignedIds.filter(x => x !== id);
         },
         saveUserRoles: async () => {
-            const userId = document.getElementById('editUserRole_UserId').value;
+            const userId = parseInt(document.getElementById('editUserRole_UserId').value);
+            const selectedRoleIds = pgState.userRoles.assignedIds;
+
+            // "Yönetici" rolünün ID'sini bulalım
+            const adminRole = pgState.userRoles.data.find(r => r.name === "Yönetici");
+            const isAdminSelected = adminRole && selectedRoleIds.includes(adminRole.id);
+
             try {
-                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: pgState.userRoles.assignedIds });
+                // Eğer kullanıcıdan yönetici rolü alınmak isteniyorsa kontrol yap
+                if (!isAdminSelected) {
+                    const allUsers = await api.get('/api/Admin/users');
+                    const adminCount = allUsers.filter(u => u.roles.includes("Yönetici")).length;
+
+                    // Düzenlenen kullanıcı şu an admin mi?
+                    const currentUser = allUsers.find(u => u.id === userId);
+                    const isCurrentlyAdmin = currentUser && currentUser.roles.includes("Yönetici");
+
+                    if (isCurrentlyAdmin && adminCount <= 1) {
+                        alert("Sistemde kalan son yönetici yetkisini kaldıramazsınız!");
+                        return;
+                    }
+                }
+
+                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: selectedRoleIds });
                 bootstrap.Modal.getInstance(document.getElementById('userRolesModal')).hide();
                 ui.switchView('users');
-            } catch (e) { alert(e.message); }
+                alert("Roller başarıyla güncellendi.");
+            } catch (e) {
+                alert("Hata: " + e.message);
+            }
         },
 
         // --- KULLANICI CİHAZ ERİŞİMİ MODALI (Arama Filtresi Dahil) ---
@@ -784,6 +823,14 @@
                 bootstrap.Modal.getInstance(document.getElementById('userTagAccessModal')).hide();
                 if (window.loadFilterTags) window.loadFilterTags();
             } catch (e) { alert(e.message); }
+        },
+        filterTagAssignComputers: () => {
+            const input = document.getElementById('tagAssignSearchInput').value.toLowerCase();
+            pgState.tagAssign.filtered = pgState.tagAssign.data.filter(c =>
+                ((c.displayName || c.machineName) + " " + (c.ipAddress || "")).toLowerCase().includes(input)
+            );
+            pgState.tagAssign.page = 1;
+            ui.renderTagAssignList();
         }
     };
 
