@@ -337,7 +337,6 @@ public sealed class AgentTelemetryController : ControllerBase
             }
         }
 
-        // Sıralama mantığın çok güzel, aynen kalsın
         var sortedResult = filteredList.OrderByDescending(dto =>
         {
             var comp = compMap[dto.MacAddress];

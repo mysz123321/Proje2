@@ -146,6 +146,20 @@
                 width: 95% !important;
                 max-width: 95% !important;
             }
+
+            /* --- BURADAN İTİBAREN YENİ EKLENEN MOBİL TAŞMA ÇÖZÜMÜ --- */
+
+            #historyModal .modal-content {
+                height: auto !important; /* İnatçı sabit 85vh yüksekliği iptal et, içeriğe göre uza */
+                max-height: 90vh; /* Ekran boyunu çok aşmasına izin verme */
+                overflow-y: auto; /* İçerik uzarsa sayfayı değil, modalın içini kaydır (scroll) */
+            }
+
+            #historyModal .col-lg-9 {
+                height: auto !important; /* Grafik alanındaki calc(85vh - 150px) kuralını mobilde ez */
+                overflow: visible !important;
+            }
+
         }
         /* --- Switch (Toggle) Görünürlük Düzeltmesi --- */
         [data-theme="light"] .form-check-input.custom-toggle {
@@ -186,7 +200,7 @@
 
         /* Select2 Açılır Menü Scroll Ayarı */
         .select2-results__options {
-            max-height: 200px !important; /* Menünün maksimum yüksekliği (kendi tasarımınıza göre değiştirebilirsiniz) */
+            max-height: 120px !important; /* Menünün maksimum yüksekliği (kendi tasarımınıza göre değiştirebilirsiniz) */
             overflow-y: auto !important; /* Taşan kısımlar için scroll çıkarır */
             overflow-x: hidden; /* Yatayda kaydırmayı gizler */
         }
@@ -240,15 +254,28 @@
     </nav>
 
     <div id="main-wrapper">
-        <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary" style="border-color:var(--border-color) !important;">
-            <div>
-                <h2 id="view-title" class="mb-0" style="color:var(--text-title);">Yükleniyor...</h2>
-                <p class="mb-0 small" id="view-subtitle" style="color:var(--text-muted);">Lütfen bekleyiniz.</p>
+        <header class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary gap-3" style="border-color:var(--border-color) !important;">
+
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-secondary d-lg-none" type="button" onclick="document.getElementById('sidebar').classList.toggle('active')">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
+
+                <div>
+                    <h2 id="view-title" class="mb-0" style="color:var(--text-title);">Yükleniyor...</h2>
+                    <p class="mb-0 small" id="view-subtitle" style="color:var(--text-muted);">Lütfen bekleyiniz.</p>
+                </div>
             </div>
-            <div id="globalFilters" class="d-flex gap-2 align-items-center" style="min-width: 300px;">
-                <select id="tagSelect" multiple="multiple" class="form-control" style="width: 100%;"></select>
-                <button class="btn btn-primary" onclick="applyFilter()"><i class="bi bi-funnel"></i></button>
+
+            <div id="globalFilters" class="d-flex gap-2 align-items-center" style="flex: 1 1 300px; max-width: 500px;">
+                <div style="width: 100%; min-width: 0;">
+                    <select id="tagSelect" multiple="multiple" class="form-control" style="width: 100%;"></select>
+                </div>
+                <button class="btn btn-primary flex-shrink-0" onclick="applyFilter()">
+                    <i class="bi bi-funnel"></i>
+                </button>
             </div>
+
         </header>
         <div id="dynamic-content"></div>
     </div>
@@ -513,30 +540,47 @@
     <script src="/assets/js/agent-ui.js"></script>
 
     <script>
-        $(document).ready(function () {
-            const currentTheme = localStorage.getItem('theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', currentTheme);
-            const icon = document.getElementById('theme-icon');
-            if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+    $(document).ready(async function () {
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        const icon = document.getElementById('theme-icon');
+        if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
 
-            if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
+        if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
 
-            const username = localStorage.getItem("staj2_username") || "Kullanıcı";
-            const roles = auth.getRoles();
-            document.getElementById("userWelcome").textContent = username;
-            document.getElementById("userRoles").textContent = roles.join(", ");
+        const username = localStorage.getItem("staj2_username") || "Kullanıcı";
+        const roles = auth.getRoles();
+        document.getElementById("userWelcome").textContent = username;
+        document.getElementById("userRoles").textContent = roles.join(", ");
 
-            // DÜZELTME: renderSidebar parametresiz çağrılıyor.
-            ui.renderSidebar();
-            ui.switchView('computers');
+        // Arayüz çizilmeden önce veritabanından canlı yetkileri bekle!
+        if (auth.loadLivePermissions) {
+            await auth.loadLivePermissions();
+        }
 
-            $('#tagSelect').select2({ placeholder: "Etiketle filtrele...", tags: false });
+        ui.renderSidebar();
+        ui.switchView('computers');
 
-            document.getElementById("btnLogout").addEventListener("click", () => {
-                auth.clearAuth();
-                window.location.href = "/login.html";
-            });
+        // KRİTİK DÜZELTME: width: '100%' eklendi. Flexbox içinde Select2'nin bozulmasını engeller.
+        $('#tagSelect').select2({
+            placeholder: "Etiketle filtrele...",
+            tags: false,
+            width: '100%'
         });
+
+        document.getElementById("btnLogout").addEventListener("click", () => {
+            auth.clearAuth();
+            window.location.href = "/login.html";
+        });
+
+        // Mobil menü kapatma tetiği
+        document.addEventListener('click', function(e) {
+            const sidebar = document.getElementById('sidebar');
+            if(window.innerWidth <= 992 && sidebar && e.target.closest('.nav-link')) {
+                sidebar.classList.remove('active');
+            }
+        });
+    });
     </script>
 </body>
 </html>

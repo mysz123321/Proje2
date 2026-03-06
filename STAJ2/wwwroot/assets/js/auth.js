@@ -1,7 +1,7 @@
 ﻿// STAJ2/wwwroot/assets/js/auth.js
 (function () {
     const TOKEN_KEY = "staj2_token";
-
+    let livePermissions = null;
     // JWT Token'ı güvenli okumak için yardımcı fonksiyon (hasPermission'daki mantığının aynısı, Türkçe karakter destekli)
     function decodeTokenSafe() {
         const token = localStorage.getItem(TOKEN_KEY);
@@ -37,6 +37,7 @@
             localStorage.removeItem("staj2_username");
             localStorage.removeItem("staj2_roles");
             localStorage.removeItem("staj2_permissions");
+            livePermissions = null;
         },
         getToken: () => localStorage.getItem(TOKEN_KEY),
 
@@ -51,9 +52,21 @@
             const roles = window.auth.getRoles();
             return roles.includes(roleName);
         },
-
+        loadLivePermissions: async () => {
+            try {
+                if (window.auth.isLoggedIn()) {
+                    livePermissions = await api.get('/api/Ui/my-permissions');
+                }
+            } catch (error) {
+                console.error("Canlı yetkiler çekilemedi, token yetkilerine dönülüyor.", error);
+                livePermissions = null;
+            }
+        },
         getPermissions: () => {
             // LocalStorage yerine direkt Token'dan okuyoruz
+            if (livePermissions !== null) {
+                return livePermissions;
+            }
             const decoded = decodeTokenSafe();
             if (!decoded) return [];
             let userPermissions = decoded.Permission || decoded["Permission"] || [];

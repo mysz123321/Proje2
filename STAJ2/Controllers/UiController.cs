@@ -62,4 +62,33 @@ public class UiController : ControllerBase
         // 5. Filtrelenmiş listeyi frontend'e gönderiyoruz
         return Ok(authorizedItems);
     }
+
+    [HttpGet("my-permissions")]
+    public async Task<IActionResult> GetMyPermissions()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ??
+                          User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+
+        var user = await _db.Users
+            .AsNoTracking()
+            .Include(x => x.Roles)
+                .ThenInclude(r => r.RolePermissions)
+                    .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(x => x.Id == userId);
+
+        if (user == null)
+            return NotFound("Kullanıcı bulunamadı.");
+
+        // Kullanıcının anlık, canlı yetkilerini çekiyoruz
+        var livePermissions = user.Roles
+            .SelectMany(r => r.RolePermissions)
+            .Select(rp => rp.Permission.Name)
+            .Distinct()
+            .ToList();
+
+        return Ok(livePermissions);
+    }
 }

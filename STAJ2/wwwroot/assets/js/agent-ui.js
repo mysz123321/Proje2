@@ -30,7 +30,7 @@ window.applyFilter = () => {
 
     const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
     const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
-    const isTagsTab = document.getElementById('nav-tags') && document.getElementById('nav-tags').classList.contains('active'); // YENİ
+    const isTagsTab = document.getElementById('nav-tags') && document.getElementById('nav-tags').classList.contains('active'); 
 
     if (isLiveTab) {
         selectedLiveTags = tags;
