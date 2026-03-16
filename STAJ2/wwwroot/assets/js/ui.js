@@ -519,7 +519,7 @@
                 ]);
                 const activeComputers = allComputers.filter(c => !c.isDeleted);
                 pgState.tagAssign.data = activeComputers;
-                pgState.tagAssign.filtered = activeComputers; // YENİ EKLENEN
+                pgState.tagAssign.filtered = activeComputers;
                 pgState.tagAssign.assignedIds = assignedIds;
                 pgState.tagAssign.page = 1;
                 ui.renderTagAssignList();

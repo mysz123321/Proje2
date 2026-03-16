@@ -264,8 +264,8 @@ input, select, .small-select {
     border: 1px solid var(--border-color) !important;
     border-radius: 1.25rem;
     padding: 2rem;
-    width: 95%;
-    max-width: 500px;
+    width: 100%; /* 95% yerine 100% yaparak dialog'un genişliğine uymasını sağlayın */
+    /* max-width: 500px;  <-- Bu satırı silin */
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
