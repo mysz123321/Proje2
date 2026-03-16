@@ -34,8 +34,14 @@ public static class DbSeeder
             new Permission { Name = "Computer.AssignTag", Description = "Cihazlara Etiket Ekleyebilir ve Çıkarabilir" },
             new Permission { Name = "Computer.Filter", Description = "Cihazları ve Metrikleri Filtreleyebilir" },
             new Permission { Name = "Role.Manage", Description = "Sistem Rollerini ve Yetkilerini Yönetebilir" },
-            new Permission { Name = "User.Manage", Description = "Kullanıcı Kayıtlarını Onaylayabilir/Yönetebilir" },
-            new Permission { Name = "Tag.Manage", Description = "Etiketleri Yönetebilir" }
+            new Permission { Name = "Tag.Manage", Description = "Etiketleri Yönetebilir" },
+    
+            // --- KULLANICI YÖNETİMİ YETKİLERİ ---
+            new Permission { Name = "User.Manage", Description = "Kullanıcı Kayıtlarını Onaylayabilir/Yönetebilir" }, // MEVCUT YETKİ - KORUNDU
+            new Permission { Name = "User.Read", Description = "Kullanıcıları Listeler (Görüntüleme)" }, // YENİ EKLENDİ
+            new Permission { Name = "User.ManageRoles", Description = "Kullanıcı Rollerini Değiştirebilir" }, // YENİ EKLENDİ
+            new Permission { Name = "User.ManageComputers", Description = "Kullanıcının Cihaz Erişimlerini Değiştirebilir" }, // YENİ EKLENDİ
+            new Permission { Name = "User.ManageTags", Description = "Kullanıcının Etiket Erişimlerini Değiştirebilir" } // YENİ EKLENDİ
         };
 
         foreach (var perm in defaultPermissions)
@@ -100,10 +106,14 @@ public static class DbSeeder
                 // Herkese açık menüler (RequiredPermission = null)
                 new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", RequiredPermission = null, OrderIndex = 1 },
                 new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", RequiredPermission = null, OrderIndex = 2 },
-                
-                // Sadece yetkisi olanların görebileceği Admin (Yönetim Paneli) menüleri
+    
+                // YÖNETİM MENÜLERİ
+                // Kayıt istekleri User.Manage yetkisinde kalıyor
                 new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", RequiredPermission = "User.Manage", OrderIndex = 3 },
-                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermission = "User.Manage", OrderIndex = 4 },
+    
+                // Kullanıcılar menüsü artık sadece User.Read yetkisi ile listelenecek
+                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermission = "User.Read", OrderIndex = 4 },
+
                 new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", RequiredPermission = "Role.Manage", OrderIndex = 5 },
                 new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", RequiredPermission = "Tag.Manage", OrderIndex = 6 }
             };
@@ -111,6 +121,28 @@ public static class DbSeeder
             context.SidebarItems.AddRange(sidebarItems);
             await context.SaveChangesAsync();
             Console.WriteLine(">>> Dinamik Sidebar menü elemanları oluşturuldu.");
+        }
+        // --- SİDEBAR DÜZELTMESİ ---
+        var usersSidebar = await context.SidebarItems.FirstOrDefaultAsync(s => s.TargetView == "users");
+        if (usersSidebar != null && usersSidebar.RequiredPermission != "User.Read")
+        {
+            usersSidebar.RequiredPermission = "User.Read";
+            await context.SaveChangesAsync();
+            Console.WriteLine(">>> Sidebar 'Kullanıcılar' menüsü User.Read olarak güncellendi.");
+        }
+        // --- DİNAMİK KULLANICI TABLOSU BUTONLARI ---
+        if (!await context.UserTableActions.AnyAsync())
+        {
+            context.UserTableActions.AddRange(new List<UserTableAction>
+            {
+                new UserTableAction { Title = "Roller", Icon = "bi bi-shield-check", ButtonClass = "btn-outline-primary", OnClickFunction = "ui.openUserRolesModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageRoles", OrderIndex = 1 },
+                new UserTableAction { Title = "Cihazlar", Icon = "bi bi-pc-display", ButtonClass = "btn-outline-success", OnClickFunction = "ui.openUserComputerAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageComputers", OrderIndex = 2 },
+                new UserTableAction { Title = "Etiketler", Icon = "bi bi-tags", ButtonClass = "btn-outline-warning", OnClickFunction = "ui.openUserTagAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageTags", OrderIndex = 3 },
+                // HideFromAdmin kaldırıldı
+                new UserTableAction { Title = "Sil", Icon = "bi bi-trash", ButtonClass = "btn-outline-danger", OnClickFunction = "ui.deleteUser(USER_ID)", RequiredPermission = "User.ManageRoles", OrderIndex = 4 }
+            });
+            await context.SaveChangesAsync();
+            Console.WriteLine(">>> Dinamik Kullanıcı Tablosu Butonları oluşturuldu.");
         }
     }
 }

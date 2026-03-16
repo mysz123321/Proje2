@@ -91,4 +91,13 @@ public class UiController : ControllerBase
 
         return Ok(livePermissions);
     }
+
+    [HttpGet("user-actions")]
+    [Authorize]
+    public async Task<IActionResult> GetUserActions()
+    {
+        var actions = await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
+        return Ok(actions);
+    }
+
 }

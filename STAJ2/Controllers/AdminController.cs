@@ -31,7 +31,7 @@ public class AdminController : ControllerBase
     }
     // --- KULLANICI YÖNETİMİ ---
     [HttpGet("users")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.Read")]
     public async Task<IActionResult> GetAllUsers() =>
         Ok(await _db.Users.Include(u => u.Roles)
                           .OrderBy(u => u.Username)
@@ -39,7 +39,7 @@ public class AdminController : ControllerBase
                           .ToListAsync());
 
     [HttpDelete("users/{id:int}")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.ManageRoles")]
     public async Task<IActionResult> DeleteUser(int id)
     {
         var user = await _db.Users.FindAsync(id);
@@ -48,7 +48,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("users/{userId}/change-roles")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.ManageRoles")]
     public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
@@ -301,7 +301,19 @@ public class AdminController : ControllerBase
 
         // Gelen yeni yetki ID'lerini veritabanından doğrula ve ekle
         var validPermissions = await _db.Permissions.Where(p => request.PermissionIds.Contains(p.Id)).ToListAsync();
+        bool requiresUserRead = validPermissions.Any(p =>
+            p.Name == "User.ManageRoles" ||
+            p.Name == "User.ManageComputers" ||
+            p.Name == "User.ManageTags");
 
+        if (requiresUserRead && !validPermissions.Any(p => p.Name == "User.Read"))
+        {
+            var userReadPerm = await _db.Permissions.FirstOrDefaultAsync(p => p.Name == "User.Read");
+            if (userReadPerm != null)
+            {
+                validPermissions.Add(userReadPerm);
+            }
+        }
         foreach (var perm in validPermissions)
         {
             role.RolePermissions.Add(new RolePermission
@@ -317,7 +329,7 @@ public class AdminController : ControllerBase
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
 
     [HttpGet("users/{userId:int}/access")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.ManageComputers,User.ManageTags")]
     public async Task<IActionResult> GetUserAccess(int userId)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == userId);
@@ -342,7 +354,7 @@ public class AdminController : ControllerBase
 
     // 2. Kullanıcıya doğrudan cihaz atama
     [HttpPost("users/{userId:int}/assign-computers")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.ManageComputers")]
     public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
     {
         var user = await _db.Users.FindAsync(userId);
@@ -362,7 +374,7 @@ public class AdminController : ControllerBase
 
     // 3. Kullanıcıya etiket atama
     [HttpPost("users/{userId:int}/assign-tags")]
-    [HasPermission("User.Manage")]
+    [HasPermission("User.ManageTags")]
     public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
     {
         var user = await _db.Users.FindAsync(userId);
@@ -405,7 +417,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("computers/all")]
-    [HasPermission("User.Manage,Tag.Manage")] // <-- İki yetkiyi araya virgül koyarak yazıyoruz
+    [HasPermission("User.ManageComputers,Tag.Manage")] // <-- İki yetkiyi araya virgül koyarak yazıyoruz
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
         // .IgnoreQueryFilters() ekleyerek silinmiş cihazların da gelmesini sağlıyoruz

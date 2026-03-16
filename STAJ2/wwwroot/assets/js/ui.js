@@ -7,7 +7,7 @@
 
     let pgState = {
         requests: { data: [], roles: [], page: 1 },
-        users: { data: [], page: 1 },
+        users: { data: [], actions: [], page: 1 },
         roles: { data: [], page: 1 },
         tags: { data: [], page: 1 },
         rolePerm: { data: [], assignedIds: [], page: 1 },
@@ -288,10 +288,13 @@
 
     async function loadUsersView(container) {
             try {
-                const users = await api.get("/api/Admin/users");
-                // currentUsername'i bulmaya veya filtrelemeye artık gerek yok
+                const [users, actions] = await Promise.all([
+                    api.get("/api/Admin/users"),
+                    api.get("/api/Ui/user-actions")
+                ]);
 
                 pgState.users.data = users; // Tüm kullanıcıları doğrudan listeye aktarıyoruz
+                pgState.users.actions = actions;
                 pgState.users.page = 1;
 
             container.innerHTML = `
@@ -400,15 +403,40 @@
                 const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
                 const isAdmin = u.roles.includes("Yönetici");
 
+                let actionButtons = '';
+
+                // API'den gelen dinamik butonları dönüyoruz
+                state.actions.forEach(action => {
+                    // 1. Yetki kontrolü
+                    if (!action.requiredPermission || window.auth.hasPermission(action.requiredPermission)) {
+
+                        // 2. Yönetici Silinmez Koruması (Doğrudan Title üzerinden yapıyoruz)
+                        if (action.title === 'Sil' && isAdmin) {
+                            actionButtons += `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span> `;
+                            return; // Döngüde sonraki butona geç
+                        }
+
+                        // 3. Veritabanındaki şablonda geçen değişkenleri (USER_ID, USER_NAME) gerçek değerlerle değiştir
+                        const onClickCode = action.onClickFunction
+                            .replace(/USER_ID/g, u.id)
+                            .replace(/USER_NAME/g, u.username);
+
+                        // Butonu HTML olarak ekle (Sil butonuysa sadece ikonu göster, diğerlerinde Title da yaz)
+                        const btnText = action.title !== 'Sil' ? ` ${action.title}` : '';
+                        actionButtons += `<button class="btn ${action.buttonClass} btn-sm" onclick="${onClickCode}" title="${action.title}"><i class="${action.icon}"></i>${btnText}</button> `;
+                    }
+                });
+
+                if (actionButtons === '') {
+                    actionButtons = `<span class="text-muted small fst-italic">İşlem Yetkisi Yok</span>`;
+                }
+
                 return `<tr>
     <td class="fw-bold" style="color:#38bdf8;">${u.username}</td>
     <td>${roleBadges || '<span class="text-muted small fst-italic">Rol Atanmamış</span>'}</td>
     <td class="text-end">
         <div class="d-flex justify-content-end gap-1 flex-wrap">
-            <button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Rol İşlemleri"><i class="bi bi-shield-check"></i> Roller</button>
-            <button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihaz Erişimleri"><i class="bi bi-pc-display"></i> Cihazlar</button>
-            <button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiket Erişimleri"><i class="bi bi-tags"></i> Etiketler</button>
-            ${!isAdmin ? `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Kullanıcıyı Sil"><i class="bi bi-trash"></i></button>` : `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span>`}
+            ${actionButtons}
         </div>
     </td>
 </tr>`;

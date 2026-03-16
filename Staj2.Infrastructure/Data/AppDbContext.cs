@@ -31,6 +31,7 @@ namespace Staj2.Infrastructure.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<SidebarItem> SidebarItems { get; set; }
+        public DbSet<UserTableAction> UserTableActions { get; set; }
         // Kullanıcı - Cihaz/Etiket Erişim Tabloları
         public DbSet<UserComputerAccess> UserComputerAccesses { get; set; }
         public DbSet<UserTagAccess> UserTagAccesses { get; set; }
