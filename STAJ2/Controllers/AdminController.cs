@@ -19,13 +19,11 @@ namespace STAJ2.Controllers;
 [Authorize]
 public class AdminController : ControllerBase
 {
-    private readonly AppDbContext _db;
     private readonly IMailSender _mail;
     private readonly IAdminService _adminService;
 
-    public AdminController(AppDbContext db, IMailSender mail, IAdminService adminService)
+    public AdminController( IMailSender mail, IAdminService adminService)
     {
-        _db = db;
         _mail = mail;
         _adminService = adminService;
     }

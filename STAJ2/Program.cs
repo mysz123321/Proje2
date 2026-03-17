@@ -20,6 +20,7 @@ builder.Services.AddScoped<STAJ2.MailServices.IMailSender, STAJ2.MailServices.Ma
 // Program.cs içinde builder.Services ile baþlayan kodlarýn olduðu yere ekle:
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IComputerService, ComputerService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

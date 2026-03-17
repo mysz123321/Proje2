@@ -237,6 +237,11 @@ namespace Staj2.Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.CreatedAt);
             });
+            modelBuilder.Entity<ComputerMetric>()
+            .HasIndex(m => new { m.ComputerId, m.CreatedAt });
+
+            modelBuilder.Entity<DiskMetric>()
+                .HasIndex(m => m.CreatedAt);
         }
     }
 }
