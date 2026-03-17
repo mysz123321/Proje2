@@ -119,7 +119,7 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<Tag>().HasQueryFilter(t => !t.IsDeleted);
             modelBuilder.Entity<ComputerTag>().HasQueryFilter(ct => !ct.IsDeleted);
             modelBuilder.Entity<UserRole>().HasQueryFilter(ur => !ur.IsDeleted);
-
+            modelBuilder.Entity<Role>().HasQueryFilter(r => !r.IsDeleted);
             // --- İLİŞKİLER VE ARA TABLOLAR ---
 
             modelBuilder.Entity<RolePermission>()
@@ -191,7 +191,7 @@ namespace Staj2.Infrastructure.Data
 
             modelBuilder.Entity<Role>(entity =>
             {
-                entity.Property(e => e.Name).HasMaxLength(200);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             });
 
             modelBuilder.Entity<Tag>(entity =>

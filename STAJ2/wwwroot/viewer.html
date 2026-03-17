@@ -553,7 +553,7 @@
     <script src="/assets/js/config.js"></script>
     <script src="/assets/js/api.js"></script>
     <script src="/assets/js/auth.js"></script>
-    <script src="/assets/js/guards.js"></script>
+    <script src="/assets/js/guards.js?v=2"></script>
     <script src="/assets/js/ui.js"></script>
     <script src="/assets/js/agent-ui.js"></script>
 
@@ -564,7 +564,7 @@ $(document).ready(async function () {
     const icon = document.getElementById('theme-icon');
     if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
 
-    if (!guards.requireRole(["Görüntüleyici", "Yönetici", "Denetleyici"])) return;
+    if (!guards.requireAuth()) return;
 
     const username = localStorage.getItem("staj2_username") || "Kullanıcı";
     const roles = auth.getRoles();

@@ -317,7 +317,15 @@
             pgState.roles.data = roles.filter(r => r.name !== "Yönetici");
             pgState.roles.page = 1;
 
+            // KONTROL: Sadece Role.Manage yetkisi olanlar butonu görebilir
+            const canManageRoles = window.auth.hasPermission('Role.Manage');
+            const addRoleBtn = canManageRoles ? `<button class="btn btn-success btn-sm" onclick="ui.openCreateRoleModal()">+ Yeni Rol Ekle</button>` : '';
+
             container.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-3" style="max-width: 600px;">
+                    <h5 class="m-0" style="color:var(--text-title);"></h5>
+                    ${addRoleBtn}
+                </div>
                 <div class="card border-0 shadow-sm" style="background:var(--bg-card); max-width: 600px;">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
@@ -326,6 +334,30 @@
                         </table>
                     </div>
                     <div id="rolesPg" class="pb-3"></div>
+                </div>
+                
+                <div class="modal fade" id="createRoleModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content" style="background:var(--bg-card); color:var(--text-main);">
+                            <div class="modal-header border-bottom border-secondary">
+                                <h5 class="modal-title">Yeni Rol Ekle</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label text-muted small">Rol Adı (Maks 20 karakter)</label>
+                                    <input type="text" id="newRoleNameInput" class="form-control" maxlength="20" placeholder="Örn: Sınıf Başkanı" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-main);">
+                                </div>
+                                <label class="form-label text-muted small mb-2">Başlangıç Yetkileri</label>
+                                <div id="newRolePermsContainer" class="row g-2" style="max-height: 250px; overflow-y: auto;">
+                                    </div>
+                            </div>
+                            <div class="modal-footer border-top border-secondary">
+                                <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                                <button class="btn btn-success" onclick="ui.saveNewRole()">Oluştur</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>`;
             ui.renderRolesTable();
         } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
@@ -407,16 +439,22 @@
 
                 // API'den gelen dinamik butonları dönüyoruz
                 state.actions.forEach(action => {
-                    // 1. Yetki kontrolü
+
+                    // --- 1. YENİ KONTROL: Eğer eylem 'Sil' ise ve giriş yapan kişi 'Yönetici' DEĞİLSE butonu gizle! ---
+                    if (action.title === 'Sil' && !window.auth.hasRole('Yönetici')) {
+                        return; // Döngüde sonraki eyleme geç (butonu çizme)
+                    }
+
+                    // 2. Yetki kontrolü (Diğer işlemler için)
                     if (!action.requiredPermission || window.auth.hasPermission(action.requiredPermission)) {
 
-                        // 2. Yönetici Silinmez Koruması (Doğrudan Title üzerinden yapıyoruz)
+                        // 3. Hedef Kullanıcı Yönetici ise Silinmez Koruması
                         if (action.title === 'Sil' && isAdmin) {
                             actionButtons += `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span> `;
                             return; // Döngüde sonraki butona geç
                         }
 
-                        // 3. Veritabanındaki şablonda geçen değişkenleri (USER_ID, USER_NAME) gerçek değerlerle değiştir
+                        // 4. Veritabanındaki şablonda geçen değişkenleri (USER_ID, USER_NAME) gerçek değerlerle değiştir
                         const onClickCode = action.onClickFunction
                             .replace(/USER_ID/g, u.id)
                             .replace(/USER_NAME/g, u.username);
@@ -448,20 +486,25 @@
         changeUsersPage: (p) => { pgState.users.page = p; ui.renderUsersTable(); },
 
         // --- 3. ROLLER VE YETKİLER RENDER & SAYFALAMA ---
+        // --- 3. ROLLER VE YETKİLER RENDER & SAYFALAMA ---
         renderRolesTable: () => {
             const tbody = document.getElementById('rolesTbody'); if (!tbody) return;
             const state = pgState.roles;
             const start = (state.page - 1) * ITEMS_PER_PAGE;
             const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
 
+            // Yetkisi olanlara sil butonunu da gösterelim
+            const canManageRoles = window.auth.hasPermission('Role.Manage');
+
             let rows = paginated.map(r => `<tr>
                     <td class="fw-bold" style="color:var(--text-main);"><i class="bi bi-shield-fill text-warning me-2"></i> ${r.name}</td>
                     <td class="text-end">
-                        <button class="btn btn-primary btn-sm" onclick="ui.openRolePermissionsModal(${r.id}, '${r.name}')"><i class="bi bi-list-check"></i> Yetkileri Düzenle</button>
+                        <button class="btn btn-primary btn-sm me-1" onclick="ui.openRolePermissionsModal(${r.id}, '${r.name}')"><i class="bi bi-list-check"></i> Yetkileri Düzenle</button>
+                        ${canManageRoles ? `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteRole(${r.id}, '${r.name}')"><i class="bi bi-trash"></i> Sil</button>` : ''}
                     </td>
                 </tr>`).join("");
 
-            tbody.innerHTML = rows;
+            tbody.innerHTML = rows || '<tr><td colspan="2" class="text-center text-muted py-4">Sistemde rol bulunamadı.</td></tr>';
             renderPagination('rolesPg', state.page, state.data.length, ITEMS_PER_PAGE, 'ui.changeRolesPage');
         },
         changeRolesPage: (p) => { pgState.roles.page = p; ui.renderRolesTable(); },
@@ -859,6 +902,64 @@
             );
             pgState.tagAssign.page = 1;
             ui.renderTagAssignList();
+        },
+        // --- YENİ ROL EKLEME FONKSİYONLARI ---
+        openCreateRoleModal: async () => {
+            document.getElementById('newRoleNameInput').value = ''; // Inputu temizle
+            const permsContainer = document.getElementById('newRolePermsContainer');
+            permsContainer.innerHTML = '<div class="text-center w-100 py-3"><div class="spinner-border text-info spinner-border-sm"></div></div>';
+
+            new bootstrap.Modal(document.getElementById('createRoleModal')).show();
+
+            try {
+                // Sistemdeki tüm yetkileri çek
+                const allPerms = await api.get('/api/Admin/permissions');
+
+                permsContainer.innerHTML = allPerms.map(p => `
+                    <div class="col-12">
+                        <label class="permission-card d-flex align-items-center w-100 py-2" for="new_perm_${p.id}" style="cursor:pointer;">
+                            <input class="form-check-input custom-toggle new-role-perm-cb m-0 me-3 flex-shrink-0" type="checkbox" id="new_perm_${p.id}" value="${p.id}">
+                            <div class="flex-grow-1" style="min-width: 0;">
+                                <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">${p.description || p.name}</div>
+                            </div>
+                        </label>
+                    </div>`).join('');
+            } catch (e) {
+                permsContainer.innerHTML = `<div class="text-danger small px-2">Yetkiler yüklenemedi: ${e.message}</div>`;
+            }
+        },
+
+        saveNewRole: async () => {
+            const roleName = document.getElementById('newRoleNameInput').value.trim();
+            if (!roleName) { alert("Lütfen rol adı giriniz."); return; }
+            if (roleName.length > 20) { alert("Rol adı en fazla 20 karakter olabilir."); return; }
+
+            // İşaretli checkbox'ların id'lerini topla
+            const selectedPerms = Array.from(document.querySelectorAll('.new-role-perm-cb:checked')).map(cb => parseInt(cb.value));
+
+            try {
+                await api.post('/api/Admin/roles', {
+                    name: roleName,
+                    permissionIds: selectedPerms
+                });
+
+                bootstrap.Modal.getInstance(document.getElementById('createRoleModal')).hide();
+                alert("Yeni rol başarıyla eklendi!");
+                ui.switchView('roles'); // Tabloyu yenile
+            } catch (e) {
+                alert("Hata: " + (e.message || "Rol eklenirken bir sorun oluştu."));
+            }
+        },
+        deleteRole: async (id, name) => {
+            if (!confirm(`'${name}' rolünü silmek istediğinize emin misiniz?`)) return;
+
+            try {
+                await api.del(`/api/Admin/roles/${id}`);
+                alert("Rol başarıyla silindi.");
+                ui.switchView('roles'); // Tabloyu anında yenile
+            } catch (e) {
+                alert("Hata: " + e.message); // Kullanıcı varsa burada hata mesajını gösterecek
+            }
         }
     };
 

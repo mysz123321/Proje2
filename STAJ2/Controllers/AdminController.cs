@@ -39,7 +39,7 @@ public class AdminController : ControllerBase
                           .ToListAsync());
 
     [HttpDelete("users/{id:int}")]
-    [HasPermission("User.ManageRoles")]
+    [Authorize(Roles = "Yönetici")]
     public async Task<IActionResult> DeleteUser(int id)
     {
         var user = await _db.Users.FindAsync(id);
@@ -289,12 +289,25 @@ public class AdminController : ControllerBase
     }
 
     // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
+    // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
     [HttpPost("roles/{roleId:int}/permissions")]
     [HasPermission("Role.Manage")]
     public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
     {
         var role = await _db.Roles.Include(r => r.RolePermissions).FirstOrDefaultAsync(r => r.Id == roleId);
         if (role == null) return NotFound(new { message = "Rol bulunamadı." });
+
+        // --- YENİ EKLENEN KISIM: İşlemi Yapanı Bul ve Tarihi Güncelle ---
+        int? currentUserId = null;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
+        {
+            currentUserId = uid;
+        }
+
+        role.UpdatedAt = DateTime.UtcNow;
+        role.UpdatedBy = currentUserId;
+        // ----------------------------------------------------------------
 
         // Eski yetkileri tamamen temizle
         role.RolePermissions.Clear();
@@ -447,5 +460,91 @@ public class AdminController : ControllerBase
             .ToListAsync();
 
         return Ok(assignedIds);
+    }
+
+
+    [HttpPost("roles")]
+    [HasPermission("Role.Manage")]
+    public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        // 1. Rol adı daha önce kullanılmış mı kontrolü
+        if (await _db.Roles.AnyAsync(r => r.Name.ToLower() == request.Name.ToLower() && !r.IsDeleted))
+            return BadRequest(new { message = "Bu rol adı zaten kullanılıyor." });
+
+        // 2. İşlemi yapan kullanıcının ID'sini Token üzerinden alma
+        int? currentUserId = null;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
+        {
+            currentUserId = uid;
+        }
+
+        // 3. Yeni Rolü Oluşturma
+        var newRole = new Role
+        {
+            Name = request.Name,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = currentUserId,
+            IsDeleted = false
+        };
+
+        _db.Roles.Add(newRole);
+        await _db.SaveChangesAsync(); // Id'nin oluşması için önce rolü kaydediyoruz
+
+        // 4. Yetkileri (Permissions) Atama
+        if (request.PermissionIds != null && request.PermissionIds.Any())
+        {
+            foreach (var permId in request.PermissionIds)
+            {
+                newRole.RolePermissions.Add(new RolePermission
+                {
+                    RoleId = newRole.Id,
+                    PermissionId = permId
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        return Ok(new { message = "Rol başarıyla oluşturuldu." });
+    }
+
+    [HttpDelete("roles/{id:int}")]
+    [HasPermission("Role.Manage")]
+    public async Task<IActionResult> DeleteRole(int id)
+    {
+        // Rolü ve o role sahip kullanıcıları getir
+        var role = await _db.Roles.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
+
+        if (role == null)
+            return NotFound(new { message = "Rol bulunamadı." });
+
+        // Sistem varsayılan yöneticisi silinemez koruması
+        if (role.Name == "Yönetici")
+            return BadRequest(new { message = "Sistem varsayılan 'Yönetici' rolü silinemez." });
+
+        // KURAL: Eğer sistemde bu role sahip silinmemiş bir kullanıcı varsa işlemi engelle
+        if (role.Users.Any(u => !u.IsDeleted))
+        {
+            return BadRequest(new { message = "Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin." });
+        }
+
+        // İşlemi yapanın ID'sini Token üzerinden al
+        int? currentUserId = null;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
+        {
+            currentUserId = uid;
+        }
+
+        // Soft Delete İşlemi
+        role.IsDeleted = true;
+        role.DeletedAt = DateTime.UtcNow;
+        role.DeletedBy = currentUserId;
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Rol başarıyla silindi." });
     }
 }

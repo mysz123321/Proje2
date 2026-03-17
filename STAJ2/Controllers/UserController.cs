@@ -7,7 +7,7 @@ namespace STAJ2.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Giriş yapan herkes erişebilir
+[Authorize] // Giriş yapan herkes erişebilir--ölü
 public class UsersController : ControllerBase
 {
     private readonly AppDbContext _db;
