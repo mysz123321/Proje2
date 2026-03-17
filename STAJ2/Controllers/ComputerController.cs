@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
 using STAJ2.Authorization;
-using STAJ2.Models; // Request modellerini (DTO) görmek için
+using Staj2.Services.Models; // Request modellerini (DTO) görmek için
 using System.Globalization;
 using System.Security.Claims;
 

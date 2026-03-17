@@ -1,5 +1,4 @@
-﻿namespace STAJ2.Services;
-
+﻿namespace STAJ2.MailServices;
 public class ConsoleMailSender : IMailSender
 {
     public Task SendAsync(string toEmail, string subject, string body)

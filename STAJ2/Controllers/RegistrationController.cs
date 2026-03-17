@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
-using STAJ2.Services; // Mail servisi için gerekli
+using STAJ2.MailServices; // Mail servisi için gerekli
 
 namespace STAJ2.Controllers;
 

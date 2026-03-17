@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations; // <--- BU SATIRI EKLEMEYİ UNUTMA
 
-namespace STAJ2.Models // Namespace ekli değilse ekleyebilirsin, genelde vardır
+namespace Staj2.Services.Models // Namespace ekli değilse ekleyebilirsin, genelde vardır
 {
     public class UpdateComputerNameRequest
     {

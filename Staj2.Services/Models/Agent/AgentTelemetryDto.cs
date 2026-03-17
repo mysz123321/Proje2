@@ -1,6 +1,6 @@
-﻿    namespace STAJ2.Models.Agent;
+﻿namespace Staj2.Services.Models.Agent;
 
-    public class AgentTelemetryDto
+public class AgentTelemetryDto
     {
         public int ComputerId { get; set; } // Veritabanı ID'sini taşımak için eklendi
         public string? DisplayName { get; set; }

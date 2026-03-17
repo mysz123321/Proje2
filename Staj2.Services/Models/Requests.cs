@@ -1,4 +1,4 @@
-﻿namespace STAJ2.Models
+﻿namespace Staj2.Services.Models
 {
     // Kullanıcı İşlemleri için
     public class ChangeRolesRequest { public List<int> NewRoleIds { get; set; } = new(); }
@@ -27,4 +27,8 @@
         public string RejectionReason { get; set; }
     }
     public class UpdateComputerTagsRequest { public List<string> Tags { get; set; } = new(); }
+    public class AssignComputersToTagRequest
+    {
+        public List<int> ComputerIds { get; set; } = new();
+    }
 }

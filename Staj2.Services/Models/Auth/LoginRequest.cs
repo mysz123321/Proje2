@@ -1,4 +1,4 @@
-﻿namespace STAJ2.Models.Auth;
+﻿namespace Staj2.Services.Models.Auth;
 
 public class LoginRequest
 {

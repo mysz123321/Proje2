@@ -1,4 +1,4 @@
-﻿namespace STAJ2.Services;
+﻿namespace STAJ2.MailServices;
 
 public interface IMailSender
 {

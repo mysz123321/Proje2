@@ -2,8 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
-using STAJ2.Models.Agent;
-using STAJ2.Services;
+using Staj2.Services.Models.Agent;
+using STAJ2.MailServices;
 using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;

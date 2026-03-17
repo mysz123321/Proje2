@@ -6,7 +6,7 @@ using Staj2.Infrastructure.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using STAJ2.Models.Auth;
+using Staj2.Services.Models.Auth;
 using Microsoft.AspNetCore.Authorization;
 
 namespace STAJ2.Controllers;

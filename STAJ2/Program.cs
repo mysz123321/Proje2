@@ -4,16 +4,22 @@ using Microsoft.IdentityModel.Tokens;
 using Staj2.Infrastructure.Data;
 using System.Text;
 using STAJ2.Authorization;
+
 using Microsoft.AspNetCore.Authorization;
+using Staj2.Services.Interfaces;
+using Staj2.Services.Services;
+
+
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
-builder.Services.AddScoped<STAJ2.Services.IMailSender, STAJ2.Services.MailKitMailSender>();
+builder.Services.AddScoped<STAJ2.MailServices.IMailSender, STAJ2.MailServices.MailKitMailSender>();
 // Program.cs içinde builder.Services ile baþlayan kodlarýn olduðu yere ekle:
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAdminService, AdminService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

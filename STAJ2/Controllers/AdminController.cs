@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
-using STAJ2.Models;
-using STAJ2.Services;
-using System.Security.Claims;
-using System.Text;
-using System.Security.Cryptography;
+using Staj2.Services.Interfaces;
+using Staj2.Services.Models;
+using Staj2.Services.Services;
 using STAJ2.Authorization;
+using STAJ2.MailServices;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace STAJ2.Controllers;
 
@@ -19,31 +21,33 @@ public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IMailSender _mail;
+    private readonly IAdminService _adminService;
 
-    public AdminController(AppDbContext db, IMailSender mail)
+    public AdminController(AppDbContext db, IMailSender mail, IAdminService adminService)
     {
         _db = db;
         _mail = mail;
+        _adminService = adminService;
     }
-    public class UpdateRolePermissionsRequest
-    {
-        public List<int> PermissionIds { get; set; } = new();
-    }
+
     // --- KULLANICI YÖNETİMİ ---
     [HttpGet("users")]
     [HasPermission("User.Read")]
-    public async Task<IActionResult> GetAllUsers() =>
-        Ok(await _db.Users.Include(u => u.Roles)
-                          .OrderBy(u => u.Username)
-                          .Select(u => new { u.Id, u.Username, u.Email, Roles = u.Roles.Select(r => r.Name).ToList() })
-                          .ToListAsync());
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _adminService.GetAllUsersAsync();
+        return Ok(users);
+    }
 
     [HttpDelete("users/{id:int}")]
     [Authorize(Roles = "Yönetici")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var user = await _db.Users.FindAsync(id);
-        if (user != null) { user.IsDeleted = true; await _db.SaveChangesAsync(); }
+        var errorMessage = await _adminService.DeleteUserAsync(id);
+
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
+
         return Ok(new { message = "Kullanıcı silindi." });
     }
 
@@ -51,16 +55,13 @@ public class AdminController : ControllerBase
     [HasPermission("User.ManageRoles")]
     public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
-        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
-        if (user == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+        var errorMessage = await _adminService.ChangeUserRolesAsync(userId, request);
 
-        var newRoles = await _db.Roles.Where(r => request.NewRoleIds.Contains(r.Id)).ToListAsync();
-        if (newRoles.Count == 0) return BadRequest(new { message = "En az bir geçerli rol seçilmelidir." });
+        if (errorMessage == "Kullanıcı bulunamadı.")
+            return NotFound(new { message = errorMessage });
+        else if (errorMessage != null)
+            return BadRequest(new { message = errorMessage });
 
-        user.Roles.Clear();
-        foreach (var role in newRoles) user.Roles.Add(role);
-
-        await _db.SaveChangesAsync();
         return Ok(new { message = "Roller güncellendi." });
     }
 
@@ -68,50 +69,44 @@ public class AdminController : ControllerBase
 
     [HttpGet("requests")]
     [HasPermission("User.Manage")]
-    public async Task<IActionResult> PendingRequests() =>
-        Ok(await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync());
+    public async Task<IActionResult> PendingRequests()
+    {
+        var requests = await _adminService.GetPendingRequestsAsync();
+        return Ok(requests);
+    }
 
     // REDDETME İŞLEMİ
     [HttpPost("requests/reject")]
     [HasPermission("User.Manage")]
     public async Task<IActionResult> RejectRequest([FromBody] RejectRegistrationRequest request)
     {
-        if (!string.IsNullOrEmpty(request.RejectionReason) && request.RejectionReason.Length > 200)
+        int? adminId = null;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("id")?.Value;
+        if (int.TryParse(userIdClaim, out int uid)) adminId = uid;
+
+        var result = await _adminService.RejectRequestAsync(request, adminId);
+
+        if (!result.IsSuccess)
         {
-            return BadRequest(new { message = "Ret gerekçesi 200 karakterden uzun olamaz." });
+            if (result.ErrorMessage == "Talep bulunamadı.") return NotFound(new { message = result.ErrorMessage });
+            return BadRequest(new { message = result.ErrorMessage });
         }
-
-        var registration = await _db.RegistrationRequests.FindAsync(request.RequestId);
-        if (registration == null) return NotFound(new { message = "Talep bulunamadı." });
-
-        if (registration.Status != RegistrationStatus.Pending)
-            return BadRequest(new { message = "Bu talep zaten işleme alınmış." });
-
-        // İşlemi yapanın ID'sini alıyoruz ---
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("id")?.Value;
-
-        if (int.TryParse(userIdClaim, out int adminId))
-        {
-            registration.RejectedBy = adminId;
-        }
-        // ----------------------------------------------------------
-
-        registration.Status = RegistrationStatus.Rejected;
-        registration.RejectedAt = DateTime.UtcNow;
-        registration.RejectionReason = request.RejectionReason;
-
-        await _db.SaveChangesAsync();
 
         try
         {
             await _mail.SendAsync(
-                registration.Email,
+                result.Email!,
                 "Kayıt Talebiniz Reddedildi",
-                $"Merhaba {registration.Username},\n\nTalebiniz maalesef onaylanmadı.\nSebep: {registration.RejectionReason ?? "Belirtilmedi"}"
+                $"Merhaba {result.Username},\n\nTalebiniz maalesef onaylanmadı.\nSebep: {request.RejectionReason ?? "Belirtilmedi"}"
             );
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Hatayı terminale kırmızı renkli yazdıralım ki hemen fark edelim
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
+            Console.ResetColor();
+        }
 
         return Ok(new { message = "Talep reddedildi." });
     }
@@ -121,73 +116,30 @@ public class AdminController : ControllerBase
     [HasPermission("User.Manage")]
     public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest? req)
     {
-        var request = await _db.RegistrationRequests.FindAsync(id);
-        if (request == null) return NotFound(new { message = "Talep bulunamadı." });
+        int? adminId = null;
+        var adminIdString = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(adminIdString, out int uid)) adminId = uid;
 
-        if (request.Status != RegistrationStatus.Pending)
-            return BadRequest(new { message = "Bu talep zaten işlenmiş." });
+        var result = await _adminService.ApproveRequestAsync(id, req, adminId);
 
-        // 1. Kullanıcı Kontrolü (Zaten var mı?)
-        var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email);
-        if (existingUser != null)
+        if (!result.IsSuccess)
         {
-            return BadRequest(new { message = $"Bu kullanıcı zaten sistemde kayıtlı! (Kullanıcı: {existingUser.Username})" });
+            if (result.ErrorMessage == "Talep bulunamadı.") return NotFound(new { message = result.ErrorMessage });
+            return BadRequest(new { message = result.ErrorMessage });
         }
 
-        // 2. Onaylayan Admin ID'sini bul
-        var adminIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        int adminId = 0;
-        if (!int.TryParse(adminIdString, out adminId))
-        {
-            var firstUser = await _db.Users.FirstOrDefaultAsync();
-            if (firstUser != null) adminId = firstUser.Id;
-        }
-        request.ApprovedByUserId = adminId;
-
-        // 3. ROL GÜNCELLEME (ÖNEMLİ)
-        // Eğer admin onaylarken rolü değiştirdiyse, talep tablosundaki rolü güncelliyoruz.
-        // Böylece AuthController (şifre belirleme ekranı) kullanıcıyı oluştururken bu yeni rolü kullanacak.
-        if (req != null && req.NewRoleId > 0)
-        {
-            request.RequestedRoleId = req.NewRoleId;
-        }
-
-        // --- KULLANICI OLUŞTURMA KISMI SİLİNDİ ---
-        // Kullanıcı artık burada değil, şifresini belirlediği an AuthController'da oluşacak.
-
-        // 4. Token Oluştur ve Hashle
-        var token = Guid.NewGuid().ToString("N");
-
-        string tokenHash;
-        using (var sha256 = SHA256.Create())
-        {
-            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
-            tokenHash = Convert.ToHexString(bytes);
-        }
-
-        var setupToken = new PasswordSetupToken
-        {
-            RegistrationRequestId = request.Id,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddHours(24),
-            IsUsed = false
-        };
-        _db.PasswordSetupTokens.Add(setupToken);
-
-        // 5. Talebi Güncelle
-        request.Status = RegistrationStatus.Approved;
-        request.ApprovedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync();
-
-        // 6. Mail Gönder
-        var frontendLink = $"http://localhost:5267/set-password.html?token={token}";
+        var frontendLink = $"http://localhost:5267/set-password.html?token={result.Token}";
         try
         {
-            // user.Email yerine request.Email kullanıyoruz
-            await _mail.SendAsync(request.Email, "Hoşgeldiniz", $"Hesabınız onaylandı. Şifrenizi belirlemek için tıklayın: {frontendLink}");
+            await _mail.SendAsync(result.Email!, "Hoşgeldiniz", $"Hesabınız onaylandı. Şifrenizi belirlemek için tıklayın: {frontendLink}");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Hatayı terminale kırmızı renkli yazdıralım ki hemen fark edelim
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
+            Console.ResetColor();
+        }
 
         return Ok(new { message = "Kayıt onaylandı, kullanıcı şifre belirleme mailini bekliyor." });
     }
@@ -196,7 +148,11 @@ public class AdminController : ControllerBase
     [HttpGet("tags")]
     [Authorize]
     //[HasPermission("Tag.Manage")]
-    public async Task<IActionResult> GetTags() => Ok(await _db.Tags.ToListAsync());
+    public async Task<IActionResult> GetTags()
+    {
+        var tags = await _adminService.GetTagsAsync();
+        return Ok(tags);
+    }
 
 
 
@@ -204,52 +160,27 @@ public class AdminController : ControllerBase
     [HasPermission("Tag.Manage")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest(new { message = "İsim boş olamaz." });
-
-        if (request.Name.Length > 200)
-        {
-            return BadRequest(new { message = "Etiket ismi 200 karakterden uzun olamaz." });
-        }
-
-        if (await _db.Tags.AnyAsync(t => t.Name == request.Name))
-            return BadRequest(new { message = "Bu etiket zaten var." });
-
-        // 1. Etiketi oluştur
-        var tag = new Tag { Name = request.Name.Trim() };
-        _db.Tags.Add(tag);
-        await _db.SaveChangesAsync(); // Id'nin oluşması için önce kaydediyoruz
-
-        // 2. OTOMATİK ATAMA: Etiketi oluşturan kullanıcıyı bul ve yetki ver
+        int? userId = null;
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (int.TryParse(userIdString, out int userId))
-        {
-            // Kullanıcıya bu etiket için erişim yetkisi tanımla
-            _db.UserTagAccesses.Add(new UserTagAccess
-            {
-                UserId = userId,
-                TagId = tag.Id
-            });
+        if (int.TryParse(userIdString, out int uid)) userId = uid;
 
-            await _db.SaveChangesAsync();
-        }
+        var result = await _adminService.CreateTagAsync(request, userId);
 
-        return Ok(new
-        {
-            id = tag.Id,
-            name = tag.Name
-        });
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.CreatedTag);
     }
 
     [HttpDelete("tags/{id:int}")]
     [HasPermission("Tag.Manage")]
     public async Task<IActionResult> DeleteTag(int id)
     {
-        var tag = await _db.Tags.FindAsync(id);
-        if (tag == null) return NotFound(new { message = "Etiket bulunamadı." });
+        var errorMessage = await _adminService.DeleteTagAsync(id);
 
-        tag.IsDeleted = true;
-        await _db.SaveChangesAsync();
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
+
         return Ok(new { message = "Etiket silindi." });
     }
 
@@ -257,10 +188,9 @@ public class AdminController : ControllerBase
 
     // 1. Sistemdeki tüm rolleri getir
     [HttpGet("roles")]
-    //[HasPermission("Role.Manage")]
     public async Task<IActionResult> GetRoles()
     {
-        var roles = await _db.Roles.Select(r => new { r.Id, r.Name }).ToListAsync();
+        var roles = await _adminService.GetRolesAsync();
         return Ok(roles);
     }
 
@@ -269,9 +199,7 @@ public class AdminController : ControllerBase
     [HasPermission("Role.Manage")]
     public async Task<IActionResult> GetAllPermissions()
     {
-        var permissions = await _db.Permissions
-            .Select(p => new { p.Id, p.Name, p.Description })
-            .ToListAsync();
+        var permissions = await _adminService.GetAllPermissionsAsync();
         return Ok(permissions);
     }
 
@@ -280,63 +208,28 @@ public class AdminController : ControllerBase
     [HasPermission("Role.Manage")]
     public async Task<IActionResult> GetRolePermissions(int roleId)
     {
-        var permissionIds = await _db.RolePermissions
-            .Where(rp => rp.RoleId == roleId)
-            .Select(rp => rp.PermissionId)
-            .ToListAsync();
-
+        var permissionIds = await _adminService.GetRolePermissionsAsync(roleId);
         return Ok(permissionIds);
     }
 
-    // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
+
     // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
     [HttpPost("roles/{roleId:int}/permissions")]
     [HasPermission("Role.Manage")]
     public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
     {
-        var role = await _db.Roles.Include(r => r.RolePermissions).FirstOrDefaultAsync(r => r.Id == roleId);
-        if (role == null) return NotFound(new { message = "Rol bulunamadı." });
-
-        // --- YENİ EKLENEN KISIM: İşlemi Yapanı Bul ve Tarihi Güncelle ---
         int? currentUserId = null;
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-        {
             currentUserId = uid;
-        }
 
-        role.UpdatedAt = DateTime.UtcNow;
-        role.UpdatedBy = currentUserId;
-        // ----------------------------------------------------------------
+        var errorMessage = await _adminService.UpdateRolePermissionsAsync(roleId, request, currentUserId);
 
-        // Eski yetkileri tamamen temizle
-        role.RolePermissions.Clear();
+        if (errorMessage == "Rol bulunamadı.")
+            return NotFound(new { message = errorMessage });
+        else if (errorMessage != null)
+            return BadRequest(new { message = errorMessage });
 
-        // Gelen yeni yetki ID'lerini veritabanından doğrula ve ekle
-        var validPermissions = await _db.Permissions.Where(p => request.PermissionIds.Contains(p.Id)).ToListAsync();
-        bool requiresUserRead = validPermissions.Any(p =>
-            p.Name == "User.ManageRoles" ||
-            p.Name == "User.ManageComputers" ||
-            p.Name == "User.ManageTags");
-
-        if (requiresUserRead && !validPermissions.Any(p => p.Name == "User.Read"))
-        {
-            var userReadPerm = await _db.Permissions.FirstOrDefaultAsync(p => p.Name == "User.Read");
-            if (userReadPerm != null)
-            {
-                validPermissions.Add(userReadPerm);
-            }
-        }
-        foreach (var perm in validPermissions)
-        {
-            role.RolePermissions.Add(new RolePermission
-            {
-                RoleId = role.Id,
-                PermissionId = perm.Id
-            });
-        }
-
-        await _db.SaveChangesAsync();
         return Ok(new { message = "Rol yetkileri başarıyla güncellendi." });
     }
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
@@ -345,24 +238,11 @@ public class AdminController : ControllerBase
     [HasPermission("User.ManageComputers,User.ManageTags")]
     public async Task<IActionResult> GetUserAccess(int userId)
     {
-        var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == userId);
-        if (user == null) return NotFound();
+        var result = await _adminService.GetUserAccessAsync(userId);
 
-        // 1. Veritabanındaki gerçek kayıtları çek
-        var computerIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
-        var tagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+        if (result == null) return NotFound();
 
-        // 2. KRİTİK MANTIK: 
-        // Eğer listeler boşsa VE kullanıcı yöneticiyse, "hiç kısıtlanmamış" demektir, hepsini seçili getir.
-        // Ama eğer listeler DOLUYSA (admin olsa bile), sadece o listeyi getir. 
-        // Böylece 4 cihazdan 1'ini çıkarıp kaydedersen, artık sadece o 3 cihaz tikli gelir.
-        if (computerIds.Count == 0 && tagIds.Count == 0 && user.Roles.Any(r => r.Name == "Yönetici"))
-        {
-            computerIds = await _db.Computers.Select(x => x.Id).ToListAsync();
-            tagIds = await _db.Tags.Select(x => x.Id).ToListAsync();
-        }
-
-        return Ok(new { computerIds, tagIds });
+        return Ok(result);
     }
 
     // 2. Kullanıcıya doğrudan cihaz atama
@@ -370,18 +250,11 @@ public class AdminController : ControllerBase
     [HasPermission("User.ManageComputers")]
     public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+        var errorMessage = await _adminService.AssignComputersAsync(userId, req);
 
-        // Eski atamaları sil
-        var existing = await _db.UserComputerAccesses.Where(x => x.UserId == userId).ToListAsync();
-        _db.UserComputerAccesses.RemoveRange(existing);
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
 
-        // Yenileri ekle
-        foreach (var cid in req.ComputerIds)
-            _db.UserComputerAccesses.Add(new UserComputerAccess { UserId = userId, ComputerId = cid });
-
-        await _db.SaveChangesAsync();
         return Ok(new { message = "Cihaz atamaları güncellendi." });
     }
 
@@ -390,18 +263,11 @@ public class AdminController : ControllerBase
     [HasPermission("User.ManageTags")]
     public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+        var errorMessage = await _adminService.AssignTagsAsync(userId, req);
 
-        // Eski atamaları sil
-        var existing = await _db.UserTagAccesses.Where(x => x.UserId == userId).ToListAsync();
-        _db.UserTagAccesses.RemoveRange(existing);
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
 
-        // Yenileri ekle
-        foreach (var tid in req.TagIds)
-            _db.UserTagAccesses.Add(new UserTagAccess { UserId = userId, TagId = tid });
-
-        await _db.SaveChangesAsync();
         return Ok(new { message = "Etiket atamaları güncellendi." });
     }
 
@@ -409,44 +275,20 @@ public class AdminController : ControllerBase
     [HasPermission("Tag.Manage")]
     public async Task<IActionResult> AssignComputersToTag(int tagId, [FromBody] AssignComputersToTagRequest req)
     {
-        var tag = await _db.Tags.Include(t => t.Computers).FirstOrDefaultAsync(t => t.Id == tagId);
-        if (tag == null) return NotFound(new { message = "Etiket bulunamadı." });
+        var errorMessage = await _adminService.AssignComputersToTagAsync(tagId, req);
 
-        // Mevcut ilişkileri temizle
-        tag.Computers.Clear();
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
 
-        // Seçilen bilgisayarları bul ve ekle
-        var computers = await _db.Computers.Where(c => req.ComputerIds.Contains(c.Id)).ToListAsync();
-        foreach (var c in computers) tag.Computers.Add(c);
-
-        await _db.SaveChangesAsync();
         return Ok(new { message = "Cihaz atamaları başarıyla güncellendi." });
     }
 
-    // Request modeli
-    public class AssignComputersToTagRequest
-    {
-        public List<int> ComputerIds { get; set; } = new();
-    }
 
     [HttpGet("computers/all")]
-    [HasPermission("User.ManageComputers,Tag.Manage")] // <-- İki yetkiyi araya virgül koyarak yazıyoruz
+    [HasPermission("User.ManageComputers,Tag.Manage")]
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
-        // .IgnoreQueryFilters() ekleyerek silinmiş cihazların da gelmesini sağlıyoruz
-        var computers = await _db.Computers
-            .IgnoreQueryFilters()
-            .Select(c => new
-            {
-                id = c.Id,
-                displayName = c.DisplayName,
-                machineName = c.MachineName,
-                ipAddress = c.IpAddress,
-                isDeleted = c.IsDeleted,
-                lastSeen = c.LastSeen
-            })
-            .ToListAsync();
-
+        var computers = await _adminService.GetAllComputersForAssignmentAsync();
         return Ok(computers);
     }
 
@@ -454,59 +296,29 @@ public class AdminController : ControllerBase
     [HasPermission("Tag.Manage")]
     public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
     {
-        var assignedIds = await _db.Tags
-            .Where(t => t.Id == tagId)
-            .SelectMany(t => t.Computers.Select(c => c.Id))
-            .ToListAsync();
-
+        var assignedIds = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
         return Ok(assignedIds);
     }
 
 
     [HttpPost("roles")]
     [HasPermission("Role.Manage")]
-    public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
+    public async Task<IActionResult> CreateRole([FromBody] Staj2.Services.Models.CreateRoleRequest request)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        // 1. Rol adı daha önce kullanılmış mı kontrolü
-        if (await _db.Roles.AnyAsync(r => r.Name.ToLower() == request.Name.ToLower() && !r.IsDeleted))
-            return BadRequest(new { message = "Bu rol adı zaten kullanılıyor." });
-
-        // 2. İşlemi yapan kullanıcının ID'sini Token üzerinden alma
+        // İşlemi yapanın ID'sini alıyoruz
         int? currentUserId = null;
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-        {
             currentUserId = uid;
-        }
 
-        // 3. Yeni Rolü Oluşturma
-        var newRole = new Role
-        {
-            Name = request.Name,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = currentUserId,
-            IsDeleted = false
-        };
+        // Servisi çağırıyoruz
+        var errorMessage = await _adminService.CreateRoleAsync(request, currentUserId);
 
-        _db.Roles.Add(newRole);
-        await _db.SaveChangesAsync(); // Id'nin oluşması için önce rolü kaydediyoruz
-
-        // 4. Yetkileri (Permissions) Atama
-        if (request.PermissionIds != null && request.PermissionIds.Any())
-        {
-            foreach (var permId in request.PermissionIds)
-            {
-                newRole.RolePermissions.Add(new RolePermission
-                {
-                    RoleId = newRole.Id,
-                    PermissionId = permId
-                });
-            }
-            await _db.SaveChangesAsync();
-        }
+        if (errorMessage != null) // Eğer hata mesajı döndüyse (null değilse)
+            return BadRequest(new { message = errorMessage });
 
         return Ok(new { message = "Rol başarıyla oluşturuldu." });
     }
@@ -515,36 +327,18 @@ public class AdminController : ControllerBase
     [HasPermission("Role.Manage")]
     public async Task<IActionResult> DeleteRole(int id)
     {
-        // Rolü ve o role sahip kullanıcıları getir
-        var role = await _db.Roles.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
-
-        if (role == null)
-            return NotFound(new { message = "Rol bulunamadı." });
-
-        // Sistem varsayılan yöneticisi silinemez koruması
-        if (role.Name == "Yönetici")
-            return BadRequest(new { message = "Sistem varsayılan 'Yönetici' rolü silinemez." });
-
-        // KURAL: Eğer sistemde bu role sahip silinmemiş bir kullanıcı varsa işlemi engelle
-        if (role.Users.Any(u => !u.IsDeleted))
-        {
-            return BadRequest(new { message = "Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin." });
-        }
-
-        // İşlemi yapanın ID'sini Token üzerinden al
         int? currentUserId = null;
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
-        {
             currentUserId = uid;
-        }
 
-        // Soft Delete İşlemi
-        role.IsDeleted = true;
-        role.DeletedAt = DateTime.UtcNow;
-        role.DeletedBy = currentUserId;
+        var errorMessage = await _adminService.DeleteRoleAsync(id, currentUserId);
 
-        await _db.SaveChangesAsync();
+        if (errorMessage == "Rol bulunamadı.")
+            return NotFound(new { message = errorMessage });
+        else if (errorMessage != null)
+            return BadRequest(new { message = errorMessage });
+
         return Ok(new { message = "Rol başarıyla silindi." });
     }
 }

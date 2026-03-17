@@ -345,7 +345,7 @@
                             </div>
                             <div class="modal-body">
                                 <div class="mb-3">
-                                    <label class="form-label text-muted small">Rol Adı (Maks 20 karakter)</label>
+                                    <label class="form-label text-muted small">Rol Adı (Maks 200 karakter)</label>
                                     <input type="text" id="newRoleNameInput" class="form-control" maxlength="20" placeholder="Örn: Sınıf Başkanı" style="background:var(--bg-input); border-color:var(--border-color); color:var(--text-main);">
                                 </div>
                                 <label class="form-label text-muted small mb-2">Başlangıç Yetkileri</label>

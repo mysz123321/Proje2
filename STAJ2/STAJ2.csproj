@@ -21,6 +21,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Staj2.Domain\Staj2.Domain.csproj" />
     <ProjectReference Include="..\Staj2.Infrastructure\Staj2.Infrastructure.csproj" />
+    <ProjectReference Include="..\Staj2.Services\Staj2.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\" />
   </ItemGroup>
 
 </Project>

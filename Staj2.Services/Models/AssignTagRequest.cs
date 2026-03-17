@@ -1,4 +1,4 @@
-﻿namespace STAJ2.Models
+﻿namespace Staj2.Services.Models
 {
     public class AssignTagsRequest
     {
