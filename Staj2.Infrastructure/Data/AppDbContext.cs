@@ -235,13 +235,16 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<ComputerMetric>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.CreatedAt);
+                // BURADAKİ TEKLİ İNDEKSİ SİLDİK: entity.HasIndex(e => e.CreatedAt); 
             });
-            modelBuilder.Entity<ComputerMetric>()
-            .HasIndex(m => new { m.ComputerId, m.CreatedAt });
 
+            // ComputerMetric için çoklu indeks (Doğru olan bu)
+            modelBuilder.Entity<ComputerMetric>()
+                .HasIndex(m => new { m.ComputerId, m.CreatedAt });
+
+            // DİKKAT: DiskMetric için de sadece CreatedAt değil, Disk ID'si ile birlikte çoklu indeks yapmalıyız!
             modelBuilder.Entity<DiskMetric>()
-                .HasIndex(m => m.CreatedAt);
+                .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt });
         }
     }
 }
