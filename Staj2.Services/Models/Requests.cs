@@ -31,4 +31,9 @@
     {
         public List<int> ComputerIds { get; set; } = new();
     }
+    public class CreateRegistrationRequest
+    {
+        public string Username { get; set; } = null!;
+        public string Email { get; set; } = null!;
+    }
 }

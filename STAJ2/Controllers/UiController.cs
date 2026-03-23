@@ -1,10 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Staj2.Infrastructure.Data;
 using System.Security.Claims;
-using System.Linq;
-using System.Threading.Tasks;
+using Staj2.Services.Interfaces;
 
 namespace STAJ2.Controllers;
 
@@ -13,91 +10,53 @@ namespace STAJ2.Controllers;
 [Authorize] // Sadece giriş yapmış kullanıcılar menüleri çekebilir
 public class UiController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly IUiService _uiService;
 
-    public UiController(AppDbContext db)
+    public UiController(IUiService uiService)
     {
-        _db = db;
+        _uiService = uiService;
+    }
+
+    // DRY (Don't Repeat Yourself) prensibi için userId getirme işlemini metoda aldık
+    private int GetUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ??
+                          User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+
+        return (userIdClaim != null && int.TryParse(userIdClaim.Value, out int id)) ? id : 0;
     }
 
     [HttpGet("sidebar-items")]
     public async Task<IActionResult> GetSidebarItems()
     {
-        // 1. Token'dan giriş yapmış kullanıcının ID'sini alıyoruz
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ??
-                          User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+        int userId = GetUserId();
+        if (userId == 0) return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
 
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-            return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+        var result = await _uiService.GetSidebarItemsAsync(userId);
 
-        // 2. Kullanıcının en güncel yetkilerini veritabanından çekiyoruz
-        var user = await _db.Users
-            .AsNoTracking()
-            .Include(x => x.Roles)
-                .ThenInclude(r => r.RolePermissions)
-                    .ThenInclude(rp => rp.Permission)
-            .FirstOrDefaultAsync(x => x.Id == userId);
+        if (!result.IsSuccess) return NotFound(result.ErrorMessage);
 
-        if (user == null)
-            return NotFound("Kullanıcı bulunamadı.");
-
-        var userPermissions = user.Roles
-            .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.Name)
-            .Distinct()
-            .ToList();
-
-        // 3. Veritabanından tüm Sidebar (Menü) elemanlarını sırasına (OrderIndex) göre çekiyoruz
-        var allSidebarItems = await _db.SidebarItems
-            .AsNoTracking()
-            .OrderBy(x => x.OrderIndex)
-            .ToListAsync();
-
-        // 4. FİLTRELEME: Sadece kullanıcının görmeye yetkisi olduğu menüleri seçiyoruz
-        var authorizedItems = allSidebarItems.Where(item =>
-            string.IsNullOrEmpty(item.RequiredPermission) || // RequiredPermission null/boş ise herkese açıktır
-            userPermissions.Contains(item.RequiredPermission) // Doluysa kullanıcının o yetkiye sahip olması gerekir
-        ).ToList();
-
-        // 5. Filtrelenmiş listeyi frontend'e gönderiyoruz
-        return Ok(authorizedItems);
+        return Ok(result.Data);
     }
 
     [HttpGet("my-permissions")]
     public async Task<IActionResult> GetMyPermissions()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ??
-                          User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+        int userId = GetUserId();
+        if (userId == 0) return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
 
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-            return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+        var result = await _uiService.GetMyPermissionsAsync(userId);
 
-        var user = await _db.Users
-            .AsNoTracking()
-            .Include(x => x.Roles)
-                .ThenInclude(r => r.RolePermissions)
-                    .ThenInclude(rp => rp.Permission)
-            .FirstOrDefaultAsync(x => x.Id == userId);
+        if (!result.IsSuccess) return NotFound(result.ErrorMessage);
 
-        if (user == null)
-            return NotFound("Kullanıcı bulunamadı.");
-
-        // Kullanıcının anlık, canlı yetkilerini çekiyoruz
-        var livePermissions = user.Roles
-            .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.Name)
-            .Distinct()
-            .ToList();
-
-        return Ok(livePermissions);
+        return Ok(result.Permissions);
     }
 
     [HttpGet("user-actions")]
     [Authorize]
     public async Task<IActionResult> GetUserActions()
     {
-        var actions = await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
+        var actions = await _uiService.GetUserActionsAsync();
         return Ok(actions);
     }
-
 }

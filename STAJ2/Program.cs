@@ -17,10 +17,13 @@ builder.Services.AddControllers();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<STAJ2.MailServices.IMailSender, STAJ2.MailServices.MailKitMailSender>();
-// Program.cs içinde builder.Services ile baþlayan kodlarýn olduðu yere ekle:
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IComputerService, ComputerService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IRegistrationService, RegistrationService>();
+builder.Services.AddScoped<IUiService, UiService>();
+builder.Services.AddScoped<IAgentTelemetryService, AgentTelemetryService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
