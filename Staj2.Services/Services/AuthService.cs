@@ -61,7 +61,7 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(x =>
                 x.TokenHash == tokenHash &&
                 !x.IsUsed &&
-                x.ExpiresAt > DateTime.UtcNow);
+                x.ExpiresAt > DateTime.Now);
 
         if (tokenRow == null)
             return (false, "Token geçersiz veya süresi dolmuş.", false);
@@ -96,7 +96,7 @@ public class AuthService : IAuthService
         _db.Users.Add(newUser);
 
         tokenRow.IsUsed = true;
-        tokenRow.UsedAt = DateTime.UtcNow;
+        tokenRow.UsedAt = DateTime.Now;
 
         await _db.SaveChangesAsync();
         return (true, null, false);
@@ -159,7 +159,7 @@ public class AuthService : IAuthService
             issuer: jwt["Issuer"],
             audience: jwt["Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(2),
+            expires: DateTime.Now.AddHours(2),
             signingCredentials: creds
         );
 

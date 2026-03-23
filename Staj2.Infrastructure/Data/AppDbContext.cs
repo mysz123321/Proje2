@@ -65,7 +65,7 @@ namespace Staj2.Infrastructure.Data
                         // Eğer tablo ICreatableEntity arayüzüne sahipse
                         if (entry.Entity is ICreatableEntity creatableEntity)
                         {
-                            creatableEntity.CreatedAt = DateTime.UtcNow;
+                            creatableEntity.CreatedAt = DateTime.Now;
                             creatableEntity.CreatedBy = currentUserId;
                         }
                         break;
@@ -76,7 +76,7 @@ namespace Staj2.Infrastructure.Data
                             softDeleteUpdate.IsDeleted &&
                             entry.Property(nameof(ISoftDeletableEntity.IsDeleted)).IsModified)
                         {
-                            softDeleteUpdate.DeletedAt = DateTime.UtcNow;
+                            softDeleteUpdate.DeletedAt = DateTime.Now;
                             softDeleteUpdate.DeletedBy = currentUserId;
                         }
                         // Senaryo B: Eğer tablo IUpdatableEntity ise ve silinmemişse
@@ -85,7 +85,7 @@ namespace Staj2.Infrastructure.Data
                             bool isDeleted = (entry.Entity as ISoftDeletableEntity)?.IsDeleted ?? false;
                             if (!isDeleted)
                             {
-                                updatableEntity.UpdatedAt = DateTime.UtcNow;
+                                updatableEntity.UpdatedAt = DateTime.Now;
                                 updatableEntity.UpdatedBy = currentUserId;
                             }
                         }
@@ -97,7 +97,7 @@ namespace Staj2.Infrastructure.Data
                         {
                             entry.State = EntityState.Modified;
                             softDeletableForDelete.IsDeleted = true;
-                            softDeletableForDelete.DeletedAt = DateTime.UtcNow;
+                            softDeletableForDelete.DeletedAt = DateTime.Now;
                             softDeletableForDelete.DeletedBy = currentUserId;
                         }
                         break;

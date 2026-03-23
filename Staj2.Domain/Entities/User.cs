@@ -9,7 +9,7 @@ public class User : ISoftDeletableEntity
     public string Email { get; set; } = null!;
     public string PasswordHash { get; set; } = null!;
     public bool IsApproved { get; set; } = true;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
     public int? DeletedBy { get; set; }

@@ -27,7 +27,6 @@ public class ComputerController : ControllerBase
 
     // 1. Cihaz Detayı
     [HttpGet("{id:int}")]
-    [HasPermission("Computer.Read")]
     public async Task<IActionResult> GetComputer(int id)
     {
         var result = await _computerService.GetComputerAsync(id, GetUserId(), IsAdmin());
@@ -40,7 +39,6 @@ public class ComputerController : ControllerBase
 
     // 2. Disk Listesi
     [HttpGet("{computerId:int}/disks")]
-    [HasPermission("Computer.Read")]
     public async Task<IActionResult> GetComputerDisks(int computerId)
     {
         var result = await _computerService.GetComputerDisksAsync(computerId, GetUserId(), IsAdmin());
@@ -52,7 +50,6 @@ public class ComputerController : ControllerBase
 
     // 3. Eşik Değerlerini Güncelle (0-100 Kontrolü Eklendi)
     [HttpPut("update-thresholds/{computerId:int}")]
-    [HasPermission("Computer.SetThreshold")]
     public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
     {
         var result = await _computerService.UpdateThresholdsAsync(computerId, request, GetUserId(), IsAdmin());
@@ -66,7 +63,6 @@ public class ComputerController : ControllerBase
 
     // 4. Etiket Atama
     [HttpPut("{id}/tags")]
-    [HasPermission("Computer.AssignTag")]
     public async Task<IActionResult> UpdateComputerTags(int id, [FromBody] UpdateComputerTagsRequest request)
     {
         var isSuccess = await _computerService.UpdateComputerTagsAsync(id, request);
@@ -78,7 +74,6 @@ public class ComputerController : ControllerBase
 
     // 5. İsim Değiştirme
     [HttpPut("update-display-name")]
-    [HasPermission("Computer.Rename")]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
     {
         var result = await _computerService.UpdateDisplayNameAsync(request);
@@ -93,7 +88,6 @@ public class ComputerController : ControllerBase
     }
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
     [HttpGet("{id:int}/metrics-history")]
-    [HasPermission("Computer.Filter")]
     public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string start, [FromQuery] string end)
     {
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end);
@@ -105,7 +99,6 @@ public class ComputerController : ControllerBase
     }
 
     [HttpGet]
-    [HasPermission("Computer.Read")]
     public async Task<IActionResult> GetAllComputers()
     {
         var result = await _computerService.GetAllComputersAsync(GetUserId(), IsAdmin());
@@ -114,7 +107,6 @@ public class ComputerController : ControllerBase
 
     // 8. Cihaz Silme (Sadece Pasif Olanlar İçin Soft Delete)
     [HttpDelete("{id:int}")]
-    [HasPermission("Computer.Delete")]
     public async Task<IActionResult> DeleteComputer(int id)
     {
         var result = await _computerService.DeleteComputerAsync(id);

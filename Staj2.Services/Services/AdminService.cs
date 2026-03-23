@@ -45,7 +45,7 @@ public class AdminService : IAdminService
         var newRole = new Role
         {
             Name = request.Name,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             CreatedBy = currentUserId,
             IsDeleted = false
         };
@@ -76,7 +76,7 @@ public class AdminService : IAdminService
         if (role == null) return "Rol bulunamadı."; // NotFound durumu
 
         // İşlemi Yapanı ve Tarihi Güncelle
-        role.UpdatedAt = DateTime.UtcNow;
+        role.UpdatedAt = DateTime.Now;
         role.UpdatedBy = currentUserId;
 
         // Eski yetkileri tamamen temizle
@@ -128,7 +128,7 @@ public class AdminService : IAdminService
 
         // Soft Delete İşlemi
         role.IsDeleted = true;
-        role.DeletedAt = DateTime.UtcNow;
+        role.DeletedAt = DateTime.Now;
         role.DeletedBy = currentUserId;
 
         await _db.SaveChangesAsync();
@@ -199,7 +199,7 @@ public class AdminService : IAdminService
             registration.RejectedBy = adminId.Value;
 
         registration.Status = RegistrationStatus.Rejected;
-        registration.RejectedAt = DateTime.UtcNow;
+        registration.RejectedAt = DateTime.Now;
         registration.RejectionReason = request.RejectionReason;
 
         await _db.SaveChangesAsync();
@@ -244,13 +244,13 @@ public class AdminService : IAdminService
         {
             RegistrationRequestId = request.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            ExpiresAt = DateTime.Now.AddHours(24),
             IsUsed = false
         };
         _db.PasswordSetupTokens.Add(setupToken);
 
         request.Status = RegistrationStatus.Approved;
-        request.ApprovedAt = DateTime.UtcNow;
+        request.ApprovedAt = DateTime.Now;
 
         await _db.SaveChangesAsync();
 

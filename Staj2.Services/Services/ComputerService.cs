@@ -212,7 +212,7 @@ public class ComputerService : IComputerService
                             .ToList()
         }).ToListAsync();
 
-        var now = DateTime.UtcNow; // Not: Sunucu saatleri farklılık yaratmasın diye UtcNow önerilir ama mevcut kodun Now'dı, değiştirmeden devam edelim.
+        var now = DateTime.Now; // Not: Sunucu saatleri farklılık yaratmasın diye UtcNow önerilir ama mevcut kodun Now'dı, değiştirmeden devam edelim.
         if (now.Kind == DateTimeKind.Utc) now = DateTime.Now; // Uyumluluk için eski DateTime.Now kalsın.
 
         // 4. İstemciye (UI) gidecek modeli oluştur
