@@ -13,7 +13,6 @@ using Staj2.Services.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<STAJ2.MailServices.IMailSender, STAJ2.MailServices.MailKitMailSender>();
@@ -83,7 +82,17 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+// 1. Memory Cache'i aktif et (Servisimiz kullanýyor)
+builder.Services.AddMemoryCache();
 
+// 2. Yazdýðýmýz servisi sisteme tanýt
+builder.Services.AddSingleton<IEndpointPermissionService, EndpointPermissionService>();
+
+// 3. Bütün projedeki Controller'larýn tepesine otomatik olarak yazdýðýmýz Filtreyi koy
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<STAJ2.Authorization.DynamicPermissionFilter>();
+});
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -100,5 +109,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 await STAJ2.Seed.DbSeeder.SeedAsync(app);
 app.MapControllers();
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<Staj2.Infrastructure.Data.AppDbContext>();
 
+    // Tablolarý oluþtur (eðer yoksa)
+    context.Database.Migrate();
+
+    // Yetkileri tabloya ekle
+    STAJ2.Seed.PermissionSeeder.Seed(context);
+}
 app.Run();

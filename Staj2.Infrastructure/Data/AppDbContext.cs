@@ -35,7 +35,7 @@ namespace Staj2.Infrastructure.Data
         // Kullanıcı - Cihaz/Etiket Erişim Tabloları
         public DbSet<UserComputerAccess> UserComputerAccesses { get; set; }
         public DbSet<UserTagAccess> UserTagAccesses { get; set; }
-
+        public DbSet<EndpointPermission> EndpointPermissions { get; set; }
         // YENİ: Fiziksel Ara Tablolar
         public DbSet<ComputerTag> ComputerTags { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }

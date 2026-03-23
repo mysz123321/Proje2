@@ -30,7 +30,6 @@ public class AdminController : ControllerBase
 
     // --- KULLANICI YÖNETİMİ ---
     [HttpGet("users")]
-    [HasPermission("User.Read")]
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _adminService.GetAllUsersAsync();
@@ -50,7 +49,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("users/{userId}/change-roles")]
-    [HasPermission("User.ManageRoles")]
     public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
         var errorMessage = await _adminService.ChangeUserRolesAsync(userId, request);
@@ -66,7 +64,6 @@ public class AdminController : ControllerBase
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
 
     [HttpGet("requests")]
-    [HasPermission("User.Manage")]
     public async Task<IActionResult> PendingRequests()
     {
         var requests = await _adminService.GetPendingRequestsAsync();
@@ -75,7 +72,6 @@ public class AdminController : ControllerBase
 
     // REDDETME İŞLEMİ
     [HttpPost("requests/reject")]
-    [HasPermission("User.Manage")]
     public async Task<IActionResult> RejectRequest([FromBody] RejectRegistrationRequest request)
     {
         int? adminId = null;
@@ -111,7 +107,6 @@ public class AdminController : ControllerBase
 
     // ONAYLAMA İŞLEMİ
     [HttpPost("requests/approve/{id}")]
-    [HasPermission("User.Manage")]
     public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest? req)
     {
         int? adminId = null;
@@ -145,7 +140,6 @@ public class AdminController : ControllerBase
     // --- ETİKET YÖNETİMİ ---
     [HttpGet("tags")]
     [Authorize]
-    //[HasPermission("Tag.Manage")]
     public async Task<IActionResult> GetTags()
     {
         var tags = await _adminService.GetTagsAsync();
@@ -155,7 +149,6 @@ public class AdminController : ControllerBase
 
 
     [HttpPost("tags")]
-    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
     {
         int? userId = null;
@@ -171,7 +164,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("tags/{id:int}")]
-    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> DeleteTag(int id)
     {
         var errorMessage = await _adminService.DeleteTagAsync(id);
@@ -194,7 +186,6 @@ public class AdminController : ControllerBase
 
     // 2. Sistemdeki tüm olası yetkileri (Permissions) getir (Arayüzde checkbox listesi oluşturmak için)
     [HttpGet("permissions")]
-    [HasPermission("Role.Manage")]
     public async Task<IActionResult> GetAllPermissions()
     {
         var permissions = await _adminService.GetAllPermissionsAsync();
@@ -203,7 +194,6 @@ public class AdminController : ControllerBase
 
     // 3. Belirli bir rolün sahip olduğu yetkilerin ID'lerini getir (Hangi checkbox'lar seçili olacak?)
     [HttpGet("roles/{roleId:int}/permissions")]
-    [HasPermission("Role.Manage")]
     public async Task<IActionResult> GetRolePermissions(int roleId)
     {
         var permissionIds = await _adminService.GetRolePermissionsAsync(roleId);
@@ -213,7 +203,6 @@ public class AdminController : ControllerBase
 
     // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
     [HttpPost("roles/{roleId:int}/permissions")]
-    [HasPermission("Role.Manage")]
     public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
     {
         int? currentUserId = null;
@@ -233,7 +222,6 @@ public class AdminController : ControllerBase
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
 
     [HttpGet("users/{userId:int}/access")]
-    [HasPermission("User.ManageComputers,User.ManageTags")]
     public async Task<IActionResult> GetUserAccess(int userId)
     {
         var result = await _adminService.GetUserAccessAsync(userId);
@@ -245,7 +233,6 @@ public class AdminController : ControllerBase
 
     // 2. Kullanıcıya doğrudan cihaz atama
     [HttpPost("users/{userId:int}/assign-computers")]
-    [HasPermission("User.ManageComputers")]
     public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
     {
         var errorMessage = await _adminService.AssignComputersAsync(userId, req);
@@ -258,7 +245,6 @@ public class AdminController : ControllerBase
 
     // 3. Kullanıcıya etiket atama
     [HttpPost("users/{userId:int}/assign-tags")]
-    [HasPermission("User.ManageTags")]
     public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
     {
         var errorMessage = await _adminService.AssignTagsAsync(userId, req);
@@ -270,7 +256,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("tags/{tagId:int}/assign-computers")]
-    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> AssignComputersToTag(int tagId, [FromBody] AssignComputersToTagRequest req)
     {
         var errorMessage = await _adminService.AssignComputersToTagAsync(tagId, req);
@@ -283,7 +268,6 @@ public class AdminController : ControllerBase
 
 
     [HttpGet("computers/all")]
-    [HasPermission("User.ManageComputers,Tag.Manage")]
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
         var computers = await _adminService.GetAllComputersForAssignmentAsync();
@@ -291,7 +275,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("tags/{tagId:int}/assigned-computer-ids")]
-    [HasPermission("Tag.Manage")]
     public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
     {
         var assignedIds = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
@@ -300,7 +283,6 @@ public class AdminController : ControllerBase
 
 
     [HttpPost("roles")]
-    [HasPermission("Role.Manage")]
     public async Task<IActionResult> CreateRole([FromBody] Staj2.Services.Models.CreateRoleRequest request)
     {
         if (!ModelState.IsValid)
@@ -322,7 +304,6 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("roles/{id:int}")]
-    [HasPermission("Role.Manage")]
     public async Task<IActionResult> DeleteRole(int id)
     {
         int? currentUserId = null;
