@@ -103,32 +103,59 @@ public static class DbSeeder
         {
             var sidebarItems = new List<SidebarItem>
             {
-                // Herkese açık menüler (RequiredPermission = null)
-                new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", RequiredPermission = null, OrderIndex = 1 },
-                new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", RequiredPermission = null, OrderIndex = 2 },
+                // Herkese açık menüler (RequiredPermissionId = null)
+                new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", RequiredPermissionId = null, OrderIndex = 1 },
+                new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", RequiredPermissionId = null, OrderIndex = 2 },
     
                 // YÖNETİM MENÜLERİ
                 // Kayıt istekleri User.Manage yetkisinde kalıyor
-                new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", RequiredPermission = "User.Manage", OrderIndex = 3 },
+                new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "User.Manage")?.Id, OrderIndex = 3 },
     
                 // Kullanıcılar menüsü artık sadece User.Read yetkisi ile listelenecek
-                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermission = "User.Read", OrderIndex = 4 },
+                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "User.Read")?.Id, OrderIndex = 4 },
 
-                new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", RequiredPermission = "Role.Manage", OrderIndex = 5 },
-                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", RequiredPermission = "Tag.Manage", OrderIndex = 6 }
+                new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "Role.Manage")?.Id, OrderIndex = 5 },
+                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "Tag.Manage")?.Id, OrderIndex = 6 }
             };
 
             context.SidebarItems.AddRange(sidebarItems);
             await context.SaveChangesAsync();
             Console.WriteLine(">>> Dinamik Sidebar menü elemanları oluşturuldu.");
         }
-        // --- SİDEBAR DÜZELTMESİ ---
-        var usersSidebar = await context.SidebarItems.FirstOrDefaultAsync(s => s.TargetView == "users");
-        if (usersSidebar != null && usersSidebar.RequiredPermission != "User.Read")
+
+        // --- SİDEBAR YETKİ DÜZELTMESİ (TÜM MENÜLER İÇİN GENEL KONTROL) ---
+        var existingSidebarItems = await context.SidebarItems.ToListAsync();
+        bool isSidebarUpdated = false;
+
+        // Hangi hedefin (TargetView) hangi yetkiyi (Permission Name) gerektirdiğini eşleştiriyoruz
+        var sidebarMappings = new Dictionary<string, string>
         {
-            usersSidebar.RequiredPermission = "User.Read";
+            { "requests", "User.Manage" },
+            { "users", "User.Read" },
+            { "roles", "Role.Manage" },
+            { "tags", "Tag.Manage" }
+        };
+
+        foreach (var mapping in sidebarMappings)
+        {
+            var sidebarItem = existingSidebarItems.FirstOrDefault(s => s.TargetView == mapping.Key);
+            if (sidebarItem != null)
+            {
+                var expectedPermissionId = allPermissions.FirstOrDefault(p => p.Name == mapping.Value)?.Id;
+
+                // Eğer veritabanındaki ID, olması gereken ID'den farklıysa (veya null ise) güncelle
+                if (sidebarItem.RequiredPermissionId != expectedPermissionId)
+                {
+                    sidebarItem.RequiredPermissionId = expectedPermissionId;
+                    isSidebarUpdated = true;
+                }
+            }
+        }
+
+        if (isSidebarUpdated)
+        {
             await context.SaveChangesAsync();
-            Console.WriteLine(">>> Sidebar 'Kullanıcılar' menüsü User.Read olarak güncellendi.");
+            Console.WriteLine(">>> Tüm Sidebar menülerinin yetki ID'leri eşitlendi/güncellendi.");
         }
         // --- DİNAMİK KULLANICI TABLOSU BUTONLARI ---
         if (!await context.UserTableActions.AnyAsync())

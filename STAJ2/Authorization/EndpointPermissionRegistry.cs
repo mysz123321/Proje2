@@ -2,55 +2,65 @@
 
 public static class EndpointPermissionRegistry
 {
-    // Key: "ControllerName_ActionName" -> Value: AppPermissions Enum
-    private static readonly Dictionary<string, AppPermissions> _permissions = new(StringComparer.OrdinalIgnoreCase)
+    // Artık tek bir Enum yerine string dizisi tutuyoruz. Böylece bir endpoint'e birden fazla yetkiyle erişilebilir.
+    private static readonly Dictionary<string, string[]> _permissions = new(StringComparer.OrdinalIgnoreCase)
     {
         // ==========================================
         // --- ADMIN CONTROLLER YETKİLERİ ---
         // ==========================================
-        { "Admin_GetAllUsers", AppPermissions.User_Read },
-        { "Admin_DeleteUser", AppPermissions.User_ManageRoles },
-        { "Admin_ChangeUserRoles", AppPermissions.User_ManageRoles },
-        { "Admin_GetPendingRequests", AppPermissions.Role_Manage },
-        { "Admin_RejectRequest", AppPermissions.Role_Manage },
-        { "Admin_ApproveRequest", AppPermissions.Role_Manage },
-        { "Admin_GetUserAccess", AppPermissions.User_ManageRoles },
-        { "Admin_AssignComputers", AppPermissions.User_ManageComputers },
-        { "Admin_AssignTags", AppPermissions.User_ManageTags },
-        { "Admin_GetAllComputersForAssignment", AppPermissions.User_ManageComputers },
-        { "Admin_GetRoles", AppPermissions.Role_Manage },
-        { "Admin_CreateRole", AppPermissions.Role_Manage },
-        { "Admin_UpdateRolePermissions", AppPermissions.Role_Manage },
-        { "Admin_DeleteRole", AppPermissions.Role_Manage },
-        { "Admin_GetTags", AppPermissions.Tag_Manage },
-        { "Admin_CreateTag", AppPermissions.Tag_Manage },
-        { "Admin_DeleteTag", AppPermissions.Tag_Manage },
-        { "Admin_AssignComputersToTag", AppPermissions.Tag_Manage },
-        { "Admin_GetTagAssignedComputerIds", AppPermissions.Tag_Manage },
+        // Kullanıcı listesini görmek için bu 4 yetkiden herhangi biri yeterli olmalı
+        { "Admin_GetAllUsers", new[] { "User.Read", "User.ManageRoles", "User.ManageComputers", "User.ManageTags" } },
+        { "Admin_DeleteUser", new[] { "User.ManageRoles" } },
+        { "Admin_ChangeUserRoles", new[] { "User.ManageRoles" } },
+
+        { "Admin_GetPendingRequests", new[] { "User.Manage" } },
+        { "Admin_RejectRequest", new[] { "User.Manage" } },
+        { "Admin_ApproveRequest", new[] { "User.Manage" } },
+        
+        // Kullanıcı yetkilerini çeken endpoint, kullanıcının rol, cihaz veya etiket atamasını yapan herkes tarafından okunabilmeli!
+        { "Admin_GetUserAccess", new[] { "User.ManageRoles", "User.ManageComputers", "User.ManageTags" } },
+        { "Admin_AssignComputers", new[] { "User.ManageComputers" } },
+        { "Admin_AssignTags", new[] { "User.ManageTags" } },
+        
+        // Cihazları atama yaparken listelemek için Tag yöneten veya User-Computer yöneten herkes erişebilmeli
+        { "Admin_GetAllComputersForAssignment", new[] { "User.ManageComputers", "Tag.Manage" } }, 
+        
+        // Roller listesini, rol ataması yapacak olan "User.ManageRoles" yetkilisi de görebilmeli
+        { "Admin_GetRoles", new[] { "Role.Manage", "User.ManageRoles" } },
+        { "Admin_CreateRole", new[] { "Role.Manage" } },
+        { "Admin_UpdateRolePermissions", new[] { "Role.Manage" } },
+        { "Admin_DeleteRole", new[] { "Role.Manage" } },
+        
+        // Etiketler listesini, etiket ataması yapacak olan "User.ManageTags" yetkilisi de görebilmeli
+        { "Admin_GetTags", new[] { "Tag.Manage", "User.ManageTags" } },
+        { "Admin_CreateTag", new[] { "Tag.Manage" } },
+        { "Admin_DeleteTag", new[] { "Tag.Manage" } },
+        { "Admin_AssignComputersToTag", new[] { "Tag.Manage" } },
+        { "Admin_GetTagAssignedComputerIds", new[] { "Tag.Manage" } },
 
         // ==========================================
         // --- COMPUTER CONTROLLER YETKİLERİ ---
         // ==========================================
-        { "Computer_GetComputer", AppPermissions.Computer_Read },
-        { "Computer_GetComputerDisks", AppPermissions.Computer_Read },
-        { "Computer_UpdateThresholds", AppPermissions.Computer_SetThreshold },
-        { "Computer_UpdateComputerTags", AppPermissions.Computer_AssignTag },
-        { "Computer_UpdateDisplayName", AppPermissions.Computer_Rename },
-        { "Computer_GetMetricsHistory", AppPermissions.Computer_Read },
-        { "Computer_GetAllComputers", AppPermissions.Computer_Read },
-        { "Computer_DeleteComputer", AppPermissions.Computer_Delete },
-        { "Computer_GetMyTags", AppPermissions.Tag_Manage }
+        { "Computer_GetComputer", new[] { "Computer.Read" } },
+        { "Computer_GetComputerDisks", new[] { "Computer.Read" } },
+        { "Computer_UpdateThresholds", new[] { "Computer.SetThreshold" } },
+        { "Computer_UpdateComputerTags", new[] { "Computer.AssignTag" } },
+        { "Computer_UpdateDisplayName", new[] { "Computer.Rename" } },
+        { "Computer_GetMetricsHistory", new[] { "Computer.Read" } },
+        { "Computer_GetAllComputers", new[] { "Computer.Read" } },
+        { "Computer_DeleteComputer", new[] { "Computer.Delete" } },
+        { "Computer_GetMyTags", new[] { "Tag.Manage" } }
     };
 
-    public static AppPermissions? GetRequiredPermission(string controllerName, string actionName)
+    // Geri dönüş tipini string[] yaptık
+    public static string[]? GetRequiredPermissions(string controllerName, string actionName)
     {
         string key = $"{controllerName}_{actionName}";
-        if (_permissions.TryGetValue(key, out var permission))
+        if (_permissions.TryGetValue(key, out var perms))
         {
-            return permission;
+            return perms;
         }
 
-        // Eğer listeye eklenmemişse null döner (Bu sayede filter tarafında "yetki istemiyor" olarak algılanır)
         return null;
     }
 }

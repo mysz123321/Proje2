@@ -23,19 +23,16 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
         string controllerName = actionDescriptor.ControllerName;
         string actionName = actionDescriptor.ActionName;
 
-        // 1. Registry'den bu endpoint için gereken Enum yetkisini bul
-        AppPermissions? requiredPermissionEnum = EndpointPermissionRegistry.GetRequiredPermission(controllerName, actionName);
+        // 1. Registry'den bu endpoint için gereken yetkileri string dizisi olarak al
+        string[]? requiredPermissions = EndpointPermissionRegistry.GetRequiredPermissions(controllerName, actionName);
 
-        // Eğer bu endpoint için bir yetki tanımlanmamışsa veya None ise geçişe izin ver
-        if (requiredPermissionEnum == null || requiredPermissionEnum == AppPermissions.None)
+        // Eğer bu endpoint için bir yetki tanımlanmamışsa geçişe izin ver
+        if (requiredPermissions == null || requiredPermissions.Length == 0)
         {
             return;
         }
 
-        // 2. Enum değerini veritabanındaki string formata çevir (Örn: Computer_Delete -> Computer.Delete)
-        string requiredPermissionString = requiredPermissionEnum.ToString().Replace("_", ".");
-
-        // 3. Kullanıcı Giriş Kontrolü
+        // 2. Kullanıcı Giriş Kontrolü
         var user = context.HttpContext.User;
         if (user.Identity?.IsAuthenticated != true)
         {
@@ -52,13 +49,13 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
             return;
         }
 
-        // 4. Kullanıcının Yetkisini DB'den Kontrol Et
+        // 3. Kullanıcının Yetkisini DB'den Kontrol Et (Dizideki yetkilerden HERHANGİ BİRİNE sahip olması yeterli)
         bool hasPermission = await _db.Users
             .AsNoTracking()
             .Where(u => u.Id == userId && !u.IsDeleted)
             .SelectMany(u => u.Roles)
             .SelectMany(r => r.RolePermissions)
-            .AnyAsync(rp => rp.Permission.Name == requiredPermissionString);
+            .AnyAsync(rp => requiredPermissions.Contains(rp.Permission.Name));
 
         if (!hasPermission)
         {

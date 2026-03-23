@@ -4,16 +4,20 @@
     {
         public int Id { get; set; }
 
-        // Uyarıyı gidermek için = string.Empty; ekledik
         public string Title { get; set; } = string.Empty;
 
         public string? Icon { get; set; }
 
-        // Uyarıyı gidermek için = string.Empty; ekledik
         public string TargetView { get; set; } = string.Empty;
 
-        public string? RequiredPermission { get; set; }
-
         public int OrderIndex { get; set; }
+
+        // --- YENİ EKLENEN İLİŞKİ ALANLARI ---
+
+        // Veritabanında tutulacak Foreign Key kolonu
+        public int? RequiredPermissionId { get; set; }
+
+        // Kod tarafında ilişkili Permission nesnesine erişmek için Navigation Property
+        public Permission? RequiredPermission { get; set; }
     }
 }

@@ -165,6 +165,11 @@ namespace Staj2.Infrastructure.Data
                         j.ToTable("UserRoles");
                     }
                 );
+            modelBuilder.Entity<SidebarItem>()
+        .HasOne(s => s.RequiredPermission)
+        .WithMany() // Bir izne birden fazla SidebarItem bağlı olabilir, bu yüzden WithMany boş kalıyor
+        .HasForeignKey(s => s.RequiredPermissionId)
+        .OnDelete(DeleteBehavior.SetNull); // Eğer Permission silinirse, menü öğesi silinmesin ama izin şartı kalksın (veya ihtiyacına göre Restrict yapabilirsin)
 
             // Computer -> ComputerDisk (One-to-Many)
             modelBuilder.Entity<ComputerDisk>()

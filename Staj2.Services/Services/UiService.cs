@@ -32,13 +32,14 @@ public class UiService : IUiService
             .ToList();
 
         var allSidebarItems = await _db.SidebarItems
+            .Include(x => x.RequiredPermission) // EKLENDİ: İlişkili tabloyu dahil ediyoruz
             .AsNoTracking()
             .OrderBy(x => x.OrderIndex)
             .ToListAsync();
 
         var authorizedItems = allSidebarItems.Where(item =>
-            string.IsNullOrEmpty(item.RequiredPermission) ||
-            userPermissions.Contains(item.RequiredPermission)
+            item.RequiredPermissionId == null || // GÜNCELLENDİ: Artık Null kontrolünü ID üzerinden yapıyoruz
+            (item.RequiredPermission != null && userPermissions.Contains(item.RequiredPermission.Name)) // GÜNCELLENDİ: Nesnenin içindeki Name değerini kontrol ediyoruz
         ).ToList();
 
         return (true, null, authorizedItems);
