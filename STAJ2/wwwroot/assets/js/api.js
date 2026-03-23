@@ -108,8 +108,9 @@
 
         if (!res.ok) {
             const msg = (typeof data === "string" && data) ? data
-                : (data && data.message) ? data.message
-                    : `HTTP ${res.status}`;
+                : (data && data.errorMessage) ? data.errorMessage // Bizim yeni Backend formatımız!
+                    : (data && data.message) ? data.message
+                        : `Sistem Hatası (HTTP ${res.status})`;
             throw new Error(msg);
         }
         return data;
