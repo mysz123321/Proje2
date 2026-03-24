@@ -9,7 +9,7 @@ public static class EndpointPermissionRegistry
         // --- ADMIN CONTROLLER YETKİLERİ ---
         // ==========================================
         // Kullanıcı listesini görmek için bu 4 yetkiden herhangi biri yeterli olmalı
-        { "Admin_GetAllUsers", new[] { "User.Read", "User.ManageRoles", "User.ManageComputers", "User.ManageTags" } },
+        { "Admin_GetAllUsers",  new[] { "User.Read", "User.ManageRoles", "User.ManageComputers", "User.ManageTags" } },
         { "Admin_DeleteUser", new[] { "User.ManageRoles" } },
         { "Admin_ChangeUserRoles", new[] { "User.ManageRoles" } },
 

@@ -148,7 +148,6 @@ public class ComputerController : ControllerBase
     //}
 
     [HttpGet("tags")]
-    [Authorize]
     public async Task<IActionResult> GetMyTags()
     {
         var tags = await _computerService.GetMyTagsAsync(GetUserId(), IsAdmin());

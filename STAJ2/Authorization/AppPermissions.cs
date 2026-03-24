@@ -14,5 +14,4 @@ public enum AppPermissions
     Computer_SetThreshold,
     Computer_AssignTag,
     Tag_Manage
-    // Projendeki diğer yetkileri buraya ekleyebilirsin
 }
