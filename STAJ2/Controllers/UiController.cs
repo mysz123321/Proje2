@@ -52,11 +52,11 @@ public class UiController : ControllerBase
         return Ok(result.Permissions);
     }
 
-    [HttpGet("user-actions")]
-    [Authorize]
-    public async Task<IActionResult> GetUserActions()
-    {
-        var actions = await _uiService.GetUserActionsAsync();
-        return Ok(actions);
-    }
+    //[HttpGet("user-actions")]
+    //[Authorize]
+    //public async Task<IActionResult> GetUserActions()
+    //{
+    //    var actions = await _uiService.GetUserActionsAsync();
+    //    return Ok(actions);
+    //}
 }

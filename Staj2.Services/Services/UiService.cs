@@ -87,8 +87,8 @@ public class UiService : IUiService
         return (true, null, livePermissions);
     }
 
-    public async Task<object> GetUserActionsAsync()
-    {
-        return await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
-    }
+    //public async Task<object> GetUserActionsAsync()
+    //{
+    //    return await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
+    //}
 }

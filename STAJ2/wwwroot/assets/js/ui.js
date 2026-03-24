@@ -288,16 +288,11 @@
 
     async function loadUsersView(container) {
         try {
-            // 1. SIFIR FRONTEND YETKİ KONTROLÜ.
-            // Direkt olarak verileri ve o kullanıcının basabileceği butonları (actions) backend'den istiyoruz.
-            // Eğer kullanıcının yetkisi yoksa, senin yazdığın [HasPermission] attribute'u zaten 403 Forbidden dönecek ve kod direkt 'catch' bloğuna düşecek.
-            const [users, actions] = await Promise.all([
-                api.get("/api/Admin/users"),
-                api.get("/api/Ui/user-actions")
-            ]);
+            // Sadece kullanıcıları çekiyoruz
+            const users = await api.get("/api/Admin/users");
 
             pgState.users.data = users;
-            pgState.users.actions = actions; // Tablodaki işlemler (sil, düzenle vb.) bile DB'den yetkiye göre geliyor! Mükemmel.
+            // pgState.users.actions sildik
             pgState.users.page = 1;
 
             container.innerHTML = `
@@ -320,8 +315,6 @@
             ui.renderUsersTable();
 
         } catch (e) {
-            // 2. BACKEND REDDEDERSE BURASI ÇALIŞIR
-            // api.js dosyan 403 veya 401 döndürdüğünde şık bir "Yetkisiz Erişim" ekranı basarız.
             container.innerHTML = `
             <div class="d-flex flex-column align-items-center justify-content-center p-5 text-center" style="min-height: 400px; color:var(--text-muted);">
                 <i class="bi bi-shield-lock-fill text-danger mb-3" style="font-size: 3rem;"></i>
@@ -457,33 +450,29 @@
 
                 let actionButtons = '';
 
-                // API'den gelen dinamik butonları dönüyoruz
-                state.actions.forEach(action => {
+                // Roller Butonu
+                if (window.auth.hasPermission('User.ManageRoles')) {
+                    actionButtons += `<button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Roller"><i class="bi bi-shield-check"></i> Roller</button> `;
+                }
 
-                    // --- 1. YENİ KONTROL: Eğer eylem 'Sil' ise ve giriş yapan kişi 'Yönetici' DEĞİLSE butonu gizle! ---
-                    if (action.title === 'Sil' && !window.auth.hasRole('Yönetici')) {
-                        return; // Döngüde sonraki eyleme geç (butonu çizme)
+                // Cihazlar Butonu
+                if (window.auth.hasPermission('User.ManageComputers')) {
+                    actionButtons += `<button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihazlar"><i class="bi bi-pc-display"></i> Cihazlar</button> `;
+                }
+
+                // Etiketler Butonu
+                if (window.auth.hasPermission('User.ManageTags')) {
+                    actionButtons += `<button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiketler"><i class="bi bi-tags"></i> Etiketler</button> `;
+                }
+
+                // Sil Butonu (Hem Yönetici rolüne hem de Role yönetimi iznine sahip mi diye bakıyoruz)
+                if (window.auth.hasRole('Yönetici') && window.auth.hasPermission('User.ManageRoles')) {
+                    if (isAdmin) {
+                        actionButtons += `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span> `;
+                    } else {
+                        actionButtons += `<button class="btn btn-outline-danger btn-sm" onclick="ui.deleteUser(${u.id})" title="Sil"><i class="bi bi-trash"></i></button> `;
                     }
-
-                    // 2. Yetki kontrolü (Diğer işlemler için)
-                    if (!action.requiredPermission || window.auth.hasPermission(action.requiredPermission)) {
-
-                        // 3. Hedef Kullanıcı Yönetici ise Silinmez Koruması
-                        if (action.title === 'Sil' && isAdmin) {
-                            actionButtons += `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span> `;
-                            return; // Döngüde sonraki butona geç
-                        }
-
-                        // 4. Veritabanındaki şablonda geçen değişkenleri (USER_ID, USER_NAME) gerçek değerlerle değiştir
-                        const onClickCode = action.onClickFunction
-                            .replace(/USER_ID/g, u.id)
-                            .replace(/USER_NAME/g, u.username);
-
-                        // Butonu HTML olarak ekle (Sil butonuysa sadece ikonu göster, diğerlerinde Title da yaz)
-                        const btnText = action.title !== 'Sil' ? ` ${action.title}` : '';
-                        actionButtons += `<button class="btn ${action.buttonClass} btn-sm" onclick="${onClickCode}" title="${action.title}"><i class="${action.icon}"></i>${btnText}</button> `;
-                    }
-                });
+                }
 
                 if (actionButtons === '') {
                     actionButtons = `<span class="text-muted small fst-italic">İşlem Yetkisi Yok</span>`;

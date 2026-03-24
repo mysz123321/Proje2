@@ -156,17 +156,17 @@ public static class DbSeeder
         }
 
         // --- 7. DİNAMİK KULLANICI TABLOSU BUTONLARI ---
-        if (!await context.UserTableActions.AnyAsync())
-        {
-            context.UserTableActions.AddRange(new List<UserTableAction>
-            {
-                new UserTableAction { Title = "Roller", Icon = "bi bi-shield-check", ButtonClass = "btn-outline-primary", OnClickFunction = "ui.openUserRolesModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageRoles", OrderIndex = 1 },
-                new UserTableAction { Title = "Cihazlar", Icon = "bi bi-pc-display", ButtonClass = "btn-outline-success", OnClickFunction = "ui.openUserComputerAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageComputers", OrderIndex = 2 },
-                new UserTableAction { Title = "Etiketler", Icon = "bi bi-tags", ButtonClass = "btn-outline-warning", OnClickFunction = "ui.openUserTagAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageTags", OrderIndex = 3 },
-                new UserTableAction { Title = "Sil", Icon = "bi bi-trash", ButtonClass = "btn-outline-danger", OnClickFunction = "ui.deleteUser(USER_ID)", RequiredPermission = "User.ManageRoles", OrderIndex = 4 }
-            });
-            await context.SaveChangesAsync();
-            Console.WriteLine(">>> Dinamik Kullanıcı Tablosu Butonları oluşturuldu.");
-        }
+        //if (!await context.UserTableActions.AnyAsync())
+        //{
+        //    context.UserTableActions.AddRange(new List<UserTableAction>
+        //    {
+        //        new UserTableAction { Title = "Roller", Icon = "bi bi-shield-check", ButtonClass = "btn-outline-primary", OnClickFunction = "ui.openUserRolesModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageRoles", OrderIndex = 1 },
+        //        new UserTableAction { Title = "Cihazlar", Icon = "bi bi-pc-display", ButtonClass = "btn-outline-success", OnClickFunction = "ui.openUserComputerAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageComputers", OrderIndex = 2 },
+        //        new UserTableAction { Title = "Etiketler", Icon = "bi bi-tags", ButtonClass = "btn-outline-warning", OnClickFunction = "ui.openUserTagAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageTags", OrderIndex = 3 },
+        //        new UserTableAction { Title = "Sil", Icon = "bi bi-trash", ButtonClass = "btn-outline-danger", OnClickFunction = "ui.deleteUser(USER_ID)", RequiredPermission = "User.ManageRoles", OrderIndex = 4 }
+        //    });
+        //    await context.SaveChangesAsync();
+        //    Console.WriteLine(">>> Dinamik Kullanıcı Tablosu Butonları oluşturuldu.");
+        //}
     }
 }
