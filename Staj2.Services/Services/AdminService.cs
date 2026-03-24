@@ -23,7 +23,7 @@ public class AdminService : IAdminService
     public async Task<object> GetAllPermissionsAsync()
     {
         return await _db.Permissions
-            .Select(p => new { p.Id, p.Name, p.Description })
+            .Select(p => new { p.Id, p.Name, p.Description }) // Description buraya geri eklendi
             .ToListAsync();
     }
 
@@ -84,19 +84,7 @@ public class AdminService : IAdminService
 
         // Gelen yeni yetki ID'lerini veritabanından doğrula ve ekle
         var validPermissions = await _db.Permissions.Where(p => request.PermissionIds.Contains(p.Id)).ToListAsync();
-        bool requiresUserRead = validPermissions.Any(p =>
-            p.Name == "User.ManageRoles" ||
-            p.Name == "User.ManageComputers" ||
-            p.Name == "User.ManageTags");
 
-        if (requiresUserRead && !validPermissions.Any(p => p.Name == "User.Read"))
-        {
-            var userReadPerm = await _db.Permissions.FirstOrDefaultAsync(p => p.Name == "User.Read");
-            if (userReadPerm != null)
-            {
-                validPermissions.Add(userReadPerm);
-            }
-        }
         foreach (var perm in validPermissions)
         {
             role.RolePermissions.Add(new RolePermission

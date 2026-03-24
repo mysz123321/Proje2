@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// STAJ2/Seed/DbSeeder.cs
+using Microsoft.EntityFrameworkCore;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 
@@ -12,7 +13,7 @@ public static class DbSeeder
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await context.Database.MigrateAsync();
-
+        
         // 1. Rolleri Ekle
         if (!await context.Roles.AnyAsync())
         {
@@ -24,7 +25,7 @@ public static class DbSeeder
             await context.SaveChangesAsync();
         }
 
-        // --- 2. SİSTEM YETKİLERİNİ (PERMISSIONS) EKLE ---
+        // --- 2. SİSTEM YETKİLERİNİ (PERMISSIONS) EKLE (Description KALDIRILDI) ---
         var defaultPermissions = new List<Permission>
         {
             new Permission { Name = "Computer.Read", Description = "Cihazları Görüntüleyebilir" },
@@ -35,13 +36,11 @@ public static class DbSeeder
             new Permission { Name = "Computer.Filter", Description = "Cihazları ve Metrikleri Filtreleyebilir" },
             new Permission { Name = "Role.Manage", Description = "Sistem Rollerini ve Yetkilerini Yönetebilir" },
             new Permission { Name = "Tag.Manage", Description = "Etiketleri Yönetebilir" },
-    
-            // --- KULLANICI YÖNETİMİ YETKİLERİ ---
-            new Permission { Name = "User.Manage", Description = "Kullanıcı Kayıtlarını Onaylayabilir/Yönetebilir" }, // MEVCUT YETKİ - KORUNDU
-            new Permission { Name = "User.Read", Description = "Kullanıcıları Listeler (Görüntüleme)" }, // YENİ EKLENDİ
-            new Permission { Name = "User.ManageRoles", Description = "Kullanıcı Rollerini Değiştirebilir" }, // YENİ EKLENDİ
-            new Permission { Name = "User.ManageComputers", Description = "Kullanıcının Cihaz Erişimlerini Değiştirebilir" }, // YENİ EKLENDİ
-            new Permission { Name = "User.ManageTags", Description = "Kullanıcının Etiket Erişimlerini Değiştirebilir" } // YENİ EKLENDİ
+            new Permission { Name = "User.Manage", Description = "Kullanıcı Kayıtlarını Onaylayabilir/Yönetebilir" },
+            new Permission { Name = "User.Read", Description = "Kullanıcıları Listeler (Görüntüleme)" },
+            new Permission { Name = "User.ManageRoles", Description = "Kullanıcı Rollerini Değiştirebilir" },
+            new Permission { Name = "User.ManageComputers", Description = "Kullanıcının Cihaz Erişimlerini Değiştirebilir" },
+            new Permission { Name = "User.ManageTags", Description = "Kullanıcının Etiket Erişimlerini Değiştirebilir" }
         };
 
         foreach (var perm in defaultPermissions)
@@ -65,7 +64,7 @@ public static class DbSeeder
                 IsApproved = true
             };
 
-            adminUser.Roles.Add(adminRole); // Listeye ekliyoruz
+            adminUser.Roles.Add(adminRole);
             context.Users.Add(adminUser);
             await context.SaveChangesAsync();
             Console.WriteLine(">>> Admin kullanıcısı (admin / Admin123!) oluşturuldu.");
@@ -81,7 +80,6 @@ public static class DbSeeder
         bool permissionsAdded = false;
         foreach (var perm in allPermissions)
         {
-            // Eğer Yönetici rolünde bu yetki yoksa, ekle
             if (!adminRoleForPerms.RolePermissions.Any(rp => rp.PermissionId == perm.Id))
             {
                 adminRoleForPerms.RolePermissions.Add(new RolePermission
@@ -99,23 +97,17 @@ public static class DbSeeder
             Console.WriteLine(">>> Yönetici rolüne tüm sistem yetkileri (Permissions) atandı.");
         }
 
+        // --- 5. MENÜLERİ OLUŞTUR (RequiredPermissionId ALANI SİLİNDİ) ---
         if (!await context.SidebarItems.AnyAsync())
         {
             var sidebarItems = new List<SidebarItem>
             {
-                // Herkese açık menüler (RequiredPermissionId = null)
-                new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", RequiredPermissionId = null, OrderIndex = 1 },
-                new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", RequiredPermissionId = null, OrderIndex = 2 },
-    
-                // YÖNETİM MENÜLERİ
-                // Kayıt istekleri User.Manage yetkisinde kalıyor
-                new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "User.Manage")?.Id, OrderIndex = 3 },
-    
-                // Kullanıcılar menüsü artık sadece User.Read yetkisi ile listelenecek
-                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "User.Read")?.Id, OrderIndex = 4 },
-
-                new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "Role.Manage")?.Id, OrderIndex = 5 },
-                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", RequiredPermissionId = allPermissions.FirstOrDefault(p => p.Name == "Tag.Manage")?.Id, OrderIndex = 6 }
+                new SidebarItem { Title = "Canlı İzleme", Icon = "bi bi-activity text-success", TargetView = "computers", OrderIndex = 1 },
+                new SidebarItem { Title = "Tüm Bilgisayarlar", Icon = "bi bi-pc-display", TargetView = "all-computers", OrderIndex = 2 },
+                new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", OrderIndex = 3 },
+                new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", OrderIndex = 4 },
+                new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", OrderIndex = 5 },
+                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", OrderIndex = 6 }
             };
 
             context.SidebarItems.AddRange(sidebarItems);
@@ -123,30 +115,35 @@ public static class DbSeeder
             Console.WriteLine(">>> Dinamik Sidebar menü elemanları oluşturuldu.");
         }
 
-        // --- SİDEBAR YETKİ DÜZELTMESİ (TÜM MENÜLER İÇİN GENEL KONTROL) ---
+        // --- 6. TERSİNE İLİŞKİ: HANGİ YETKİ HANGİ MENÜYÜ AÇAR? ---
         var existingSidebarItems = await context.SidebarItems.ToListAsync();
         bool isSidebarUpdated = false;
 
-        // Hangi hedefin (TargetView) hangi yetkiyi (Permission Name) gerektirdiğini eşleştiriyoruz
-        var sidebarMappings = new Dictionary<string, string>
-        {
-            { "requests", "User.Manage" },
-            { "users", "User.Read" },
-            { "roles", "Role.Manage" },
-            { "tags", "Tag.Manage" }
-        };
+        // Yetki Adı -> Açacağı Menünün TargetView'i
+        var permissionToSidebarMappings = new Dictionary<string, string>
+{
+    { "User.Manage", "requests" },
+    
+    // --- KULLANICILAR MENÜSÜNÜ AÇACAK YETKİLER ---
+    { "User.Read", "users" },
+    { "User.ManageRoles", "users" },      // YENİ EKLENDİ
+    { "User.ManageComputers", "users" },  // YENİ EKLENDİ
+    { "User.ManageTags", "users" },       // YENİ EKLENDİ
 
-        foreach (var mapping in sidebarMappings)
+    { "Role.Manage", "roles" },
+    { "Tag.Manage", "tags" }
+};
+
+        foreach (var mapping in permissionToSidebarMappings)
         {
-            var sidebarItem = existingSidebarItems.FirstOrDefault(s => s.TargetView == mapping.Key);
-            if (sidebarItem != null)
+            var permission = allPermissions.FirstOrDefault(p => p.Name == mapping.Key);
+            var targetMenu = existingSidebarItems.FirstOrDefault(s => s.TargetView == mapping.Value);
+
+            if (permission != null && targetMenu != null)
             {
-                var expectedPermissionId = allPermissions.FirstOrDefault(p => p.Name == mapping.Value)?.Id;
-
-                // Eğer veritabanındaki ID, olması gereken ID'den farklıysa (veya null ise) güncelle
-                if (sidebarItem.RequiredPermissionId != expectedPermissionId)
+                if (permission.SidebarItemId != targetMenu.Id)
                 {
-                    sidebarItem.RequiredPermissionId = expectedPermissionId;
+                    permission.SidebarItemId = targetMenu.Id;
                     isSidebarUpdated = true;
                 }
             }
@@ -155,9 +152,10 @@ public static class DbSeeder
         if (isSidebarUpdated)
         {
             await context.SaveChangesAsync();
-            Console.WriteLine(">>> Tüm Sidebar menülerinin yetki ID'leri eşitlendi/güncellendi.");
+            Console.WriteLine(">>> Yetkiler (Permissions) başarıyla ilgili Sidebar menülerine bağlandı.");
         }
-        // --- DİNAMİK KULLANICI TABLOSU BUTONLARI ---
+
+        // --- 7. DİNAMİK KULLANICI TABLOSU BUTONLARI ---
         if (!await context.UserTableActions.AnyAsync())
         {
             context.UserTableActions.AddRange(new List<UserTableAction>
@@ -165,7 +163,6 @@ public static class DbSeeder
                 new UserTableAction { Title = "Roller", Icon = "bi bi-shield-check", ButtonClass = "btn-outline-primary", OnClickFunction = "ui.openUserRolesModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageRoles", OrderIndex = 1 },
                 new UserTableAction { Title = "Cihazlar", Icon = "bi bi-pc-display", ButtonClass = "btn-outline-success", OnClickFunction = "ui.openUserComputerAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageComputers", OrderIndex = 2 },
                 new UserTableAction { Title = "Etiketler", Icon = "bi bi-tags", ButtonClass = "btn-outline-warning", OnClickFunction = "ui.openUserTagAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageTags", OrderIndex = 3 },
-                // HideFromAdmin kaldırıldı
                 new UserTableAction { Title = "Sil", Icon = "bi bi-trash", ButtonClass = "btn-outline-danger", OnClickFunction = "ui.deleteUser(USER_ID)", RequiredPermission = "User.ManageRoles", OrderIndex = 4 }
             });
             await context.SaveChangesAsync();

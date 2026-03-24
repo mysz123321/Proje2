@@ -15,6 +15,7 @@ public class UiService : IUiService
 
     public async Task<(bool IsSuccess, string? ErrorMessage, object? Data)> GetSidebarItemsAsync(int userId)
     {
+        // 1. Kullanıcıyı ve rollerine bağlı yetkileri çekiyoruz
         var user = await _db.Users
             .AsNoTracking()
             .Include(x => x.Roles)
@@ -25,25 +26,45 @@ public class UiService : IUiService
         if (user == null)
             return (false, "Kullanıcı bulunamadı.", null);
 
-        var userPermissions = user.Roles
+        // 2. Kullanıcının sahip olduğu yetkilerin açabildiği SidebarItem ID'lerini bir listeye alıyoruz
+        var userAllowedSidebarItemIds = user.Roles
             .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.Name)
+            .Where(rp => rp.Permission.SidebarItemId != null)
+            .Select(rp => rp.Permission.SidebarItemId!.Value)
             .Distinct()
             .ToList();
 
+        // 3. Veritabanındaki tüm korumalı (bir yetkiye bağlanmış) SidebarItem ID'lerini buluyoruz
+        var allProtectedSidebarItemIds = await _db.Permissions
+            .Where(p => p.SidebarItemId != null)
+            .Select(p => p.SidebarItemId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        // 4. Tüm menü ögelerini sırasına göre çekiyoruz
         var allSidebarItems = await _db.SidebarItems
-            .Include(x => x.RequiredPermission) // EKLENDİ: İlişkili tabloyu dahil ediyoruz
             .AsNoTracking()
             .OrderBy(x => x.OrderIndex)
             .ToListAsync();
 
+        // 5. Menüleri filtreliyoruz
         var authorizedItems = allSidebarItems.Where(item =>
-            item.RequiredPermissionId == null || // GÜNCELLENDİ: Artık Null kontrolünü ID üzerinden yapıyoruz
-            (item.RequiredPermission != null && userPermissions.Contains(item.RequiredPermission.Name)) // GÜNCELLENDİ: Nesnenin içindeki Name değerini kontrol ediyoruz
-        ).ToList();
+            !allProtectedSidebarItemIds.Contains(item.Id) || // Herkese açık menüler
+            userAllowedSidebarItemIds.Contains(item.Id)      // Kullanıcının yetkisinin olduğu menüler
+        ).Select(item => new
+        {
+            item.Id,
+            item.Title,
+            item.Icon,
+            item.TargetView,
+            item.OrderIndex,
+            // Eğer bu menünün ID'si korunan menüler listesindeyse true döner
+            IsProtected = allProtectedSidebarItemIds.Contains(item.Id)
+        }).ToList();
 
         return (true, null, authorizedItems);
     }
+
 
     public async Task<(bool IsSuccess, string? ErrorMessage, List<string>? Permissions)> GetMyPermissionsAsync(int userId)
     {

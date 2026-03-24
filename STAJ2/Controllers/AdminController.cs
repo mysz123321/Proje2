@@ -22,14 +22,16 @@ public class AdminController : ControllerBase
     private readonly IMailSender _mail;
     private readonly IAdminService _adminService;
 
-    public AdminController( IMailSender mail, IAdminService adminService)
+    public AdminController(IMailSender mail, IAdminService adminService)
     {
         _mail = mail;
         _adminService = adminService;
     }
 
     // --- KULLANICI YÖNETİMİ ---
+
     [HttpGet("users")]
+    [HasPermission(AppPermissions.User_Read, AppPermissions.User_ManageRoles, AppPermissions.User_ManageComputers, AppPermissions.User_ManageTags)]
     public async Task<IActionResult> GetAllUsers()
     {
         var users = await _adminService.GetAllUsersAsync();
@@ -49,6 +51,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("users/{userId}/change-roles")]
+    [HasPermission(AppPermissions.User_ManageRoles)]
     public async Task<IActionResult> ChangeUserRoles(int userId, [FromBody] ChangeRolesRequest request)
     {
         var errorMessage = await _adminService.ChangeUserRolesAsync(userId, request);
@@ -64,6 +67,7 @@ public class AdminController : ControllerBase
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
 
     [HttpGet("requests")]
+    [HasPermission(AppPermissions.User_Manage)]
     public async Task<IActionResult> PendingRequests()
     {
         var requests = await _adminService.GetPendingRequestsAsync();
@@ -72,6 +76,7 @@ public class AdminController : ControllerBase
 
     // REDDETME İŞLEMİ
     [HttpPost("requests/reject")]
+    [HasPermission(AppPermissions.User_Manage)]
     public async Task<IActionResult> RejectRequest([FromBody] RejectRegistrationRequest request)
     {
         int? adminId = null;
@@ -96,7 +101,6 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Hatayı terminale kırmızı renkli yazdıralım ki hemen fark edelim
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
             Console.ResetColor();
@@ -107,6 +111,7 @@ public class AdminController : ControllerBase
 
     // ONAYLAMA İŞLEMİ
     [HttpPost("requests/approve/{id}")]
+    [HasPermission(AppPermissions.User_Manage)]
     public async Task<IActionResult> ApproveRequest(int id, [FromBody] ChangeRoleRequest? req)
     {
         int? adminId = null;
@@ -128,7 +133,6 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Hatayı terminale kırmızı renkli yazdıralım ki hemen fark edelim
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
             Console.ResetColor();
@@ -138,17 +142,17 @@ public class AdminController : ControllerBase
     }
 
     // --- ETİKET YÖNETİMİ ---
+
     [HttpGet("tags")]
-    [Authorize]
+    [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetTags()
     {
         var tags = await _adminService.GetTagsAsync();
         return Ok(tags);
     }
 
-
-
     [HttpPost("tags")]
+    [HasPermission(AppPermissions.Tag_Manage)]
     public async Task<IActionResult> CreateTag([FromBody] TagCreateRequest request)
     {
         int? userId = null;
@@ -164,6 +168,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("tags/{id:int}")]
+    [HasPermission(AppPermissions.Tag_Manage)]
     public async Task<IActionResult> DeleteTag(int id)
     {
         var errorMessage = await _adminService.DeleteTagAsync(id);
@@ -176,33 +181,32 @@ public class AdminController : ControllerBase
 
     // --- ROL VE YETKİ YÖNETİMİ ---
 
-    // 1. Sistemdeki tüm rolleri getir
     [HttpGet("roles")]
+    [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetRoles()
     {
         var roles = await _adminService.GetRolesAsync();
         return Ok(roles);
     }
 
-    // 2. Sistemdeki tüm olası yetkileri (Permissions) getir (Arayüzde checkbox listesi oluşturmak için)
     [HttpGet("permissions")]
+    [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> GetAllPermissions()
     {
         var permissions = await _adminService.GetAllPermissionsAsync();
         return Ok(permissions);
     }
 
-    // 3. Belirli bir rolün sahip olduğu yetkilerin ID'lerini getir (Hangi checkbox'lar seçili olacak?)
     [HttpGet("roles/{roleId:int}/permissions")]
+    [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> GetRolePermissions(int roleId)
     {
         var permissionIds = await _adminService.GetRolePermissionsAsync(roleId);
         return Ok(permissionIds);
     }
 
-
-    // 4. Checkbox'lardan gelen yeni yetkileri role kaydet
     [HttpPost("roles/{roleId:int}/permissions")]
+    [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
     {
         int? currentUserId = null;
@@ -219,91 +223,29 @@ public class AdminController : ControllerBase
 
         return Ok(new { message = "Rol yetkileri başarıyla güncellendi." });
     }
-    // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
-
-    [HttpGet("users/{userId:int}/access")]
-    public async Task<IActionResult> GetUserAccess(int userId)
-    {
-        var result = await _adminService.GetUserAccessAsync(userId);
-
-        if (result == null) return NotFound();
-
-        return Ok(result);
-    }
-
-    // 2. Kullanıcıya doğrudan cihaz atama
-    [HttpPost("users/{userId:int}/assign-computers")]
-    public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
-    {
-        var errorMessage = await _adminService.AssignComputersAsync(userId, req);
-
-        if (errorMessage != null)
-            return NotFound(new { message = errorMessage });
-
-        return Ok(new { message = "Cihaz atamaları güncellendi." });
-    }
-
-    // 3. Kullanıcıya etiket atama
-    [HttpPost("users/{userId:int}/assign-tags")]
-    public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
-    {
-        var errorMessage = await _adminService.AssignTagsAsync(userId, req);
-
-        if (errorMessage != null)
-            return NotFound(new { message = errorMessage });
-
-        return Ok(new { message = "Etiket atamaları güncellendi." });
-    }
-
-    [HttpPost("tags/{tagId:int}/assign-computers")]
-    public async Task<IActionResult> AssignComputersToTag(int tagId, [FromBody] AssignComputersToTagRequest req)
-    {
-        var errorMessage = await _adminService.AssignComputersToTagAsync(tagId, req);
-
-        if (errorMessage != null)
-            return NotFound(new { message = errorMessage });
-
-        return Ok(new { message = "Cihaz atamaları başarıyla güncellendi." });
-    }
-
-
-    [HttpGet("computers/all")]
-    public async Task<IActionResult> GetAllComputersForAssignment()
-    {
-        var computers = await _adminService.GetAllComputersForAssignmentAsync();
-        return Ok(computers);
-    }
-
-    [HttpGet("tags/{tagId:int}/assigned-computer-ids")]
-    public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
-    {
-        var assignedIds = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
-        return Ok(assignedIds);
-    }
-
 
     [HttpPost("roles")]
+    [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> CreateRole([FromBody] Staj2.Services.Models.CreateRoleRequest request)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        // İşlemi yapanın ID'sini alıyoruz
         int? currentUserId = null;
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int uid))
             currentUserId = uid;
 
-        // Servisi çağırıyoruz
         var errorMessage = await _adminService.CreateRoleAsync(request, currentUserId);
 
-        if (errorMessage != null) // Eğer hata mesajı döndüyse (null değilse)
+        if (errorMessage != null)
             return BadRequest(new { message = errorMessage });
 
         return Ok(new { message = "Rol başarıyla oluşturuldu." });
     }
 
     [HttpDelete("roles/{id:int}")]
+    [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> DeleteRole(int id)
     {
         int? currentUserId = null;
@@ -319,5 +261,70 @@ public class AdminController : ControllerBase
             return BadRequest(new { message = errorMessage });
 
         return Ok(new { message = "Rol başarıyla silindi." });
+    }
+
+    // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
+
+    [HttpGet("users/{userId:int}/access")]
+    [HasPermission(AppPermissions.User_ManageComputers, AppPermissions.User_ManageTags)]
+    public async Task<IActionResult> GetUserAccess(int userId)
+    {
+        var result = await _adminService.GetUserAccessAsync(userId);
+
+        if (result == null) return NotFound();
+
+        return Ok(result);
+    }
+
+    [HttpPost("users/{userId:int}/assign-computers")]
+    [HasPermission(AppPermissions.User_ManageComputers)]
+    public async Task<IActionResult> AssignComputers(int userId, [FromBody] AssignComputersRequest req)
+    {
+        var errorMessage = await _adminService.AssignComputersAsync(userId, req);
+
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
+
+        return Ok(new { message = "Cihaz atamaları güncellendi." });
+    }
+
+    [HttpPost("users/{userId:int}/assign-tags")]
+    [HasPermission(AppPermissions.User_ManageTags)]
+    public async Task<IActionResult> AssignTags(int userId, [FromBody] AssignTagsRequest req)
+    {
+        var errorMessage = await _adminService.AssignTagsAsync(userId, req);
+
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
+
+        return Ok(new { message = "Etiket atamaları güncellendi." });
+    }
+
+    [HttpPost("tags/{tagId:int}/assign-computers")]
+    [HasPermission(AppPermissions.Tag_Manage)]
+    public async Task<IActionResult> AssignComputersToTag(int tagId, [FromBody] AssignComputersToTagRequest req)
+    {
+        var errorMessage = await _adminService.AssignComputersToTagAsync(tagId, req);
+
+        if (errorMessage != null)
+            return NotFound(new { message = errorMessage });
+
+        return Ok(new { message = "Cihaz atamaları başarıyla güncellendi." });
+    }
+
+    [HttpGet("computers/all")]
+    [HasPermission(AppPermissions.User_ManageComputers, AppPermissions.Tag_Manage)]
+    public async Task<IActionResult> GetAllComputersForAssignment()
+    {
+        var computers = await _adminService.GetAllComputersForAssignmentAsync();
+        return Ok(computers);
+    }
+
+    [HttpGet("tags/{tagId:int}/assigned-computer-ids")]
+    [HasPermission(AppPermissions.Tag_Manage)]
+    public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
+    {
+        var assignedIds = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
+        return Ok(assignedIds);
     }
 }

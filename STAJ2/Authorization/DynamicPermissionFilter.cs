@@ -1,8 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿// STAJ2/Authorization/DynamicPermissionFilter.cs
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace STAJ2.Authorization;
 
@@ -17,22 +21,22 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        var actionDescriptor = context.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor;
-        if (actionDescriptor == null) return;
+        // 1. İsteğin gittiği Endpoint'in üzerindeki HasPermission etiketini oku
+        var endpoint = context.HttpContext.GetEndpoint();
+        var permissionAttribute = endpoint?.Metadata.GetMetadata<HasPermissionAttribute>();
 
-        string controllerName = actionDescriptor.ControllerName;
-        string actionName = actionDescriptor.ActionName;
-
-        // 1. Registry'den bu endpoint için gereken yetkileri string dizisi olarak al
-        string[]? requiredPermissions = EndpointPermissionRegistry.GetRequiredPermissions(controllerName, actionName);
-
-        // Eğer bu endpoint için bir yetki tanımlanmamışsa geçişe izin ver
-        if (requiredPermissions == null || requiredPermissions.Length == 0)
+        // Eğer etiket yoksa veya AppPermissions.None verilmişse yetki kontrolüne gerek yok
+        if (permissionAttribute == null || permissionAttribute.Permissions.Length == 0 || permissionAttribute.Permissions.Contains(AppPermissions.None))
         {
             return;
         }
 
-        // 2. Kullanıcı Giriş Kontrolü
+        // 2. Enum değerlerini DB'deki string formatına çevir (Örn: User_Read -> "User.Read")
+        string[] requiredPermissions = permissionAttribute.Permissions
+            .Select(p => p.ToString().Replace("_", "."))
+            .ToArray();
+
+        // 3. Kullanıcı Giriş Kontrolü
         var user = context.HttpContext.User;
         if (user.Identity?.IsAuthenticated != true)
         {
@@ -49,7 +53,7 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
             return;
         }
 
-        // 3. Kullanıcının Yetkisini DB'den Kontrol Et (Dizideki yetkilerden HERHANGİ BİRİNE sahip olması yeterli)
+        // 4. Kullanıcının Yetkisini DB'den Kontrol Et (Dizideki yetkilerden HERHANGİ BİRİNE sahip olması yeterli)
         bool hasPermission = await _db.Users
             .AsNoTracking()
             .Where(u => u.Id == userId && !u.IsDeleted)

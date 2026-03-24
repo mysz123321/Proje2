@@ -77,36 +77,36 @@
 
             let html = '';
 
-            // Gelen menüleri "Genel" ve "Yönetim" olarak ikiye ayıralım
-            const mainItems = sidebarItems.filter(item => !item.requiredPermission);
-            const adminItems = sidebarItems.filter(item => item.requiredPermission);
+            // YENİ SİSTEM: Artık isProtected flag'ine göre ayırıyoruz
+            const mainItems = sidebarItems.filter(item => !item.isProtected);
+            const adminItems = sidebarItems.filter(item => item.isProtected);
 
             // 1. Herkese Açık / Temel Menüleri Oluştur
             mainItems.forEach(item => {
                 const isActive = item.targetView === 'computers' ? 'active' : '';
 
                 html += `
-            <li class="nav-item">
-                <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link ${isActive}" onclick="ui.switchView('${item.targetView}')">
-                    <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
-                </a>
-            </li>`;
+        <li class="nav-item">
+            <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link ${isActive}" onclick="ui.switchView('${item.targetView}')">
+                <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
+            </a>
+        </li>`;
             });
 
             // 2. Yönetim Paneli Menülerini Oluştur
             if (adminItems.length > 0) {
                 html += `
-            <li class="px-4 mt-4 mb-2">
-                <small class="text-uppercase fw-bold" style="font-size:0.7rem; letter-spacing:1px; color:var(--text-muted);">Yönetim Paneli</small>
-            </li>`;
+        <li class="px-4 mt-4 mb-2">
+            <small class="text-uppercase fw-bold" style="font-size:0.7rem; letter-spacing:1px; color:var(--text-muted);">Yönetim Paneli</small>
+        </li>`;
 
                 adminItems.forEach(item => {
                     html += `
-                <li class="nav-item">
-                    <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link" onclick="ui.switchView('${item.targetView}')">
-                        <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
-                    </a>
-                </li>`;
+            <li class="nav-item">
+                <a href="javascript:void(0)" id="nav-${item.targetView}" class="nav-link" onclick="ui.switchView('${item.targetView}')">
+                    <i class="${item.icon || 'bi bi-circle'}"></i> <span>${item.title}</span>
+                </a>
+            </li>`;
                 });
             }
 
@@ -115,11 +115,11 @@
         } catch (error) {
             console.error("Menü veritabanından çekilirken hata oluştu:", error);
             nav.innerHTML = `
-        <li class="nav-item">
-            <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
-                <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
-            </a>
-        </li>`;
+    <li class="nav-item">
+        <a href="javascript:void(0)" id="nav-computers" class="nav-link active" onclick="ui.switchView('computers')">
+            <i class="bi bi-activity text-success"></i> <span>Canlı İzleme</span>
+        </a>
+    </li>`;
         }
     }
 
@@ -287,28 +287,48 @@
     }
 
     async function loadUsersView(container) {
-            try {
-                const [users, actions] = await Promise.all([
-                    api.get("/api/Admin/users"),
-                    api.get("/api/Ui/user-actions")
-                ]);
+        try {
+            // 1. SIFIR FRONTEND YETKİ KONTROLÜ.
+            // Direkt olarak verileri ve o kullanıcının basabileceği butonları (actions) backend'den istiyoruz.
+            // Eğer kullanıcının yetkisi yoksa, senin yazdığın [HasPermission] attribute'u zaten 403 Forbidden dönecek ve kod direkt 'catch' bloğuna düşecek.
+            const [users, actions] = await Promise.all([
+                api.get("/api/Admin/users"),
+                api.get("/api/Ui/user-actions")
+            ]);
 
-                pgState.users.data = users; // Tüm kullanıcıları doğrudan listeye aktarıyoruz
-                pgState.users.actions = actions;
-                pgState.users.page = 1;
+            pgState.users.data = users;
+            pgState.users.actions = actions; // Tablodaki işlemler (sil, düzenle vb.) bile DB'den yetkiye göre geliyor! Mükemmel.
+            pgState.users.page = 1;
 
             container.innerHTML = `
-                <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead><tr style="color:var(--text-muted);"><th>Kullanıcı Adı</th><th>Sahip Olduğu Roller</th><th class="text-end">İşlemler</th></tr></thead>
-                            <tbody id="usersTbody"></tbody>
-                        </table>
-                    </div>
-                    <div id="usersPg" class="pb-3"></div>
-                </div>`;
+            <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr style="color:var(--text-muted);">
+                                <th>Kullanıcı Adı</th>
+                                <th>Sahip Olduğu Roller</th>
+                                <th class="text-end">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTbody"></tbody>
+                    </table>
+                </div>
+                <div id="usersPg" class="pb-3"></div>
+            </div>`;
+
             ui.renderUsersTable();
-        } catch (e) { container.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
+
+        } catch (e) {
+            // 2. BACKEND REDDEDERSE BURASI ÇALIŞIR
+            // api.js dosyan 403 veya 401 döndürdüğünde şık bir "Yetkisiz Erişim" ekranı basarız.
+            container.innerHTML = `
+            <div class="d-flex flex-column align-items-center justify-content-center p-5 text-center" style="min-height: 400px; color:var(--text-muted);">
+                <i class="bi bi-shield-lock-fill text-danger mb-3" style="font-size: 3rem;"></i>
+                <h4 class="text-white">Yetkisiz Erişim veya Bağlantı Hatası</h4>
+                <p>${e.message || 'Bu veriyi görüntüleme yetkiniz bulunmamaktadır.'}</p>
+            </div>`;
+        }
     }
 
     async function loadRolesView(container) {

@@ -16,6 +16,7 @@ namespace STAJ2.Controllers;
 public class ComputerController : ControllerBase
 {
     private readonly IComputerService _computerService;
+
     public ComputerController(IComputerService computerService)
     {
         _computerService = computerService;
@@ -27,6 +28,7 @@ public class ComputerController : ControllerBase
 
     // 1. Cihaz Detayı
     [HttpGet("{id:int}")]
+    [HasPermission(AppPermissions.Computer_Read)]
     public async Task<IActionResult> GetComputer(int id)
     {
         var result = await _computerService.GetComputerAsync(id, GetUserId(), IsAdmin());
@@ -39,6 +41,7 @@ public class ComputerController : ControllerBase
 
     // 2. Disk Listesi
     [HttpGet("{computerId:int}/disks")]
+    [HasPermission(AppPermissions.Computer_Read)]
     public async Task<IActionResult> GetComputerDisks(int computerId)
     {
         var result = await _computerService.GetComputerDisksAsync(computerId, GetUserId(), IsAdmin());
@@ -50,6 +53,7 @@ public class ComputerController : ControllerBase
 
     // 3. Eşik Değerlerini Güncelle (0-100 Kontrolü Eklendi)
     [HttpPut("update-thresholds/{computerId:int}")]
+    [HasPermission(AppPermissions.Computer_SetThreshold)]
     public async Task<IActionResult> UpdateThresholds(int computerId, [FromBody] UpdateThresholdsRequest request)
     {
         var result = await _computerService.UpdateThresholdsAsync(computerId, request, GetUserId(), IsAdmin());
@@ -63,6 +67,7 @@ public class ComputerController : ControllerBase
 
     // 4. Etiket Atama
     [HttpPut("{id}/tags")]
+    [HasPermission(AppPermissions.Computer_AssignTag)]
     public async Task<IActionResult> UpdateComputerTags(int id, [FromBody] UpdateComputerTagsRequest request)
     {
         var isSuccess = await _computerService.UpdateComputerTagsAsync(id, request);
@@ -74,6 +79,7 @@ public class ComputerController : ControllerBase
 
     // 5. İsim Değiştirme
     [HttpPut("update-display-name")]
+    [HasPermission(AppPermissions.Computer_Rename)]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
     {
         var result = await _computerService.UpdateDisplayNameAsync(request);
@@ -86,8 +92,10 @@ public class ComputerController : ControllerBase
 
         return Ok(new { message = "İsim başarıyla güncellendi." });
     }
+
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
     [HttpGet("{id:int}/metrics-history")]
+    [HasPermission(AppPermissions.Computer_Filter)]
     public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string start, [FromQuery] string end)
     {
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end);
@@ -98,7 +106,9 @@ public class ComputerController : ControllerBase
         return Ok(result.data);
     }
 
+    // 7. Tüm Cihazları Getir
     [HttpGet]
+    [HasPermission(AppPermissions.Computer_Read)]
     public async Task<IActionResult> GetAllComputers()
     {
         var result = await _computerService.GetAllComputersAsync(GetUserId(), IsAdmin());
@@ -107,6 +117,7 @@ public class ComputerController : ControllerBase
 
     // 8. Cihaz Silme (Sadece Pasif Olanlar İçin Soft Delete)
     [HttpDelete("{id:int}")]
+    [HasPermission(AppPermissions.Computer_Delete)]
     public async Task<IActionResult> DeleteComputer(int id)
     {
         var result = await _computerService.DeleteComputerAsync(id);
@@ -120,38 +131,12 @@ public class ComputerController : ControllerBase
         return Ok(new { message = "Bilgisayar başarıyla silindi." });
     }
 
-
-    //private async Task<bool> CheckComputerAccessAsync(int computerId)
-    //{
-    //    if (User.IsInRole("Yönetici")) return true;
-
-    //    // 2. Kullanıcı ID'sini al
-    //    var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-    //    int userId = int.TryParse(userIdString, out int id) ? id : 0;
-    //    if (userId == 0) return false;
-
-    //    // 3. Doğrudan cihaz ataması var mı kontrol et
-    //    bool hasDirectAccess = await _db.UserComputerAccesses
-    //        .AnyAsync(uca => uca.UserId == userId && uca.ComputerId == computerId);
-    //    if (hasDirectAccess) return true;
-
-    //    // 4. Etiket üzerinden ataması var mı kontrol et
-    //    var computerTagIds = await _db.Computers
-    //        .Where(c => c.Id == computerId)
-    //        .SelectMany(c => c.Tags.Select(t => t.Id))
-    //        .ToListAsync();
-
-    //    bool hasTagAccess = await _db.UserTagAccesses
-    //        .AnyAsync(uta => uta.UserId == userId && computerTagIds.Contains(uta.TagId));
-
-    //    return hasTagAccess;
-    //}
-
+    // 9. Etiketleri Getir
     [HttpGet("tags")]
+    [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetMyTags()
     {
         var tags = await _computerService.GetMyTagsAsync(GetUserId(), IsAdmin());
         return Ok(tags);
     }
-
 }

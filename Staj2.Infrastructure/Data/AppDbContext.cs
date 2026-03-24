@@ -130,16 +130,15 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<UserTagAccess>()
                 .HasKey(ut => new { ut.UserId, ut.TagId });
 
-            modelBuilder.Entity<Permission>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Name).IsUnique();
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Description).HasMaxLength(200);
-            });
+            // BUNU EKLEYİN:
+            modelBuilder.Entity<Permission>()
+                .HasOne(p => p.SidebarItem)
+                .WithMany() // Bir SidebarItem birden fazla yetki tarafından açılabilir
+                .HasForeignKey(p => p.SidebarItemId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // YENİ: Tag - Computer (Fiziksel Sınıf ComputerTag Üzerinden Many-to-Many)
-             modelBuilder.Entity<Computer>()
+            modelBuilder.Entity<Computer>()
                 .HasMany(c => c.Tags)
                 .WithMany(t => t.Computers)
                 .UsingEntity<ComputerTag>(
@@ -165,11 +164,15 @@ namespace Staj2.Infrastructure.Data
                         j.ToTable("UserRoles");
                     }
                 );
-            modelBuilder.Entity<SidebarItem>()
-        .HasOne(s => s.RequiredPermission)
-        .WithMany() // Bir izne birden fazla SidebarItem bağlı olabilir, bu yüzden WithMany boş kalıyor
-        .HasForeignKey(s => s.RequiredPermissionId)
-        .OnDelete(DeleteBehavior.SetNull); // Eğer Permission silinirse, menü öğesi silinmesin ama izin şartı kalksın (veya ihtiyacına göre Restrict yapabilirsin)
+            modelBuilder.Entity<Permission>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+
+                // --- GERİ GELEN KURAL ---
+                entity.Property(e => e.Description).HasMaxLength(200);
+            });
 
             // Computer -> ComputerDisk (One-to-Many)
             modelBuilder.Entity<ComputerDisk>()
