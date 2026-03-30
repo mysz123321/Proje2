@@ -4,7 +4,7 @@ using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
-using static Org.BouncyCastle.Math.EC.ECCurve;
+using STAJ2.MailServices;
 
 namespace Staj2.Services.Services;
 
@@ -12,10 +12,13 @@ public class AdminService : IAdminService
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
-    public AdminService(AppDbContext db , IConfiguration config)
+    private readonly IMailSender _mail;
+
+    public AdminService(AppDbContext db , IConfiguration config, IMailSender mail)
     {
         _db = db;
         _config = config;
+        _mail = mail;
     }
 
     public async Task<object> GetRolesAsync()
@@ -176,17 +179,17 @@ public class AdminService : IAdminService
         return await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync();
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, string? Email, string? Username)> RejectRequestAsync(RejectRegistrationRequest request, int? adminId)
+    public async Task<(bool IsSuccess, string? ErrorMessage)> RejectRequestAsync(RejectRegistrationRequest request, int? adminId)
     {
         if (!string.IsNullOrEmpty(request.RejectionReason) && request.RejectionReason.Length > 200)
-            return (false, "Ret gerekçesi 200 karakterden uzun olamaz.", null, null);
+            return (false, "Ret gerekçesi 200 karakterden uzun olamaz.");
 
         var registration = await _db.RegistrationRequests.FindAsync(request.RequestId);
         if (registration == null)
-            return (false, "Talep bulunamadı.", null, null);
+            return (false, "Talep bulunamadı.");
 
         if (registration.Status != RegistrationStatus.Pending)
-            return (false, "Bu talep zaten işleme alınmış.", null, null);
+            return (false, "Bu talep zaten işleme alınmış.");
 
         if (adminId.HasValue)
             registration.RejectedBy = adminId.Value;
@@ -197,21 +200,37 @@ public class AdminService : IAdminService
 
         await _db.SaveChangesAsync();
 
-        return (true, null, registration.Email, registration.Username);
+        // --- MAİL İŞLEMİ CONTROLLER'DAN BURAYA TAŞINDI ---
+        try
+        {
+            await _mail.SendAsync(
+                registration.Email!,
+                "Kayıt Talebiniz Reddedildi",
+                $"Merhaba {registration.Username},\n\nTalebiniz maalesef onaylanmadı.\nSebep: {request.RejectionReason ?? "Belirtilmedi"}"
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
+            Console.ResetColor();
+        }
+
+        return (true, null); // Mail gitmese bile veritabanı işlemi başarılı olduğu için True dönüyoruz.
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, string? Email, string? Token)> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId)
+    public async Task<(bool IsSuccess, string? ErrorMessage)> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId)
     {
         var request = await _db.RegistrationRequests.FindAsync(id);
         if (request == null)
-            return (false, "Talep bulunamadı.", null, null);
+            return (false, "Talep bulunamadı.");
 
         if (request.Status != RegistrationStatus.Pending)
-            return (false, "Bu talep zaten işlenmiş.", null, null);
+            return (false, "Bu talep zaten işlenmiş.");
 
         var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email);
         if (existingUser != null)
-            return (false, $"Bu kullanıcı zaten sistemde kayıtlı! (Kullanıcı: {existingUser.Username})", null, null);
+            return (false, $"Bu kullanıcı zaten sistemde kayıtlı! (Kullanıcı: {existingUser.Username})");
 
         int finalAdminId = adminId ?? 0;
         if (finalAdminId == 0)
@@ -247,9 +266,27 @@ public class AdminService : IAdminService
 
         await _db.SaveChangesAsync();
 
-        return (true, null, request.Email, token);
-    }
+        // --- LİNK OLUŞTURMA VE MAİL İŞLEMİ CONTROLLER'DAN BURAYA TAŞINDI ---
+        var baseUrl = _config["App:FrontendBaseUrl"] ?? "http://localhost:5267";
+        var frontendLink = $"{baseUrl}/set-password.html?token={token}";
 
+        try
+        {
+            await _mail.SendAsync(
+                request.Email!,
+                "Hoşgeldiniz",
+                $"Hesabınız onaylandı. Şifrenizi belirlemek için tıklayın: {frontendLink}"
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nMAIL GÖNDERİM HATASI: {ex.Message}\n");
+            Console.ResetColor();
+        }
+
+        return (true, null); // Mail gitmese bile veritabanı işlemi başarılı olduğu için True dönüyoruz.
+    }
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ İŞ MANTIKLARI ---
 
     public async Task<object?> GetUserAccessAsync(int userId)
