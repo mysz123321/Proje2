@@ -1,6 +1,7 @@
 ﻿using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using Staj2.Services.Interfaces;
 
 namespace STAJ2.MailServices;
 

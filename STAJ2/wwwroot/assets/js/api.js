@@ -96,6 +96,18 @@
 
         const res = await fetch(url, { ...options, headers });
 
+        // YENİ EKLENEN KISIM: 401 Unauthorized (Token Süresi Dolmuş/Geçersiz) Kontrolü
+        if (res.status === 401) {
+            alert("Oturum süreniz doldu veya geçersiz. Lütfen tekrar giriş yapın.");
+            if (window.auth && typeof window.auth.clearAuth === 'function') {
+                window.auth.clearAuth(); // Token'ı temizle
+            } else {
+                localStorage.removeItem("staj2_token");
+            }
+            window.location.href = "/login.html?reason=expired";
+            throw new Error("Oturum süresi doldu (401).");
+        }
+
         if (res.status === 403) {
             alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
             window.location.reload();
@@ -108,7 +120,7 @@
 
         if (!res.ok) {
             const msg = (typeof data === "string" && data) ? data
-                : (data && data.errorMessage) ? data.errorMessage // Bizim yeni Backend formatımız!
+                : (data && data.errorMessage) ? data.errorMessage
                     : (data && data.message) ? data.message
                         : `Sistem Hatası (HTTP ${res.status})`;
             throw new Error(msg);

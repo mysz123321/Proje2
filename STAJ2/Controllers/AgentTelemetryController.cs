@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Staj2.Services.Models.Agent;
-using STAJ2.MailServices;
 using Staj2.Services.Interfaces;
 
 namespace STAJ2.Controllers;

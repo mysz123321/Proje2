@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Staj2.Infrastructure.Data;
-using System.Text;
-using STAJ2.Authorization;
-
-using Microsoft.AspNetCore.Authorization;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Services;
+using STAJ2.Authorization;
+using STAJ2.MailServices;
+using System.Text;
+
 
 
 
@@ -15,7 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
-builder.Services.AddScoped<STAJ2.MailServices.IMailSender, STAJ2.MailServices.MailKitMailSender>();
+builder.Services.AddScoped<IMailSender, MailKitMailSender>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IComputerService, ComputerService>();

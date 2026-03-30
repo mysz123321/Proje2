@@ -4,7 +4,6 @@ using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
-using STAJ2.MailServices;
 
 namespace Staj2.Services.Services;
 
