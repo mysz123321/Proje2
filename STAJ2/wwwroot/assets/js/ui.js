@@ -327,7 +327,8 @@
     async function loadRolesView(container) {
         try {
             const roles = await api.get("/api/Admin/roles");
-            pgState.roles.data = roles.filter(r => r.name !== "Yönetici");
+            // Sabit string yerine APP_CONFIG kullanımı
+            pgState.roles.data = roles.filter(r => r.name !== window.APP_CONFIG.ADMIN_ROLE_NAME);
             pgState.roles.page = 1;
 
             // KONTROL: Sadece Role.Manage yetkisi olanlar butonu görebilir
@@ -446,7 +447,7 @@
 
             let rows = paginated.map(u => {
                 const roleBadges = u.roles.map(r => `<span class="badge bg-secondary me-1">${r}</span>`).join('');
-                const isAdmin = u.roles.includes("Yönetici");
+                const isAdmin = u.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME);
 
                 let actionButtons = '';
 
@@ -746,18 +747,18 @@
             const selectedRoleIds = pgState.userRoles.assignedIds;
 
             // "Yönetici" rolünün ID'sini bulalım
-            const adminRole = pgState.userRoles.data.find(r => r.name === "Yönetici");
+            const adminRole = pgState.userRoles.data.find(r => r.name === window.APP_CONFIG.ADMIN_ROLE_NAME);
             const isAdminSelected = adminRole && selectedRoleIds.includes(adminRole.id);
 
             try {
                 // Eğer kullanıcıdan yönetici rolü alınmak isteniyorsa kontrol yap
                 if (!isAdminSelected) {
                     const allUsers = await api.get('/api/Admin/users');
-                    const adminCount = allUsers.filter(u => u.roles.includes("Yönetici")).length;
+                    const adminCount = allUsers.filter(u => u.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME)).length;
 
                     // Düzenlenen kullanıcı şu an admin mi?
                     const currentUser = allUsers.find(u => u.id === userId);
-                    const isCurrentlyAdmin = currentUser && currentUser.roles.includes("Yönetici");
+                    const isCurrentlyAdmin = currentUser && currentUser.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME);
 
                     if (isCurrentlyAdmin && adminCount <= 1) {
                         alert("Sistemde kalan son yönetici yetkisini kaldıramazsınız!");

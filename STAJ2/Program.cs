@@ -85,7 +85,14 @@ builder.Services.AddAuthorization();
 // 1. Memory Cache'i aktif et (Servisimiz kullanýyor)
 builder.Services.AddMemoryCache();
 
+// Program.cs
+var adminRoleName = builder.Configuration["AppDefaults:AdminRoleName"] ?? "Yönetici";
 
+builder.Services.AddAuthorization(options =>
+{
+    // Dinamik olarak appsettings'den rolü okuyup kural oluþturuyoruz
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(adminRoleName));
+});
 
 // 3. Bütün projedeki Controller'larýn tepesine otomatik olarak yazdýðýmýz Filtreyi koy
 builder.Services.AddControllers(options =>

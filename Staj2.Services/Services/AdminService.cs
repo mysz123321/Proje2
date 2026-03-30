@@ -1,18 +1,21 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace Staj2.Services.Services;
 
 public class AdminService : IAdminService
 {
     private readonly AppDbContext _db;
-
-    public AdminService(AppDbContext db)
+    private readonly IConfiguration _config;
+    public AdminService(AppDbContext db , IConfiguration config)
     {
         _db = db;
+        _config = config;
     }
 
     public async Task<object> GetRolesAsync()
@@ -107,8 +110,10 @@ public class AdminService : IAdminService
             return "Rol bulunamadı."; // NotFound durumu
 
         // Sistem varsayılan yöneticisi silinemez koruması
-        if (role.Name == "Yönetici")
-            return "Sistem varsayılan 'Yönetici' rolü silinemez."; // BadRequest durumu
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+
+        if (role.Name == adminRoleName)
+            return $"Sistem varsayılan '{adminRoleName}' rolü silinemez."; // BadRequest durumu
 
         // KURAL: Eğer sistemde bu role sahip silinmemiş bir kullanıcı varsa işlemi engelle
         if (role.Users.Any(u => !u.IsDeleted))
@@ -255,7 +260,9 @@ public class AdminService : IAdminService
         var computerIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var tagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
-        if (computerIds.Count == 0 && tagIds.Count == 0 && user.Roles.Any(r => r.Name == "Yönetici"))
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+
+        if (computerIds.Count == 0 && tagIds.Count == 0 && user.Roles.Any(r => r.Name == adminRoleName))
         {
             computerIds = await _db.Computers.Select(x => x.Id).ToListAsync();
             tagIds = await _db.Tags.Select(x => x.Id).ToListAsync();

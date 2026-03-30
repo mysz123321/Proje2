@@ -11,14 +11,16 @@ public static class DbSeeder
     {
         using var scope = app.ApplicationServices.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var adminRoleName = config["AppDefaults:AdminRoleName"] ?? "Yönetici";
 
         await context.Database.MigrateAsync();
-        
+
         // 1. Rolleri Ekle
         if (!await context.Roles.AnyAsync())
         {
             context.Roles.AddRange(new List<Role> {
-                new Role { Name = "Yönetici", CreatedAt = DateTime.Now },
+                new Role { Name = adminRoleName, CreatedAt = DateTime.Now }, // Değişti
                 new Role { Name = "Denetleyici", CreatedAt = DateTime.Now },
                 new Role { Name = "Görüntüleyici", CreatedAt = DateTime.Now }
             });
@@ -55,7 +57,7 @@ public static class DbSeeder
         // 3. Admin Kullanıcısını Ekle
         if (!await context.Users.AnyAsync(u => u.Username == "admin"))
         {
-            var adminRole = await context.Roles.FirstAsync(r => r.Name == "Yönetici");
+            var adminRole = await context.Roles.FirstAsync(r => r.Name == adminRoleName); // Değişti
             var adminUser = new User
             {
                 Username = "admin",
@@ -72,8 +74,8 @@ public static class DbSeeder
 
         // --- 4. YÖNETİCİ ROLÜNE TÜM YETKİLERİ OTOMATİK ATA ---
         var adminRoleForPerms = await context.Roles
-            .Include(r => r.RolePermissions)
-            .FirstAsync(r => r.Name == "Yönetici");
+     .Include(r => r.RolePermissions)
+     .FirstAsync(r => r.Name == adminRoleName);
 
         var allPermissions = await context.Permissions.ToListAsync();
 

@@ -21,11 +21,12 @@ public class AdminController : ControllerBase
 {
     private readonly IMailSender _mail;
     private readonly IAdminService _adminService;
-
-    public AdminController(IMailSender mail, IAdminService adminService)
+    private readonly IConfiguration _config;
+    public AdminController(IMailSender mail, IAdminService adminService, IConfiguration config)
     {
         _mail = mail;
         _adminService = adminService;
+        _config = config;
     }
 
     // --- KULLANICI YÖNETİMİ ---
@@ -39,7 +40,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("users/{id:int}")]
-    [Authorize(Roles = "Yönetici")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteUser(int id)
     {
         var errorMessage = await _adminService.DeleteUserAsync(id);
@@ -126,7 +127,12 @@ public class AdminController : ControllerBase
             return BadRequest(new { message = result.ErrorMessage });
         }
 
-        var frontendLink = $"http://localhost:5267/set-password.html?token={result.Token}";
+        // Appsettings içerisinden "App:FrontendBaseUrl" değerini okuyoruz. 
+        // Eğer bulamazsa hata vermemesi için fallback (yedek) olarak yine localhost:5267 atıyoruz.
+        var baseUrl = _config["App:FrontendBaseUrl"] ?? "http://localhost:5267";
+
+        // Linki dinamik olarak oluşturuyoruz
+        var frontendLink = $"{baseUrl}/set-password.html?token={result.Token}";
         try
         {
             await _mail.SendAsync(result.Email!, "Hoşgeldiniz", $"Hesabınız onaylandı. Şifrenizi belirlemek için tıklayın: {frontendLink}");

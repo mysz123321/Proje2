@@ -16,15 +16,21 @@ namespace STAJ2.Controllers;
 public class ComputerController : ControllerBase
 {
     private readonly IComputerService _computerService;
+    private readonly IConfiguration _config;
 
-    public ComputerController(IComputerService computerService)
+    public ComputerController(IComputerService computerService, IConfiguration config)
     {
         _computerService = computerService;
+        _config = config;
     }
 
     // --- YARDIMCI METOTLAR (Controller içinde sürekli kod tekrarı yapmamak için) ---
     private int GetUserId() => int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
-    private bool IsAdmin() => User.IsInRole("Yönetici");
+    private bool IsAdmin()
+    {
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+        return User.IsInRole(adminRoleName);
+    }
 
     // 1. Cihaz Detayı
     [HttpGet("{id:int}")]

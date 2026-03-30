@@ -13,12 +13,13 @@ public class AgentTelemetryController : ControllerBase
 {
     private readonly IAgentTelemetryService _telemetryService;
     private readonly IServiceScopeFactory _scopeFactory;
-
+    private readonly IConfiguration _config;
     // ScopeFactory kalıyor çünkü Task.Run (arka plan işlemi) Controller'ın yaşam döngüsünden bağımsız çalışmak zorundadır.
-    public AgentTelemetryController(IAgentTelemetryService telemetryService, IServiceScopeFactory scopeFactory)
+    public AgentTelemetryController(IAgentTelemetryService telemetryService, IServiceScopeFactory scopeFactory, IConfiguration config)
     {
         _telemetryService = telemetryService;
         _scopeFactory = scopeFactory;
+        _config = config;
     }
 
     [HttpPost]
@@ -57,10 +58,14 @@ public class AgentTelemetryController : ControllerBase
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int userId = int.TryParse(userIdString, out int id) ? id : 0;
-        bool isAdmin = User.IsInRole("Yönetici");
+
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+        bool isAdmin = User.IsInRole(adminRoleName);
 
         var result = await _telemetryService.GetLatestAsync(userId, isAdmin);
 
         return Ok(result);
     }
+
+
 }
