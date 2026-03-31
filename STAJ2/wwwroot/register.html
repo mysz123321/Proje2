@@ -53,9 +53,11 @@
 
         document.getElementById("btnRegister").addEventListener("click", async () => {
             ui.hide("msg");
+            const btn = document.getElementById("btnRegister");
             const username = document.getElementById("username").value.trim();
             const email = document.getElementById("email").value.trim();
 
+            // 1. Boşluk Kontrolü
             if (!username || !email) {
                 ui.show("msg");
                 document.getElementById("msg").className = "message error";
@@ -63,15 +65,51 @@
                 return;
             }
 
+            // --- YENİ: 2. E-posta Format Kontrolü ---
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                ui.show("msg");
+                document.getElementById("msg").className = "message error";
+                ui.setText("msg", "Lütfen geçerli bir e-posta adresi giriniz.");
+                return;
+            }
+            // -----------------------------------------
+
+            // --- 3. Yükleniyor (Spinner) ve Kilitleme İşlemi ---
+            const originalText = btn.innerHTML; // Orijinal yazıyı sakla
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Lütfen Bekleyin...';
+            btn.disabled = true;
+
+            // --- 4. Ekrana "İşlem yapılıyor" mesajı bas ---
+            ui.show("msg");
+            document.getElementById("msg").className = "message"; // Ne kırmızı ne yeşil, standart (nötr) arkaplan
+            ui.setText("msg", "⏳ İşlem yapılıyor, bilgilendirme maili gönderiliyor lütfen bekleyiniz...");
+
+            // --- 5. Tarayıcının ekrana yazıyı çizebilmesi için 50ms es veriyoruz ---
+            await new Promise(resolve => setTimeout(resolve, 50));
+
             try {
+                // Mail atma / Kayıt isteği işlemi
                 await api.post("/api/Registration", { username, email });
+
                 ui.show("msg");
                 document.getElementById("msg").className = "message success";
                 ui.setText("msg", "✅ İstek alındı. E-posta kutunuzu kontrol edin.");
+
+                // İşlem başarılı olduktan sonra inputları temizle ve butonu düzelt
+                document.getElementById("username").value = "";
+                document.getElementById("email").value = "";
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+
             } catch (e) {
                 ui.show("msg");
                 document.getElementById("msg").className = "message error";
                 ui.setText("msg", "❌ " + e.message);
+
+                // Hata durumunda sadece butonu düzelt ki kullanıcı tekrar deneyebilsin
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             }
         });
     </script>

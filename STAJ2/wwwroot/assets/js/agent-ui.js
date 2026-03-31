@@ -378,10 +378,27 @@ window.openHistoryModal = (id) => {
 
 window.fetchHistoryMetrics = async () => {
     const id = document.getElementById("historyComputerId").value;
+
     const start = document.getElementById("historyStart").value;
     const end = document.getElementById("historyEnd").value;
 
     if (!start || !end) return alert("Lütfen tarih aralığı seçiniz.");
+
+    // --- YENİ: 7 GÜN VE TARİH KONTROLÜ ---
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+
+    if (startDate > endDate) {
+        return alert("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
+    }
+
+    const diffInMs = Math.abs(endDate - startDate);
+    const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
+
+    if (diffInDays > 7) {
+        return alert("Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.");
+    }
+    // ------------------------------------
 
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
