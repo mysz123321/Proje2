@@ -215,7 +215,22 @@
             .permission-card:hover {
                 border-color: #38bdf8;
             }
+        /* --- Modal Kapatma (X) Butonunu Turkuaz Yapma --- */
+        .modal-header .btn-close {
+            /* Orijinal SVG'nin fill renginin %2338bdf8 (Turkuaz) yapılmış hali */
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2338bdf8'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e") !important;
+            opacity: 0.8 !important; /* Görünürlüğü artırır */
+            transition: all 0.2s ease-in-out;
+        }
 
+            .modal-header .btn-close:hover {
+                opacity: 1 !important; /* Üzerine gelince tam parlak olsun */
+                transform: scale(1.15); /* Üzerine gelince hafif büyüsün (isteğe bağlı) */
+            }
+
+            .modal-header .btn-close:focus {
+                box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.25) !important; /* Tıklama efektini de turkuaz yapar */
+            }
         /* Select2 Açılır Menü Scroll Ayarı */
         .select2-results__options {
             max-height: 120px !important; /* Menünün maksimum yüksekliği (kendi tasarımınıza göre değiştirebilirsiniz) */
@@ -558,38 +573,67 @@
     <script src="/assets/js/agent-ui.js"></script>
 
     <script>
-$(document).ready(async function () {
-    const currentTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', currentTheme);
-    const icon = document.getElementById('theme-icon');
-    if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+        $(document).ready(async function () {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            const icon = document.getElementById('theme-icon');
+            if (icon) icon.className = currentTheme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
 
-    if (!guards.requireAuth()) return;
+            if (!guards.requireAuth()) return;
 
-    const username = localStorage.getItem("staj2_username") || "Kullanıcı";
-    const roles = auth.getRoles();
-    document.getElementById("userWelcome").textContent = username;
-    document.getElementById("userRoles").textContent = roles.join(", ");
+            const username = localStorage.getItem("staj2_username") || "Kullanıcı";
+            const roles = auth.getRoles();
 
-    // Arayüz çizilmeden önce veritabanından canlı yetkileri bekle!
-    if (auth.loadLivePermissions) {
-        await auth.loadLivePermissions();
-    }
+            // 1. İlk yüklemede mevcut (eski) rolleri ekrana basarız
+            document.getElementById("userWelcome").textContent = username;
+            document.getElementById("userRoles").textContent = roles.join(", ");
 
-    ui.renderSidebar();
-    ui.switchView('computers');
+            // Arayüz çizilmeden önce veritabanından canlı yetkileri bekle!
+            if (auth.loadLivePermissions) {
+                await auth.loadLivePermissions();
+            }
 
-    // KRİTİK DÜZELTME: width: '100%' eklendi. Flexbox içinde Select2'nin bozulmasını engeller.
-    $('#tagSelect').select2({
-        placeholder: "Etiketle filtrele...",
-        tags: false,
-        width: '100%'
-    });
+            ui.renderSidebar();
+            ui.switchView('computers');
 
-    document.getElementById("btnLogout").addEventListener("click", () => {
-        auth.clearAuth();
-        window.location.href = "/login.html";
-    });
+            // --- YENİ EKLENEN KISIM: F5 (Yenileme) Durumunda En Güncel Rolleri Çek ---
+            // Sayfa her açıldığında arka planda sessizce token'ı yenileyerek güncel rolleri alır.
+            const rfToken = localStorage.getItem("staj2_refresh_token");
+            if (rfToken) {
+                fetch('/api/Auth/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken: rfToken })
+                })
+                    .then(res => {
+                        if (res.ok) return res.json();
+                        throw new Error("Sessiz yenileme başarısız");
+                    })
+                    .then(newData => {
+                        // Yeni token'ı (ve varsa yeni refresh token'ı) localStorage'a kaydet
+                        window.auth.saveAuth(newData.token, null, null, null, newData.refreshToken);
+
+                        // Yeni token'ın içinden GÜNCEL rolleri oku ve menüdeki yazıyı güncelle
+                        const currentRoles = window.auth.getRoles();
+                        document.getElementById("userRoles").textContent = currentRoles.join(", ");
+                    })
+                    .catch(err => {
+                        console.log("Arka planda token yenilenemedi (Oturum süresi dolmuş olabilir):", err);
+                    });
+            }
+            // ------------------------------------------------------------------------
+
+            // KRİTİK DÜZELTME: width: '100%' eklendi...
+            $('#tagSelect').select2({
+                placeholder: "Etiketle filtrele...",
+                tags: false,
+                width: '100%'
+            });
+
+            document.getElementById("btnLogout").addEventListener("click", () => {
+                auth.clearAuth();
+                window.location.href = "/login.html";
+            });
 
     // --- MENÜ AÇMA/KAPAMA (TOGGLE) İŞLEMLERİ ---
     const menuBtn = document.getElementById('menuToggleBtn');
