@@ -14,7 +14,8 @@
         tagAssign: { data: [], filtered: [], assignedIds: [], page: 1 },
         userRoles: { data: [], assignedIds: [], page: 1 },
         userComp: { data: [], filtered: [], assignedIds: [], page: 1 },
-        userTag: { data: [], assignedIds: [], page: 1 }
+        userTag: { data: [], assignedIds: [], page: 1 },
+        newRolePerm: { data: [], assignedIds: [], page: 1 }
     };
 
     function renderPagination(containerId, currentPage, totalItems, itemsPerPage, changePageFnString) {
@@ -542,7 +543,6 @@
         changeUsersPage: (p) => { pgState.users.page = p; ui.renderUsersTable(); },
 
         // --- 3. ROLLER VE YETKİLER RENDER & SAYFALAMA ---
-        // --- 3. ROLLER VE YETKİLER RENDER & SAYFALAMA ---
         renderRolesTable: () => {
             const tbody = document.getElementById('rolesTbody'); if (!tbody) return;
             const state = pgState.roles;
@@ -961,25 +961,29 @@
         },
         // --- YENİ ROL EKLEME FONKSİYONLARI ---
         openCreateRoleModal: async () => {
-            document.getElementById('newRoleNameInput').value = ''; // Inputu temizle
+            document.getElementById('newRoleNameInput').value = '';
             const permsContainer = document.getElementById('newRolePermsContainer');
             permsContainer.innerHTML = '<div class="text-center w-100 py-3"><div class="spinner-border text-info spinner-border-sm"></div></div>';
+
+            // Sayfalandırma div'i yoksa oluştur
+            let pgDiv = document.getElementById('newRolePermPg');
+            if (!pgDiv) {
+                pgDiv = document.createElement('div');
+                pgDiv.id = 'newRolePermPg';
+                pgDiv.className = 'mt-3 w-100';
+                permsContainer.parentNode.appendChild(pgDiv);
+            } else {
+                pgDiv.innerHTML = '';
+            }
 
             new bootstrap.Modal(document.getElementById('createRoleModal')).show();
 
             try {
-                // Sistemdeki tüm yetkileri çek
                 const allPerms = await api.get('/api/Admin/permissions');
-
-                permsContainer.innerHTML = allPerms.map(p => `
-                    <div class="col-12">
-                        <label class="permission-card d-flex align-items-center w-100 py-2" for="new_perm_${p.id}" style="cursor:pointer;">
-                            <input class="form-check-input custom-toggle new-role-perm-cb m-0 me-3 flex-shrink-0" type="checkbox" id="new_perm_${p.id}" value="${p.id}">
-                            <div class="flex-grow-1" style="min-width: 0;">
-                                <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">${p.description || p.name}</div>
-                            </div>
-                        </label>
-                    </div>`).join('');
+                pgState.newRolePerm.data = allPerms;
+                pgState.newRolePerm.assignedIds = []; // Seçimleri sıfırla
+                pgState.newRolePerm.page = 1;
+                ui.renderNewRolePermList(); // Listeyi render et
             } catch (e) {
                 permsContainer.innerHTML = `<div class="text-danger small px-2">Yetkiler yüklenemedi: ${e.message}</div>`;
             }
@@ -988,20 +992,18 @@
         saveNewRole: async () => {
             const roleName = document.getElementById('newRoleNameInput').value.trim();
             if (!roleName) { alert("Lütfen rol adı giriniz."); return; }
-            if (roleName.length > 20) { alert("Rol adı en fazla 20 karakter olabilir."); return; }
 
-            // İşaretli checkbox'ların id'lerini topla
-            const selectedPerms = Array.from(document.querySelectorAll('.new-role-perm-cb:checked')).map(cb => parseInt(cb.value));
+            // Değişen kısım: Seçimleri direkt state'den alıyoruz
+            const selectedPerms = pgState.newRolePerm.assignedIds;
 
             try {
                 await api.post('/api/Admin/roles', {
                     name: roleName,
                     permissionIds: selectedPerms
                 });
-
                 bootstrap.Modal.getInstance(document.getElementById('createRoleModal')).hide();
                 alert("Yeni rol başarıyla eklendi!");
-                ui.switchView('roles'); // Tabloyu yenile
+                ui.switchView('roles');
             } catch (e) {
                 alert("Hata: " + (e.message || "Rol eklenirken bir sorun oluştu."));
             }
@@ -1015,6 +1017,47 @@
                 ui.switchView('roles'); // Tabloyu anında yenile
             } catch (e) {
                 alert("Hata: " + e.message); // Kullanıcı varsa burada hata mesajını gösterecek
+            }
+        },
+        // window.ui nesnesinin içine ekle
+        renderNewRolePermList: () => {
+            const container = document.getElementById('newRolePermsContainer');
+            if (!container) return;
+
+            // Bu modala özel sayfa başı öğe sayısı
+            const ITEMS_FOR_THIS_MODAL = 5;
+
+            const state = pgState.newRolePerm;
+            const start = (state.page - 1) * ITEMS_FOR_THIS_MODAL;
+            const paginated = state.data.slice(start, start + ITEMS_FOR_THIS_MODAL);
+
+            container.innerHTML = paginated.map(p => `
+<div class="col-12">
+    <label class="permission-card d-flex align-items-center w-100 py-2" for="new_perm_${p.id}" style="cursor:pointer;">
+        <input class="form-check-input custom-toggle new-role-perm-cb m-0 me-3 flex-shrink-0" 
+               type="checkbox" id="new_perm_${p.id}" value="${p.id}" 
+               ${state.assignedIds.includes(p.id) ? 'checked' : ''} 
+               onchange="ui.toggleNewRolePerm(${p.id}, this.checked)">
+        <div class="flex-grow-1" style="min-width: 0;">
+            <div class="fw-bold" style="color:var(--text-title); font-size:0.9rem;">${p.description || p.name}</div>
+        </div>
+    </label>
+</div>`).join('');
+
+            // Pagination fonksiyonuna da aynı sabit değeri gönderiyoruz
+            renderPagination('newRolePermPg', state.page, state.data.length, ITEMS_FOR_THIS_MODAL, 'ui.changeNewRolePermPage');
+        },
+
+        changeNewRolePermPage: (p) => {
+            pgState.newRolePerm.page = p;
+            ui.renderNewRolePermList();
+        },
+
+        toggleNewRolePerm: (id, isChecked) => {
+            if (isChecked) {
+                if (!pgState.newRolePerm.assignedIds.includes(id)) pgState.newRolePerm.assignedIds.push(id);
+            } else {
+                pgState.newRolePerm.assignedIds = pgState.newRolePerm.assignedIds.filter(x => x !== id);
             }
         }
     };

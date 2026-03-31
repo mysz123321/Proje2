@@ -170,7 +170,7 @@ public class ComputerService : IComputerService
             .Select(m => new {
                 m.CreatedAt,
                 m.UsedPercent,
-                DiskName = m.ComputerDisk.DiskName
+                diskName = m.ComputerDisk.DiskName
             })
             .ToListAsync();
 
@@ -190,7 +190,7 @@ public class ComputerService : IComputerService
         var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
-        var query = _db.Computers.IgnoreQueryFilters().AsQueryable();
+        var query = _db.Computers.AsQueryable();
 
         // 2. Admin olsa bile eğer bir kısıtlama listesi varsa onu uygula
         bool isRestricted = !isAdmin || (accCompIds.Count > 0 || accTagIds.Count > 0);

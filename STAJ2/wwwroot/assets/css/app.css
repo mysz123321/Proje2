@@ -590,3 +590,60 @@ input, select, .small-select {
         font-family: monospace;
     }
 
+/* Koyu temada input ipucu (placeholder) renklerini belirginleştir */
+[data-theme="dark"] ::placeholder {
+    color: #94a3b8 !important; /* Açık gri/mavi tonu */
+    opacity: 1;
+}
+
+/* Modal içindeki genel açıklama metinleri */
+[data-theme="dark"] .modal-content .text-muted,
+[data-theme="dark"] .modal-content .small,
+[data-theme="dark"] .modal-content label.text-muted {
+    color: #cbd5e1 !important; /* Daha parlak bir gri */
+}
+
+/* Yükleniyor ve Kayıt Bulunamadı metinleri */
+[data-theme="dark"] #metricsHistoryContent,
+[data-theme="dark"] #diskThresholdsContainer {
+    color: var(--text-main);
+}
+
+/* Disk satırlarındaki eşik % ifadesi */
+[data-theme="dark"] .disk-row span {
+    color: var(--text-main) !important;
+}
+
+/* Metrik geçmişi simge ve bilgi yazıları */
+[data-theme="dark"] .modal-body .bi,
+[data-theme="dark"] .modal-body .info-text {
+    color: #38bdf8 !important; /* Marka mavisi ile belirginleştir */
+}
+
+/* Yeni rol ekle modalı ve yetki açıklamaları */
+[data-theme="dark"] #newRolePermsContainer .fw-bold,
+[data-theme="dark"] #permissionsCheckboxContainer .fw-bold {
+    color: var(--text-title) !important;
+}
+
+/* Örnek metin ifadeleri (Örn: Sınıf Başkanı) */
+[data-theme="dark"] .form-label.text-muted.small {
+    color: #94a3b8 !important;
+}
+
+/* IP Adresleri - Kod fontu olduğu için daha parlak olmalı */
+[data-theme="dark"] .modal-body small.text-muted,
+[data-theme="dark"] .computer-access-item .text-muted {
+    color: #38bdf8 !important; /* IP'leri turkuaz/mavi yaparak okunur kıl */
+    font-weight: 500;
+}
+
+/* Etiket ekle kısmındaki (modal dışı) örnek metin */
+[data-theme="dark"] #newTagName::placeholder {
+    color: #64748b !important;
+}
+
+/* Cihaz ata modalı kutu içi arama metni */
+[data-theme="dark"] #tagAssignSearchInput::placeholder {
+    color: #94a3b8 !important;
+}
