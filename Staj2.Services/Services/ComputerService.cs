@@ -257,15 +257,25 @@ public class ComputerService : IComputerService
 
         if (!isAdmin)
         {
-            var accessibleComputerIds = await _db.UserComputerAccesses
-                .Where(uca => uca.UserId == userId).Select(uca => uca.ComputerId).ToListAsync();
+            // YENİ EKLENEN KOD: Kullanıcının etiket yönetme yetkisi var mı kontrol et
+            bool hasTagManagePerm = await _db.UserRoles
+                .Where(ur => ur.UserId == userId)
+                .SelectMany(ur => ur.Role.RolePermissions)
+                .AnyAsync(rp => rp.Permission.Name == "Tag_Manage" || rp.Permission.Name == "Tag.Manage");
 
-            var accessibleTagIds = await _db.UserTagAccesses
-                .Where(uta => uta.UserId == userId).Select(uta => uta.TagId).ToListAsync();
+            // Eğer kullanıcının etiket yönetme yetkisi YOKSA kısıtlama uygula, VARSA kısıtlama bloğunu atla
+            if (!hasTagManagePerm)
+            {
+                var accessibleComputerIds = await _db.UserComputerAccesses
+                    .Where(uca => uca.UserId == userId).Select(uca => uca.ComputerId).ToListAsync();
 
-            query = query.Where(t =>
-                accessibleTagIds.Contains(t.Id) ||
-                t.Computers.Any(c => accessibleComputerIds.Contains(c.Id)));
+                var accessibleTagIds = await _db.UserTagAccesses
+                    .Where(uta => uta.UserId == userId).Select(uta => uta.TagId).ToListAsync();
+
+                query = query.Where(t =>
+                    accessibleTagIds.Contains(t.Id) ||
+                    t.Computers.Any(c => accessibleComputerIds.Contains(c.Id)));
+            }
         }
 
         var tags = await query.Select(t => new { t.Id, t.Name }).ToListAsync();

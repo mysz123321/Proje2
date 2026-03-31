@@ -744,6 +744,9 @@ $(document).ready(function () {
         const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
         const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
 
+        // YENİ EKLENEN KOD: Etiket filtresini arka planda günceller
+        window.loadFilterTags();
+
         if (isLiveTab) {
             loadAgents();
         } else if (isAllTab) {
