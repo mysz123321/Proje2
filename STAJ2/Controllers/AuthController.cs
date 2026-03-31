@@ -59,4 +59,16 @@ public class AuthController : ControllerBase
 
         return Ok(result.Permissions);
     }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+    {
+        var result = await _authService.RefreshTokenAsync(request.RefreshToken);
+        if (!result.IsSuccess) return Unauthorized("Geçersiz Refresh Token");
+
+        return Ok(new { token = result.Token, refreshToken = result.RefreshToken });
+    }
+
+    public class RefreshRequest { public string RefreshToken { get; set; } = null!; }
+
 }

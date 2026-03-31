@@ -84,6 +84,9 @@
     }
 
     // Sistemin genel Fetch Wrapper'ı
+    let isRefreshing = false;
+    let refreshPromise = null;
+
     async function request(path, options = {}) {
         const base = window.APP_CONFIG?.API_BASE ?? "";
         const url = base + path;
@@ -94,19 +97,64 @@
         const token = getToken();
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        const res = await fetch(url, { ...options, headers });
+        let res = await fetch(url, { ...options, headers });
 
-        // YENİ EKLENEN KISIM: 401 Unauthorized (Token Süresi Dolmuş/Geçersiz) Kontrolü
+        // --- REFRESH TOKEN BAŞLANGIÇ ---
         if (res.status === 401) {
-            alert("Oturum süreniz doldu veya geçersiz. Lütfen tekrar giriş yapın.");
-            if (window.auth && typeof window.auth.clearAuth === 'function') {
-                window.auth.clearAuth(); // Token'ı temizle
-            } else {
-                localStorage.removeItem("staj2_token");
+            const rfToken = localStorage.getItem("staj2_refresh_token");
+
+            if (rfToken) {
+                // Eğer o an halihazırda bir yenileme işlemi YOKSA, kilidi kapat ve yenilemeyi başlat
+                if (!isRefreshing) {
+                    isRefreshing = true;
+                    refreshPromise = new Promise(async (resolve, reject) => {
+                        try {
+                            const refreshRes = await fetch('/api/Auth/refresh', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ refreshToken: rfToken })
+                            });
+
+                            if (refreshRes.ok) {
+                                const newData = await refreshRes.json();
+                                window.auth.saveAuth(newData.token, null, null, null, newData.refreshToken);
+                                resolve(newData.token); // Yeni token'ı bekleyenlere dağıt
+                            } else {
+                                reject("Refresh işlemi reddedildi");
+                            }
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            isRefreshing = false; // İşlem bitince kilidi aç
+                        }
+                    });
+                }
+
+                try {
+                    // AYNI ANDA 401 YİYEN TÜM İSTEKLER BURADA BEKLER (Kuyruk mantığı)
+                    const newToken = await refreshPromise;
+
+                    // Herkes yeni token'ı cebine koyup az önce başarısız olan isteğini tekrar dener
+                    headers["Authorization"] = `Bearer ${newToken}`;
+                    res = await fetch(url, { ...options, headers });
+
+                    if (res.ok) {
+                        const contentType = res.headers.get("content-type") || "";
+                        return contentType.includes("application/json") ? await res.json() : await res.text();
+                    }
+                } catch (err) {
+                    console.error("Token yenileme kuyruğunda hata:", err);
+                    // Hata olursa aşağıdaki logout uyarısına düşer
+                }
             }
+
+            // Eğer sistem kurtarılamadıysa o zaman kullanıcıyı at
+            alert("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+            window.auth.clearAuth();
             window.location.href = "/login.html?reason=expired";
             throw new Error("Oturum süresi doldu (401).");
         }
+        // --- REFRESH TOKEN BİTİŞ ---
 
         if (res.status === 403) {
             alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");

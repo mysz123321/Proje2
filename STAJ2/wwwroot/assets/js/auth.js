@@ -19,16 +19,20 @@
     }
 
     window.auth = {
-        saveAuth: (token, roles, permissions, username) => {
+        // STAJ2/wwwroot/assets/js/auth.js içinde bul ve değiştir:
+        saveAuth: (token, roles, permissions, username, refreshToken) => {
             localStorage.setItem(TOKEN_KEY, token);
 
-            // Kullanıcı adını kaydediyoruz
+            // EĞER REFRESH TOKEN GELDİYSE KAYDET
+            if (refreshToken) {
+                localStorage.setItem("staj2_refresh_token", refreshToken);
+            }
+
             if (username) {
                 localStorage.setItem("staj2_username", username);
             }
 
-            // F12'YE YAZMA KISIMLARI SİLİNDİ! 
-            // Eskiden kalanlar varsa temizliyoruz ki F12'de görünmesinler
+            // Eskileri temizle
             localStorage.removeItem("staj2_roles");
             localStorage.removeItem("staj2_permissions");
         },

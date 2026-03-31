@@ -7,4 +7,5 @@ public interface IAuthService
     Task<(bool IsSuccess, string? ErrorMessage, object? Data)> LoginAsync(LoginRequest request);
     Task<(bool IsSuccess, string? ErrorMessage, bool isConflict)> SetPasswordAsync(SetPasswordRequest request);
     Task<(bool IsSuccess, string? ErrorMessage, List<string>? Permissions)> GetMyPermissionsAsync(int userId);
+    Task<(bool IsSuccess, string? Token, string? RefreshToken)> RefreshTokenAsync(string token);
 }

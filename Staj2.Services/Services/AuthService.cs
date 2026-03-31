@@ -25,31 +25,32 @@ public class AuthService : IAuthService
     public async Task<(bool IsSuccess, string? ErrorMessage, object? Data)> LoginAsync(LoginRequest request)
     {
         var user = await _db.Users
-            .Include(x => x.Roles)
-                .ThenInclude(r => r.RolePermissions)
-                    .ThenInclude(rp => rp.Permission)
+            .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return (false, "Giriş bilgileri hatalı", null);
 
-        var token = CreateJwtToken(user);
+        var accessToken = CreateJwtToken(user);
 
-        var userPermissions = user.Roles
-            .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.Name)
-            .Distinct()
-            .ToList();
-
-        var data = new
+        // Yeni Refresh Token oluştur
+        var refreshToken = new RefreshToken
         {
-            token,
-            user.Username,
-            roles = user.Roles.Select(r => r.Name).ToList(),
-            permissions = userPermissions
+            Token = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTime.Now.AddDays(7),
+            UserId = user.Id
         };
 
-        return (true, null, data);
+        _db.RefreshTokens.Add(refreshToken);
+        await _db.SaveChangesAsync();
+
+        return (true, null, new
+        {
+            token = accessToken,
+            refreshToken = refreshToken.Token,
+            user.Username,
+            permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
+        });
     }
 
     public async Task<(bool IsSuccess, string? ErrorMessage, bool isConflict)> SetPasswordAsync(SetPasswordRequest req)
@@ -129,7 +130,35 @@ public class AuthService : IAuthService
         var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
     }
+    // AuthService.cs içine eklenecek yeni metot
+    // Staj2.Services/Services/AuthService.cs içindeki ilgili metot
 
+    public async Task<(bool IsSuccess, string? Token, string? RefreshToken)> RefreshTokenAsync(string token)
+    {
+        var storedToken = await _db.RefreshTokens
+            .Include(x => x.User)
+                .ThenInclude(u => u.Roles)               // EKSİK OLAN KISIM BURASIYDI
+                    .ThenInclude(r => r.RolePermissions) // YETKİLERİ DE ÇEKİYORUZ
+                        .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(x => x.Token == token && !x.IsRevoked && x.ExpiresAt > DateTime.Now);
+
+        if (storedToken == null) return (false, null, null);
+
+        storedToken.IsRevoked = true;
+
+        var newAccessToken = CreateJwtToken(storedToken.User);
+        var newRefreshToken = Guid.NewGuid().ToString("N");
+
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            Token = newRefreshToken,
+            ExpiresAt = DateTime.Now.AddDays(7),
+            UserId = storedToken.UserId
+        });
+
+        await _db.SaveChangesAsync();
+        return (true, newAccessToken, newRefreshToken);
+    }
     private string CreateJwtToken(User user)
     {
         var jwt = _config.GetSection("Jwt");
@@ -159,7 +188,7 @@ public class AuthService : IAuthService
             issuer: jwt["Issuer"],
             audience: jwt["Audience"],
             claims: claims,
-            expires: DateTime.Now.AddHours(2),
+            expires: DateTime.Now.AddMinutes(15),
             signingCredentials: creds
         );
 

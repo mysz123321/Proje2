@@ -37,7 +37,7 @@ namespace Staj2.Infrastructure.Data
         // YENİ: Fiziksel Ara Tablolar
         public DbSet<ComputerTag> ComputerTags { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
-
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
         // ====================================================================
         // YENİ: ARAYÜZ (INTERFACE) TABANLI OTOMATİK AUDIT LOGGING
         // ====================================================================

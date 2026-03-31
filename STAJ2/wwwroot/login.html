@@ -67,9 +67,12 @@
             try {
                 const res = await api.post("/api/Auth/login", { email, password });
 
-                // DÜZELTME: API'den gelen kullanıcı adını yakalayıp saveAuth'a 4. parametre olarak gönderiyoruz
+                // 1. Backend'den gelen verileri ayıkla
                 const activeUsername = res.username || res.Username || "";
-                auth.saveAuth(res.token, res.roles, res.permissions, activeUsername);
+                const refreshToken = res.refreshToken || res.RefreshToken || ""; // Refresh token'ı yakala
+
+                // 2. saveAuth'a 5. parametre olarak refreshToken'ı gönder
+                auth.saveAuth(res.token, res.roles, res.permissions, activeUsername, refreshToken);
 
                 window.location.href = "/viewer.html";
             } catch (e) {
