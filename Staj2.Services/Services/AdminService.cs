@@ -340,7 +340,6 @@ public class AdminService : IAdminService
     public async Task<object> GetAllComputersForAssignmentAsync()
     {
         return await _db.Computers
-            .IgnoreQueryFilters()
             .Select(c => new
             {
                 id = c.Id,
