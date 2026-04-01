@@ -17,8 +17,9 @@
         });
 
         if (response.status === 403) {
-            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
-            window.location.reload();
+            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            window.auth.clearAuth();
+            window.location.href = "/login.html?reason=forbidden";
             return;
         }
 
@@ -70,8 +71,9 @@
         });
 
         if (response.status === 403) {
-            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
-            window.location.reload();
+            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            window.auth.clearAuth();
+            window.location.href = "/login.html?reason=forbidden";
             return;
         }
 
@@ -157,8 +159,9 @@
         // --- REFRESH TOKEN BİTİŞ ---
 
         if (res.status === 403) {
-            alert("Dikkat: Sistemdeki yetkileriniz yöneticiler tarafından değiştirildi. Sayfa güncel yetkilerle yeniden yükleniyor...");
-            window.location.reload();
+            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            window.auth.clearAuth();
+            window.location.href = "/login.html?reason=forbidden";
             throw new Error("Yetkiler değiştirildiği için işlem iptal edildi.");
         }
 

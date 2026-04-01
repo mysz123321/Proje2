@@ -204,7 +204,7 @@ public class AgentTelemetryService : IAgentTelemetryService
 
             if (dbUpdateNeeded) await _context.SaveChangesAsync(ct);
         }
-
+        dto.Ts = DateTime.Now;
         lock (_latestData) { _latestData[dto.MacAddress] = dto; }
 
         return (false, false, null, alertsToSend);

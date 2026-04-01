@@ -54,23 +54,23 @@ public static class DbSeeder
         }
         await context.SaveChangesAsync(); // Yetkileri kaydet
 
-        // 3. Admin Kullanıcısını Ekle
-        if (!await context.Users.AnyAsync(u => u.Username == "admin"))
-        {
-            var adminRole = await context.Roles.FirstAsync(r => r.Name == adminRoleName); // Değişti
-            var adminUser = new User
-            {
-                Username = "admin",
-                Email = "admin@staj2.com",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
-                IsApproved = true
-            };
+        //// 3. Admin Kullanıcısını Ekle
+        //if (!await context.Users.AnyAsync(u => u.Username == "admin"))
+        //{
+        //    var adminRole = await context.Roles.FirstAsync(r => r.Name == adminRoleName); // Değişti
+        //    var adminUser = new User
+        //    {
+        //        Username = "admin",
+        //        Email = "admin@staj2.com",
+        //        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+        //        IsApproved = true
+        //    };
 
-            adminUser.Roles.Add(adminRole);
-            context.Users.Add(adminUser);
-            await context.SaveChangesAsync();
-            Console.WriteLine(">>> Admin kullanıcısı (admin / Admin123!) oluşturuldu.");
-        }
+        //    adminUser.Roles.Add(adminRole);
+        //    context.Users.Add(adminUser);
+        //    await context.SaveChangesAsync();
+        //    Console.WriteLine(">>> Admin kullanıcısı (admin / Admin123!) oluşturuldu.");
+        //}
 
         // --- 4. YÖNETİCİ ROLÜNE TÜM YETKİLERİ OTOMATİK ATA ---
         var adminRoleForPerms = await context.Roles
