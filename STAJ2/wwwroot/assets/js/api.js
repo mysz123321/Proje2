@@ -100,7 +100,7 @@
         let res = await fetch(url, { ...options, headers });
 
         // --- REFRESH TOKEN BAŞLANGIÇ ---
-        if (res.status === 401) {
+        if (res.status === 401 && !path.includes('/login')) {
             const rfToken = localStorage.getItem("staj2_refresh_token");
 
             if (rfToken) {

@@ -432,7 +432,7 @@ window.fetchHistoryMetrics = async () => {
         renderBaseCharts(data.cpuRam);
         generateDiskFilters(data.disks);
 
-        placeholder.innerHTML = `<div class="opacity-25 mb-3 text-muted"><i class="bi bi-graph-up display-1"></i></div><h4 class="text-muted fw-light">Lütfen sol taraftan tarih aralığı seçerek analize başlayın.</h4>`;
+        placeholder.innerHTML = `<div class="opacity-25 mb-3 text-muted"><i class="bi bi-graph-up display-1"></i></div><h4 class="text-muted fw-light">Lütfen tarih aralığı seçerek analize başlayın.</h4>`;
 
     } catch (e) {
         placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger"><i class="bi bi-exclamation-triangle me-2"></i> Metrikler yüklenirken hata: ${e.message}</div>`;
