@@ -52,6 +52,7 @@ public class AgentTelemetryService : IAgentTelemetryService
                 TotalRamMb = dto.TotalRamMb,
                 LastSeen = DateTime.Now,
                 CreatedAt = DateTime.Now
+
             };
             _context.Computers.Add(computer);
         }
@@ -63,6 +64,10 @@ public class AgentTelemetryService : IAgentTelemetryService
             computer.CpuModel = dto.CpuModel;
             if (Math.Abs(computer.TotalRamMb - dto.TotalRamMb) > 1)
                 computer.TotalRamMb = dto.TotalRamMb;
+            if (computer.IsOfflineAlertSent)
+            {
+                computer.IsOfflineAlertSent = false;
+            }
         }
 
         await _context.SaveChangesAsync(ct);

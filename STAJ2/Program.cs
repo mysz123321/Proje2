@@ -24,7 +24,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRegistrationService, RegistrationService>();
 builder.Services.AddScoped<IUiService, UiService>();
 builder.Services.AddScoped<IAgentTelemetryService, AgentTelemetryService>();
-
+builder.Services.AddHostedService<Staj2.Services.Services.OfflineDeviceMonitorService>();
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

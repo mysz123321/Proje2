@@ -25,6 +25,7 @@ namespace Staj2.Domain.Entities
         public DateTime LastSeen { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public int? UpdatedBy { get; set; }
+        public bool IsOfflineAlertSent { get; set; } = false;
         // İlişkiler
         public List<ComputerDisk> Disks { get; set; } = new();
         public List<ComputerMetric> Metrics { get; set; } = new();
