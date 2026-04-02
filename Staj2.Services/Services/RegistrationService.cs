@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
@@ -9,10 +10,11 @@ namespace Staj2.Services.Services;
 public class RegistrationService : IRegistrationService
 {
     private readonly AppDbContext _db;
-
-    public RegistrationService(AppDbContext db)
+    private readonly IConfiguration _config;
+    public RegistrationService(AppDbContext db, IConfiguration config)
     {
         _db = db;
+        _config = config;
     }
 
     public async Task<(bool IsBadRequest, bool IsConflict, string? ErrorMessage, int? RequestId, string? Email, string? Username)> CreateRegistrationAsync(CreateRegistrationRequest request)
@@ -42,7 +44,7 @@ public class RegistrationService : IRegistrationService
         }
 
         // 3) Yeni kayıt isteğini oluştur
-        const int viewerRoleId = 3;
+        int viewerRoleId = _config.GetValue<int>("DefaultRoles:ViewerRoleId", 3);
 
         var rr = new UserRegistrationRequest
         {

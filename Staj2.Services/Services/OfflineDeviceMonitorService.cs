@@ -24,8 +24,10 @@ public class OfflineDeviceMonitorService : BackgroundService
         // Yani bu döngü SADECE proje çalışırken döner. Proje kapanırsa döngü biter.
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Her 60 saniyede bir kontrol et
-            await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+            // Bekleme süresini config'den al, yoksa varsayılan olarak 60 saniye kullan
+            int checkIntervalSeconds = _config.GetValue<int>("Alerting:CheckIntervalSeconds", 60);
+
+            await Task.Delay(TimeSpan.FromSeconds(checkIntervalSeconds), stoppingToken);
 
             // Kontrol metodunu çağır
             await CheckOfflineDevicesAsync(stoppingToken);
@@ -43,17 +45,21 @@ public class OfflineDeviceMonitorService : BackgroundService
 
         if (recipients == null || recipients.Count == 0) return;
 
-        // 150 saniyeden uzun süredir haber alınamayan cihazlar
-        var offlineThreshold = DateTime.Now.AddSeconds(-150);
+        // Ayarları config'den çekiyoruz. Bulunamazsa varsayılan değerler (150 ve 15) kullanılır.
+        int offlineThresholdSeconds = alertingConfig.GetValue<int>("OfflineThresholdSeconds", 150);
+        int ignoreThresholdMinutes = alertingConfig.GetValue<int>("IgnoreThresholdMinutes", 15);
 
-        // Çok eskiden ölmüş cihazları yoksayma süresi (Örn: 15 dakikadan daha uzun süredir yoksa zaten eskiden kapanmıştır)
-        var ignoreThreshold = DateTime.Now.AddMinutes(-15);
+        // Config'den gelen saniyeye göre çevrimdışı sayılma zamanı
+        var offlineThreshold = DateTime.Now.AddSeconds(-offlineThresholdSeconds);
 
-        // Henüz maili atılmamış, 150 saniyeden uzun süredir yok olan AMA son 15 dakika içinde kopmuş cihazlar
+        // Config'den gelen dakikaya göre çok eskiden ölmüş cihazları yoksayma süresi
+        var ignoreThreshold = DateTime.Now.AddMinutes(-ignoreThresholdMinutes);
+
+        // Henüz maili atılmamış, belirlenen süreden uzun süredir yok olan AMA yoksayma süresi içinde kopmuş cihazlar
         var offlineComputers = await context.Computers
             .Where(c => !c.IsDeleted
                      && c.LastSeen <= offlineThreshold
-                     && c.LastSeen >= ignoreThreshold // YENİ EKLENEN KISIM
+                     && c.LastSeen >= ignoreThreshold
                      && !c.IsOfflineAlertSent)
             .ToListAsync(stoppingToken);
 
@@ -68,7 +74,7 @@ public class OfflineDeviceMonitorService : BackgroundService
                 await mailSender.SendAsync(email, subject, body);
             }
 
-            // Bir sonraki 60 saniyelik döngüde aynı maili tekrar atmaması için bayrağı işaretle
+            // Bir sonraki döngüde aynı maili tekrar atmaması için bayrağı işaretle
             computer.IsOfflineAlertSent = true;
         }
 

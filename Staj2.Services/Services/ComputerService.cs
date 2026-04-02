@@ -1,17 +1,20 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace Staj2.Services.Services;
 
 public class ComputerService : IComputerService
 {
     private readonly AppDbContext _db;
-
-    public ComputerService(AppDbContext db)
+    private readonly IConfiguration _config;
+    public ComputerService(AppDbContext db, IConfiguration config)
     {
         _db = db;
+        _config = config;
     }
 
     // --- ORTAK YETKİ KONTROLÜ (Controller'dan Servise taşındı ve HttpContext'ten arındırıldı) ---
@@ -214,7 +217,7 @@ public class ComputerService : IComputerService
 
         //var now = DateTime.Now; // Not: Sunucu saatleri farklılık yaratmasın diye UtcNow önerilir ama mevcut kodun Now'dı, değiştirmeden devam edelim.
         //if (now.Kind == DateTimeKind.Utc) now = DateTime.Now; // Uyumluluk için eski DateTime.Now kalsın.
-
+        int offlineThreshold = _config.GetValue<int>("Alerting:OfflineThresholdSeconds", 150);
         // 4. İstemciye (UI) gidecek modeli oluştur
         var result = computersData.Select(x => new {
             id = x.Computer.Id,
@@ -224,7 +227,7 @@ public class ComputerService : IComputerService
             lastSeen = x.Computer.LastSeen,
             tags = x.ActiveTags,
             isDeleted = x.Computer.IsDeleted,
-            isActive = (DateTime.Now - x.Computer.LastSeen).TotalSeconds <= 150
+            isActive = (DateTime.Now - x.Computer.LastSeen).TotalSeconds <= offlineThreshold
         })
         .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen);
 
@@ -237,8 +240,8 @@ public class ComputerService : IComputerService
         var computer = await _db.Computers.FindAsync(id);
         if (computer == null)
             return (true, false, "Bilgisayar bulunamadı.");
-
-        bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= 150;
+        int offlineThreshold = _config.GetValue<int>("Alerting:OfflineThresholdSeconds", 150);
+        bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= offlineThreshold;
         if (isActive)
         {
             return (false, true, "Aktif olan bir bilgisayarı silemezsiniz. Lütfen önce ajanı durdurun.");

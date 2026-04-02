@@ -33,11 +33,12 @@ public class AuthService : IAuthService
 
         var accessToken = CreateJwtToken(user);
 
-        // Yeni Refresh Token oluştur
+        // 1. DÜZENLEME: Refresh Token gün sayısını config'den çekiyoruz
+        int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
         var refreshToken = new RefreshToken
         {
             Token = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTime.Now.AddDays(7),
+            ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
             UserId = user.Id
         };
 
@@ -124,21 +125,19 @@ public class AuthService : IAuthService
         return (true, null, currentPermissions);
     }
 
-    // --- HELPER METOTLAR (Sadece bu serviste kullanıldığı için private yapıldı) ---
+    // --- HELPER METOTLAR ---
     private static string Sha256(string input)
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
     }
-    // AuthService.cs içine eklenecek yeni metot
-    // Staj2.Services/Services/AuthService.cs içindeki ilgili metot
 
     public async Task<(bool IsSuccess, string? Token, string? RefreshToken)> RefreshTokenAsync(string token)
     {
         var storedToken = await _db.RefreshTokens
             .Include(x => x.User)
-                .ThenInclude(u => u.Roles)               // EKSİK OLAN KISIM BURASIYDI
-                    .ThenInclude(r => r.RolePermissions) // YETKİLERİ DE ÇEKİYORUZ
+                .ThenInclude(u => u.Roles)
+                    .ThenInclude(r => r.RolePermissions)
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(x => x.Token == token && !x.IsRevoked && x.ExpiresAt > DateTime.Now);
 
@@ -149,16 +148,20 @@ public class AuthService : IAuthService
         var newAccessToken = CreateJwtToken(storedToken.User);
         var newRefreshToken = Guid.NewGuid().ToString("N");
 
+        // 2. DÜZENLEME: Burada da yeni refresh token oluşturulurken sabit 7 gün yerine config kullanıyoruz.
+        int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
+
         _db.RefreshTokens.Add(new RefreshToken
         {
             Token = newRefreshToken,
-            ExpiresAt = DateTime.Now.AddDays(7),
+            ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
             UserId = storedToken.UserId
         });
 
         await _db.SaveChangesAsync();
         return (true, newAccessToken, newRefreshToken);
     }
+
     private string CreateJwtToken(User user)
     {
         var jwt = _config.GetSection("Jwt");
@@ -184,11 +187,14 @@ public class AuthService : IAuthService
         foreach (var permission in userPermissions)
             claims.Add(new Claim("Permission", permission));
 
+        // 3. DÜZENLEME: Access token geçerlilik süresini 15 dakika sabiti yerine config'den çekiyoruz.
+        int accessTokenMinutes = _config.GetValue<int>("Jwt:AccessTokenExpirationMinutes", 15);
+
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],
             audience: jwt["Audience"],
             claims: claims,
-            expires: DateTime.Now.AddMinutes(15),
+            expires: DateTime.Now.AddMinutes(accessTokenMinutes),
             signingCredentials: creds
         );
 
