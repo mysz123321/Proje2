@@ -7,4 +7,7 @@ public class RolePermission
 
     public int PermissionId { get; set; }
     public Permission Permission { get; set; } = null!;
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+    public int? DeletedBy { get; set; }
 }

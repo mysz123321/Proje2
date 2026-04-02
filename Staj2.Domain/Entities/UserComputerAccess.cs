@@ -7,4 +7,7 @@ public class UserComputerAccess
 
     public int ComputerId { get; set; }
     public Computer Computer { get; set; } = null!;
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+    public int? DeletedBy { get; set; }
 }

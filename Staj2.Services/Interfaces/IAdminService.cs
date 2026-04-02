@@ -12,7 +12,7 @@ public interface IAdminService
     Task<string?> DeleteRoleAsync(int id, int? currentUserId);
 
     Task<object> GetAllUsersAsync();
-    Task<string?> DeleteUserAsync(int id);
+    Task<string?> DeleteUserAsync(int id, int? currentUserId);
     Task<string?> ChangeUserRolesAsync(int userId, ChangeRolesRequest request);
 
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
@@ -33,7 +33,7 @@ public interface IAdminService
     // --- ETİKET YÖNETİMİ ---
     Task<object> GetTagsAsync();
     Task<(bool IsSuccess, string? ErrorMessage, object? CreatedTag)> CreateTagAsync(TagCreateRequest request, int? userId);
-    Task<string?> DeleteTagAsync(int id);
+    Task<string?> DeleteTagAsync(int id, int? currentUserId);
     Task<string?> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req);
     Task<List<int>> GetTagAssignedComputerIdsAsync(int tagId);
 }

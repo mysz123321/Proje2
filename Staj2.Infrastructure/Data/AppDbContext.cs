@@ -118,6 +118,9 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<ComputerTag>().HasQueryFilter(ct => !ct.IsDeleted);
             modelBuilder.Entity<UserRole>().HasQueryFilter(ur => !ur.IsDeleted);
             modelBuilder.Entity<Role>().HasQueryFilter(r => !r.IsDeleted);
+            modelBuilder.Entity<UserComputerAccess>().HasQueryFilter(uca => !uca.IsDeleted);
+            modelBuilder.Entity<UserTagAccess>().HasQueryFilter(uta => !uta.IsDeleted);
+            modelBuilder.Entity<RolePermission>().HasQueryFilter(rp => !rp.IsDeleted);
             // --- İLİŞKİLER VE ARA TABLOLAR ---
 
             modelBuilder.Entity<RolePermission>()

@@ -7,4 +7,7 @@ public class UserTagAccess
 
     public int TagId { get; set; }
     public Tag Tag { get; set; } = null!;
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+    public int? DeletedBy { get; set; }
 }

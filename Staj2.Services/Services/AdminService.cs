@@ -105,29 +105,35 @@ public class AdminService : IAdminService
 
     public async Task<string?> DeleteRoleAsync(int id, int? currentUserId)
     {
-        // Rolü ve o role sahip kullanıcıları getir
         var role = await _db.Roles.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
+        if (role == null) return "Rol bulunamadı.";
 
-        if (role == null)
-            return "Rol bulunamadı."; // NotFound durumu
-
-        // Sistem varsayılan yöneticisi silinemez koruması
         var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+        if (role.Name == adminRoleName) return $"Sistem varsayılan '{adminRoleName}' rolü silinemez.";
+        if (role.Users.Any(u => !u.IsDeleted)) return "Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin.";
 
-        if (role.Name == adminRoleName)
-            return $"Sistem varsayılan '{adminRoleName}' rolü silinemez."; // BadRequest durumu
-
-        // KURAL: Eğer sistemde bu role sahip silinmemiş bir kullanıcı varsa işlemi engelle
-        if (role.Users.Any(u => !u.IsDeleted))
-            return "Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin."; // BadRequest
-
-        // Soft Delete İşlemi
         role.IsDeleted = true;
         role.DeletedAt = DateTime.Now;
         role.DeletedBy = currentUserId;
 
+        // Role ait yetkilerin (RolePermission) silinmesi
+        var rolePermissions = await _db.RolePermissions.Where(rp => rp.RoleId == id).ToListAsync();
+        rolePermissions.ForEach(rp => {
+            rp.IsDeleted = true;
+            rp.DeletedAt = DateTime.Now;
+            rp.DeletedBy = currentUserId;
+        });
+
+        // Role ait kullanıcı bağlarının (UserRole) silinmesi
+        var userRoles = await _db.UserRoles.Where(ur => ur.RoleId == id).ToListAsync();
+        userRoles.ForEach(ur => {
+            ur.IsDeleted = true;
+            ur.DeletedAt = DateTime.Now;
+            ur.DeletedBy = currentUserId;
+        });
+
         await _db.SaveChangesAsync();
-        return null; // Başarılı
+        return null;
     }
 
     // --- KULLANICI YÖNETİMİ İŞ MANTIKLARI ---
@@ -140,16 +146,42 @@ public class AdminService : IAdminService
                           .ToListAsync();
     }
 
-    public async Task<string?> DeleteUserAsync(int id)
+    public async Task<string?> DeleteUserAsync(int id, int? currentUserId) // Parametre eklendi
     {
         var user = await _db.Users.FindAsync(id);
         if (user == null)
-            return "Kullanıcı bulunamadı."; // NotFound
+            return "Kullanıcı bulunamadı.";
 
         user.IsDeleted = true;
-        await _db.SaveChangesAsync();
+        user.DeletedAt = DateTime.Now;
+        user.DeletedBy = currentUserId; // Eklendi
 
-        return null; // Başarılı
+        // Kullanıcıya ait Rol bağlantılarını sil
+        var userRoles = await _db.UserRoles.Where(ur => ur.UserId == id).ToListAsync();
+        userRoles.ForEach(ur => {
+            ur.IsDeleted = true;
+            ur.DeletedAt = DateTime.Now;
+            ur.DeletedBy = currentUserId; // Eklendi
+        });
+
+        // Kullanıcıya ait Cihaz erişimlerini sil
+        var userComputerAccesses = await _db.UserComputerAccesses.Where(uca => uca.UserId == id).ToListAsync();
+        userComputerAccesses.ForEach(uca => {
+            uca.IsDeleted = true;
+            uca.DeletedAt = DateTime.Now;
+            uca.DeletedBy = currentUserId; // Eklendi
+        });
+
+        // Kullanıcıya ait Etiket erişimlerini sil
+        var userTagAccesses = await _db.UserTagAccesses.Where(uta => uta.UserId == id).ToListAsync();
+        userTagAccesses.ForEach(uta => {
+            uta.IsDeleted = true;
+            uta.DeletedAt = DateTime.Now;
+            uta.DeletedBy = currentUserId; // Eklendi
+        });
+
+        await _db.SaveChangesAsync();
+        return null;
     }
 
     public async Task<string?> ChangeUserRolesAsync(int userId, ChangeRolesRequest request)
@@ -389,12 +421,31 @@ public class AdminService : IAdminService
         return (true, null, new { id = tag.Id, name = tag.Name });
     }
 
-    public async Task<string?> DeleteTagAsync(int id)
+    public async Task<string?> DeleteTagAsync(int id, int? currentUserId) // Parametre eklendi
     {
         var tag = await _db.Tags.FindAsync(id);
         if (tag == null) return "Etiket bulunamadı.";
 
         tag.IsDeleted = true;
+        tag.DeletedAt = DateTime.Now;
+        tag.DeletedBy = currentUserId; // Eklendi
+
+        // Etikete ait Cihaz bağlantılarını (ComputerTag) sil
+        var computerTags = await _db.ComputerTags.Where(ct => ct.TagId == id).ToListAsync();
+        computerTags.ForEach(ct => {
+            ct.IsDeleted = true;
+            ct.DeletedAt = DateTime.Now;
+            ct.DeletedBy = currentUserId; // Eklendi
+        });
+
+        // Etikete ait Kullanıcı erişimlerini (UserTagAccess) sil
+        var userTagAccesses = await _db.UserTagAccesses.Where(uta => uta.TagId == id).ToListAsync();
+        userTagAccesses.ForEach(uta => {
+            uta.IsDeleted = true;
+            uta.DeletedAt = DateTime.Now;
+            uta.DeletedBy = currentUserId; // Eklendi
+        });
+
         await _db.SaveChangesAsync();
         return null;
     }

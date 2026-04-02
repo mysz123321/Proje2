@@ -41,7 +41,18 @@ public class AdminController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var errorMessage = await _adminService.DeleteUserAsync(id);
+        // 1. Token'dan giriş yapan kullanıcının ID'sini çek
+        int? currentUserId = null;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? User.FindFirst("id")?.Value;
+
+        if (int.TryParse(userIdClaim, out int parsedId))
+        {
+            currentUserId = parsedId;
+        }
+
+        // 2. Servise bu ID'yi gönder
+        var errorMessage = await _adminService.DeleteUserAsync(id, currentUserId);
 
         if (errorMessage != null)
             return NotFound(new { message = errorMessage });
@@ -142,7 +153,18 @@ public class AdminController : ControllerBase
     [HasPermission(AppPermissions.Tag_Manage)]
     public async Task<IActionResult> DeleteTag(int id)
     {
-        var errorMessage = await _adminService.DeleteTagAsync(id);
+        // 1. Token'dan giriş yapan kullanıcının ID'sini çek
+        int? currentUserId = null;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? User.FindFirst("id")?.Value;
+
+        if (int.TryParse(userIdClaim, out int parsedId))
+        {
+            currentUserId = parsedId;
+        }
+
+        // 2. Servise bu ID'yi gönder
+        var errorMessage = await _adminService.DeleteTagAsync(id, currentUserId);
 
         if (errorMessage != null)
             return NotFound(new { message = errorMessage });
