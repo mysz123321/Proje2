@@ -10,6 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/css/app.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --sidebar-width: 260px;
@@ -127,6 +128,7 @@
                 color: #0f172a !important;
                 font-weight: bold;
             }
+
         #sidebar {
             transition: margin 0.3s ease;
         }
@@ -146,6 +148,7 @@
                 width: 100%;
             }
         }
+
         @media (max-width: 992px) {
             #sidebar {
                 margin-left: calc(-1 * var(--sidebar-width));
@@ -177,7 +180,6 @@
                 height: auto !important; /* Grafik alanındaki calc(85vh - 150px) kuralını mobilde ez */
                 overflow: visible !important;
             }
-
         }
         /* --- Switch (Toggle) Görünürlük Düzeltmesi --- */
         [data-theme="light"] .form-check-input.custom-toggle {

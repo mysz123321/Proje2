@@ -17,7 +17,7 @@
         });
 
         if (response.status === 403) {
-            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            await Swal.fire('Erişim Reddedildi', 'Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...', 'error');
             window.auth.clearAuth();
             window.location.href = "/login.html?reason=forbidden";
             return;
@@ -71,17 +71,17 @@
         });
 
         if (response.status === 403) {
-            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            await Swal.fire('Erişim Reddedildi', 'Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...', 'error');
             window.auth.clearAuth();
             window.location.href = "/login.html?reason=forbidden";
             return;
         }
 
         if (response.ok) {
-            alert("Eşik değerleri güncellendi!");
+            Swal.fire('Başarılı', 'Eşik değerleri güncellendi!', 'success');
             if (typeof closeModal === "function") closeModal();
         } else {
-            alert("Hata oluştu.");
+            Swal.fire('Hata', 'İşlem sırasında hata oluştu.', 'error');
         }
     }
 
@@ -151,7 +151,7 @@
             }
 
             // Eğer sistem kurtarılamadıysa o zaman kullanıcıyı at
-            alert("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+            await Swal.fire('Oturum Kapandı', 'Oturum süreniz doldu. Lütfen tekrar giriş yapın.', 'info');
             window.auth.clearAuth();
             window.location.href = "/login.html?reason=expired";
             throw new Error("Oturum süresi doldu (401).");
@@ -159,7 +159,7 @@
         // --- REFRESH TOKEN BİTİŞ ---
 
         if (res.status === 403) {
-            alert("Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...");
+            await Swal.fire('Erişim Reddedildi', 'Dikkat: Hesabınız silinmiş veya yetkileriniz değiştirilmiş olabilir. Güvenlik nedeniyle çıkış yapılıyor...', 'error');
             window.auth.clearAuth();
             window.location.href = "/login.html?reason=forbidden";
             throw new Error("Yetkiler değiştirildiği için işlem iptal edildi.");

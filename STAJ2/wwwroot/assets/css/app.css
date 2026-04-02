@@ -647,3 +647,33 @@ input, select, .small-select {
 [data-theme="dark"] #tagAssignSearchInput::placeholder {
     color: #94a3b8 !important;
 }
+/* SweetAlert2 bildirimlerinin Bootstrap modallarının önünde görünmesi için */
+.swal2-container {
+    z-index: 999999 !important;
+}
+/* --- Koyu Mod İçin SweetAlert2 Uyarlaması --- */
+html[data-theme="dark"] .swal2-popup {
+    background-color: var(--bg-card) !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Başlık ve Metin Renkleri */
+html[data-theme="dark"] .swal2-title,
+html[data-theme="dark"] .swal2-html-container {
+    color: var(--text-main) !important;
+}
+
+/* Prompt (Girdi) Ekranları İçin Input Arka Planları (Ret Sebebi Kutusu vb.) */
+html[data-theme="dark"] .swal2-input,
+html[data-theme="dark"] .swal2-textarea {
+    background-color: var(--bg-input) !important;
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Girdi doğrulama hata mesajı arka planı (Ret sebebi boş bırakıldığında çıkan uyarı) */
+html[data-theme="dark"] .swal2-validation-message {
+    background: var(--bg-hover) !important;
+    color: var(--text-main) !important;
+}

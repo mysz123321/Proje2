@@ -384,30 +384,42 @@
         renderSidebar, switchView, toggleTheme,
 
         approveRequest: async (id) => {
-            if (!confirm("Bu kullanıcıyı onaylamak istiyor musunuz?")) return;
+            // 1. Tarayıcı varsayılan "confirm" yerine SweetAlert2 Onay Penceresi
+            const result = await Swal.fire({
+                title: 'Onaylıyor musunuz?',
+                text: "Bu kullanıcıyı onaylamak istiyor musunuz?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Evet, Onayla',
+                cancelButtonText: 'İptal'
+            });
 
-            // 1. İşlem yapılan butonu bul ve loading durumuna al
+            // Eğer iptale basılırsa işlemi durdur
+            if (!result.isConfirmed) return;
+
+            // 2. SİZİN KODUNUZ: İşlem yapılan butonu bul ve loading durumuna al
             const approveBtn = document.querySelector(`button[onclick="ui.approveRequest(${id})"]`);
             const rejectBtn = document.querySelector(`button[onclick="ui.rejectRequest(${id})"]`);
 
             if (approveBtn) {
-                // Orijinal metni sakla, spinner ekle ve butonu kilitle
                 approveBtn.dataset.originalText = approveBtn.innerHTML;
                 approveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Mail Gönderiliyor...';
                 approveBtn.disabled = true;
             }
-            if (rejectBtn) rejectBtn.disabled = true; // Çakışmayı önlemek için reddet butonunu da kilitle
+            if (rejectBtn) rejectBtn.disabled = true;
 
             try {
                 const roleId = document.getElementById(`reqRole_${id}`).value;
                 await api.post(`/api/admin/requests/approve/${id}`, { newRoleId: parseInt(roleId) });
 
-                alert("Kullanıcı onaylandı ve bilgilendirme maili gönderildi.");
-                ui.switchView('requests'); // Tabloyu yeniler (butonlar kendiliğinden sıfırlanır)
+                // 3. Tarayıcı varsayılan "alert" yerine SweetAlert2 Başarı Mesajı
+                Swal.fire('Onaylandı', 'Kullanıcı onaylandı ve bilgilendirme maili gönderildi.', 'success');
+                ui.switchView('requests');
             } catch (e) {
-                alert(e.message || "Bir hata oluştu.");
+                // 4. Tarayıcı varsayılan "alert" yerine SweetAlert2 Hata Mesajı
+                Swal.fire('Hata', e.message || "Bir hata oluştu.", 'error');
 
-                // 2. Hata olursa butonları eski haline getir (sayfa yenilenmezse)
+                // SİZİN KODUNUZ: Hata olursa butonları eski haline getir
                 if (approveBtn) {
                     approveBtn.innerHTML = approveBtn.dataset.originalText;
                     approveBtn.disabled = false;
@@ -417,32 +429,45 @@
         },
 
         rejectRequest: async (id) => {
-            const reason = prompt("Lütfen ret sebebini giriniz:");
-            if (reason === null) return;
-            if (reason.length > 200) { alert("Ret sebebi 200 karakterden uzun olamaz."); return; }
+            // 1. Tarayıcı varsayılan "prompt" yerine SweetAlert2 Girdi Penceresi
+            const { value: reason } = await Swal.fire({
+                title: 'Ret Sebebi',
+                input: 'textarea',
+                inputLabel: 'Lütfen ret sebebini giriniz:',
+                showCancelButton: true,
+                confirmButtonText: 'Reddet',
+                cancelButtonText: 'İptal',
+                inputValidator: (value) => {
+                    if (!value) return 'Ret sebebi boş bırakılamaz!';
+                    if (value.length > 200) return 'Ret sebebi 200 karakterden uzun olamaz.';
+                }
+            });
 
-            // --- YENİ: Butonları bul ve yükleniyor (spinner) moduna al ---
+            // Eğer iptale basılırsa veya boş geçilirse işlemi durdur
+            if (!reason) return;
+
+            // 2. SİZİN KODUNUZ: Butonları bul ve yükleniyor (spinner) moduna al
             const approveBtn = document.querySelector(`button[onclick="ui.approveRequest(${id})"]`);
             const rejectBtn = document.querySelector(`button[onclick="ui.rejectRequest(${id})"]`);
 
             if (rejectBtn) {
-                // Orijinal metni sakla, spinner ekle ve butonu kilitle
                 rejectBtn.dataset.originalText = rejectBtn.innerHTML;
                 rejectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Mail Gönderiliyor...';
                 rejectBtn.disabled = true;
             }
-            // Aynı anda onayla butonuna basılmasını engellemek için onu da kilitle
             if (approveBtn) approveBtn.disabled = true;
 
             try {
                 await api.post(`/api/admin/requests/reject`, { requestId: id, rejectionReason: reason });
 
-                alert("Talep reddedildi ve bilgilendirme maili gönderildi.");
-                ui.switchView('requests'); // Tabloyu yeniler (butonlar kendiliğinden sıfırlanır)
+                // 3. Tarayıcı varsayılan "alert" yerine SweetAlert2 Başarı Mesajı
+                Swal.fire('Reddedildi', 'Talep reddedildi ve bilgilendirme maili gönderildi.', 'success');
+                ui.switchView('requests');
             } catch (e) {
-                alert(e.message || "Bir hata oluştu.");
+                // 4. Tarayıcı varsayılan "alert" yerine SweetAlert2 Hata Mesajı
+                Swal.fire('Hata', e.message || "Bir hata oluştu.", 'error');
 
-                // Hata durumunda butonları eski haline getir
+                // SİZİN KODUNUZ: Hata durumunda butonları eski haline getir
                 if (rejectBtn) {
                     rejectBtn.innerHTML = rejectBtn.dataset.originalText;
                     rejectBtn.disabled = false;
@@ -451,11 +476,23 @@
             }
         },
         deleteUser: async (id) => {
-            if (confirm("Kullanıcı silinsin mi?")) {
+            const result = await Swal.fire({
+                title: 'Emin misiniz?',
+                text: "Kullanıcı silinsin mi?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Evet, Sil!',
+                cancelButtonText: 'İptal'
+            });
+
+            if (result.isConfirmed) {
                 try {
                     await api.del(`/api/Admin/users/${id}`);
+                    Swal.fire('Silindi!', 'Kullanıcı silindi.', 'success');
                     ui.switchView('users');
-                } catch (e) { alert(e.message); }
+                } catch (e) { Swal.fire('Hata', e.message, 'error'); }
             }
         },
 
@@ -612,16 +649,28 @@
                     nameInput.value = "";
                     await switchView('tags');
                     if (window.loadFilterTags) window.loadFilterTags();
-                } catch (e) { alert("Etiket eklenirken hata: " + e.message); }
+                    Swal.fire({ title: 'Başarılı', text: 'Etiket Eklendi!', icon: 'success', timer: 1500, showConfirmButton: false });
+                } catch (e) { Swal.fire('Hata', "Etiket eklenirken hata: " + e.message, 'error'); }
             }
         },
         deleteTag: async (id) => {
-            if (confirm("Etiket silinsin mi?")) {
+            const result = await Swal.fire({
+                title: 'Silmek İstediğinize Emin misiniz?',
+                text: "Etiket silinecektir.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sil',
+                cancelButtonText: 'İptal'
+            });
+
+            if (result.isConfirmed) {
                 try {
                     await api.del(`/api/Admin/tags/${id}`);
                     ui.switchView('tags');
                     if (window.loadFilterTags) window.loadFilterTags();
-                } catch (e) { alert(e.message); }
+                    Swal.fire('Silindi', 'Etiket silindi.', 'success');
+                } catch (e) { Swal.fire('Hata', e.message, 'error'); }
             }
         },
 
@@ -688,8 +737,8 @@
             try {
                 await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: pgState.tagAssign.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById("tagAssignModal")).hide();
-                alert("Atama işlemi başarılı!");
-            } catch (e) { alert("Hata: " + e.message); }
+                Swal.fire('Başarılı', 'Atama işlemi başarılı!', 'success');
+            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
         },
 
         // --- ROL YETKİLERİ MODALI ---
@@ -743,8 +792,8 @@
             try {
                 await api.post(`/api/Admin/roles/${roleId}/permissions`, { permissionIds: pgState.rolePerm.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('rolePermissionsModal')).hide();
-                alert("Yetkiler başarıyla güncellendi. Değişikliklerin size yansıması için çıkış yapıp tekrar girmelisiniz.");
-            } catch (e) { alert(e.message); }
+                Swal.fire('Başarılı', 'Yetkiler başarıyla güncellendi. Değişikliklerin size yansıması için çıkış yapıp tekrar girmelisiniz.', 'success');
+            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
         },
 
         // --- KULLANICI ROLLERİ MODALI ---
@@ -791,33 +840,27 @@
         saveUserRoles: async () => {
             const userId = parseInt(document.getElementById('editUserRole_UserId').value);
             const selectedRoleIds = pgState.userRoles.assignedIds;
-
-            // "Yönetici" rolünün ID'sini bulalım
             const adminRole = pgState.userRoles.data.find(r => r.name === window.APP_CONFIG.ADMIN_ROLE_NAME);
             const isAdminSelected = adminRole && selectedRoleIds.includes(adminRole.id);
 
             try {
-                // Eğer kullanıcıdan yönetici rolü alınmak isteniyorsa kontrol yap
                 if (!isAdminSelected) {
                     const allUsers = await api.get('/api/Admin/users');
                     const adminCount = allUsers.filter(u => u.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME)).length;
-
-                    // Düzenlenen kullanıcı şu an admin mi?
                     const currentUser = allUsers.find(u => u.id === userId);
                     const isCurrentlyAdmin = currentUser && currentUser.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME);
 
                     if (isCurrentlyAdmin && adminCount <= 1) {
-                        alert("Sistemde kalan son yönetici yetkisini kaldıramazsınız!");
-                        return;
+                        return Swal.fire('Eylem Reddedildi', 'Sistemde kalan son yönetici yetkisini kaldıramazsınız!', 'warning');
                     }
                 }
 
                 await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: selectedRoleIds });
                 bootstrap.Modal.getInstance(document.getElementById('userRolesModal')).hide();
                 ui.switchView('users');
-                alert("Roller başarıyla güncellendi.");
+                Swal.fire('Başarılı', 'Roller başarıyla güncellendi.', 'success');
             } catch (e) {
-                alert("Hata: " + e.message);
+                Swal.fire('Hata', e.message, 'error');
             }
         },
 
@@ -892,7 +935,8 @@
             try {
                 await api.post(`/api/Admin/users/${userId}/assign-computers`, { computerIds: pgState.userComp.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userComputerAccessModal')).hide();
-            } catch (e) { alert(e.message); }
+                Swal.fire({ title: 'Başarılı', icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
         },
 
         // --- KULLANICI ETİKET ERİŞİMİ MODALI ---
@@ -949,7 +993,8 @@
                 await api.post(`/api/Admin/users/${userId}/assign-tags`, { tagIds: pgState.userTag.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userTagAccessModal')).hide();
                 if (window.loadFilterTags) window.loadFilterTags();
-            } catch (e) { alert(e.message); }
+                Swal.fire({ title: 'Başarılı', icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
         },
         filterTagAssignComputers: () => {
             const input = document.getElementById('tagAssignSearchInput').value.toLowerCase();
@@ -991,32 +1036,37 @@
 
         saveNewRole: async () => {
             const roleName = document.getElementById('newRoleNameInput').value.trim();
-            if (!roleName) { alert("Lütfen rol adı giriniz."); return; }
-
-            // Değişen kısım: Seçimleri direkt state'den alıyoruz
+            if (!roleName) { return Swal.fire('Uyarı', 'Lütfen rol adı giriniz.', 'warning'); }
             const selectedPerms = pgState.newRolePerm.assignedIds;
 
             try {
-                await api.post('/api/Admin/roles', {
-                    name: roleName,
-                    permissionIds: selectedPerms
-                });
+                await api.post('/api/Admin/roles', { name: roleName, permissionIds: selectedPerms });
                 bootstrap.Modal.getInstance(document.getElementById('createRoleModal')).hide();
-                alert("Yeni rol başarıyla eklendi!");
+                Swal.fire('Başarılı', 'Yeni rol başarıyla eklendi!', 'success');
                 ui.switchView('roles');
             } catch (e) {
-                alert("Hata: " + (e.message || "Rol eklenirken bir sorun oluştu."));
+                Swal.fire('Hata', e.message || "Rol eklenirken bir sorun oluştu.", 'error');
             }
         },
         deleteRole: async (id, name) => {
-            if (!confirm(`'${name}' rolünü silmek istediğinize emin misiniz?`)) return;
+            const result = await Swal.fire({
+                title: 'Emin misiniz?',
+                text: `'${name}' rolünü silmek istediğinize emin misiniz?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Evet, Sil!',
+                cancelButtonText: 'İptal'
+            });
+
+            if (!result.isConfirmed) return;
 
             try {
                 await api.del(`/api/Admin/roles/${id}`);
-                alert("Rol başarıyla silindi.");
-                ui.switchView('roles'); // Tabloyu anında yenile
+                Swal.fire('Silindi', 'Rol başarıyla silindi.', 'success');
+                ui.switchView('roles');
             } catch (e) {
-                alert("Hata: " + e.message); // Kullanıcı varsa burada hata mesajını gösterecek
+                Swal.fire('Hata', e.message, 'error');
             }
         },
         // window.ui nesnesinin içine ekle

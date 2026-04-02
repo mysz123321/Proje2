@@ -225,8 +225,9 @@ window.handleRename = (id, currentName) => {
 window.saveComputerName = async () => {
     const id = document.getElementById("renameComputerId").value;
     const newName = document.getElementById("newComputerName").value.trim();
-    if (!newName) return alert("İsim alanı boş bırakılamaz!");
-    if (newName.length > 200) return alert("Bilgisayar ismi 200 karakterden uzun olamaz!");
+
+    if (!newName) return Swal.fire('Uyarı', 'İsim alanı boş bırakılamaz!', 'warning');
+    if (newName.length > 200) return Swal.fire('Uyarı', 'Bilgisayar ismi 200 karakterden uzun olamaz!', 'warning');
 
     try {
         await api.put(`/api/Computer/update-display-name`, { id: parseInt(id), newDisplayName: newName });
@@ -234,7 +235,8 @@ window.saveComputerName = async () => {
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-    } catch (e) { alert(e.message); }
+        Swal.fire({ title: 'Başarılı', text: 'İsim güncellendi!', icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) { Swal.fire('Hata', e.message, 'error'); }
 };
 
 window.openTagModal = async (id) => {
@@ -260,7 +262,8 @@ window.saveTags = async () => {
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-    } catch (e) { alert(e.message); }
+        Swal.fire({ title: 'Başarılı', text: 'Etiketler güncellendi!', icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) { Swal.fire('Hata', e.message, 'error'); }
 };
 
 window.openThresholdSettings = async (id) => {
@@ -337,7 +340,8 @@ window.saveThresholdsWithValidation = async () => {
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-    } catch (e) { alert("Hata: " + e.message); }
+        Swal.fire({ title: 'Başarılı', text: 'Sınırlar kaydedildi!', icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) { Swal.fire('Hata', "Hata: " + e.message, 'error'); }
 };
 
 // --- 3. GEÇMİŞ METRİK FONKSİYONLARI (GRAFİKLİ SOL MENÜLÜ YAPI) ---
@@ -382,23 +386,21 @@ window.fetchHistoryMetrics = async () => {
     const start = document.getElementById("historyStart").value;
     const end = document.getElementById("historyEnd").value;
 
-    if (!start || !end) return alert("Lütfen tarih aralığı seçiniz.");
+    if (!start || !end) return Swal.fire('Uyarı', 'Lütfen tarih aralığı seçiniz.', 'warning');
 
-    // --- YENİ: 7 GÜN VE TARİH KONTROLÜ ---
     const startDate = new Date(start);
     const endDate = new Date(end);
 
     if (startDate > endDate) {
-        return alert("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
+        return Swal.fire('Hata', 'Başlangıç tarihi bitiş tarihinden sonra olamaz.', 'error');
     }
 
     const diffInMs = Math.abs(endDate - startDate);
     const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
 
     if (diffInDays > 7) {
-        return alert("Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.");
+        return Swal.fire('Uyarı', 'Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.', 'warning');
     }
-    // ------------------------------------
 
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
@@ -649,15 +651,27 @@ window.renderAllComputersTable = () => {
 };
 
 window.deleteComputer = async (id) => {
-    if (!confirm("Bu bilgisayarı silmek istediğinize emin misiniz? (Geçmiş metrikleri filtrelenerek bulunmaya devam edecektir)")) return;
+    const result = await Swal.fire({
+        title: 'Emin misiniz?',
+        text: "Bu bilgisayarı silmek istediğinize emin misiniz?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Evet, Sil!',
+        cancelButtonText: 'İptal'
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
         await api.del(`/api/Computer/${id}`);
         loadAllComputers();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
+        Swal.fire('Silindi!', 'Bilgisayar başarıyla silindi.', 'success');
     } catch (e) {
-        alert(e.message);
+        Swal.fire('Hata', e.message, 'error');
     }
 };
 
