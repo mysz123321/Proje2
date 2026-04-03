@@ -145,4 +145,11 @@ public class ComputerController : ControllerBase
         var tags = await _computerService.GetMyTagsAsync(GetUserId(), IsAdmin());
         return Ok(tags);
     }
+
+    [HttpGet("performance-report")]
+    public async Task<IActionResult> GetPerformanceReport()
+    {
+        var report = await _computerService.GetPerformanceReportAsync();
+        return Ok(report);
+    }
 }

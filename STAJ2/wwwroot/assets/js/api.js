@@ -239,6 +239,8 @@
         put: (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) }),
         del: (path) => request(path, { method: "DELETE" }),
         openThresholdSettings: openThresholdSettings,
-        saveThresholds: saveThresholds
+        saveThresholds: saveThresholds,
+
+        getPerformanceReport: () => request('/api/Computer/performance-report')
     };
 })();

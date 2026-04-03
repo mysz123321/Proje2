@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
@@ -11,10 +12,12 @@ public class ComputerService : IComputerService
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
-    public ComputerService(AppDbContext db, IConfiguration config)
+    private readonly IMemoryCache _cache;
+    public ComputerService(AppDbContext db, IConfiguration config, IMemoryCache cache)
     {
         _db = db;
         _config = config;
+        _cache = cache;
     }
 
     // --- ORTAK YETKİ KONTROLÜ (Controller'dan Servise taşındı ve HttpContext'ten arındırıldı) ---
@@ -283,5 +286,74 @@ public class ComputerService : IComputerService
 
         var tags = await query.Select(t => new { t.Id, t.Name }).ToListAsync();
         return tags;
+    }
+    public async Task<PerformanceReportDto> GetPerformanceReportAsync()
+    {
+        const string cacheKey = "AllTimePerformanceReport";
+
+        // 1. ADIM CACHE KONTROLÜ: Rapor RAM'de (Cache) var mı? Varsa veritabanını hiç yormadan anında (0 sn) gönder!
+        if (_cache.TryGetValue(cacheKey, out PerformanceReportDto? cachedReport) && cachedReport != null)
+        {
+            return cachedReport;
+        }
+
+        var activeComputerIds = await _db.Computers.Select(c => c.Id).ToListAsync();
+
+        // 2. Metrikleri çekerken SADECE bu aktif cihazların ID'sine sahip olanları grupla
+        var metricsSummary = await _db.ComputerMetrics
+            .Where(m => activeComputerIds.Contains(m.ComputerId)) // <--- SİHİRLİ DOKUNUŞ BURASI
+            .GroupBy(m => m.ComputerId)
+            .Select(g => new
+            {
+                ComputerId = g.Key,
+                AvgCpu = g.Average(m => m.CpuUsage),
+                AvgRam = g.Average(m => m.RamUsage)
+            })
+            .ToListAsync();
+
+        if (!metricsSummary.Any()) return new PerformanceReportDto();
+
+        // Bilgisayar isimlerini ayrı, hafif bir sorguyla çekiyoruz
+        var computers = await _db.Computers
+            .Select(c => new { c.Id, c.DisplayName, c.MachineName })
+            .ToListAsync();
+
+        // İki veriyi (Ortalamalar ve İsimler) birleştiriyoruz
+        var deviceAverages = metricsSummary.Select(m => new
+        {
+            ComputerId = m.ComputerId,
+            ComputerName = computers.FirstOrDefault(c => c.Id == m.ComputerId)?.DisplayName
+                        ?? computers.FirstOrDefault(c => c.Id == m.ComputerId)?.MachineName
+                        ?? "Bilinmeyen Cihaz",
+            AvgCpu = m.AvgCpu,
+            AvgRam = m.AvgRam
+        }).ToList();
+
+        // Genel ortalamayı hesapla
+        double globalAvgCpu = deviceAverages.Average(d => d.AvgCpu);
+        double globalAvgRam = deviceAverages.Average(d => d.AvgRam);
+
+        var report = new PerformanceReportDto
+        {
+            GlobalAverageCpu = Math.Round(globalAvgCpu, 2),
+            GlobalAverageRam = Math.Round(globalAvgRam, 2),
+            Devices = deviceAverages.Select(d => new DevicePerformanceDto
+            {
+                ComputerId = d.ComputerId,
+                ComputerName = d.ComputerName,
+                AverageCpu = Math.Round(d.AvgCpu, 2),
+                AverageRam = Math.Round(d.AvgRam, 2),
+                CpuStatus = d.AvgCpu <= globalAvgCpu ? "İyi" : "Kötü",
+                RamStatus = d.AvgRam <= globalAvgRam ? "İyi" : "Kötü"
+            })
+            .OrderByDescending(d => d.AverageCpu)
+            .ToList()
+        };
+
+        // 3. ADIM CACHE'E KAYDETME: Hesaplanmış bu ağır raporu 5 Dakikalığına RAM'e kaydet.
+        // 5 dakika boyunca sayfaya giren herkes anında veriyi görecek.
+        _cache.Set(cacheKey, report, TimeSpan.FromSeconds(30));
+
+        return report;
     }
 }

@@ -258,7 +258,102 @@
     `;
                 ui.loadTagTable();
                 break;
+
+            case 'reports':
+                title.innerText = "Performans Raporları";
+                subtitle.innerText = "Cihazların CPU ve RAM ortalamalarına göre detaylı analizi.";
+
+                const filterEl = document.getElementById('globalFilters');
+                if (filterEl) { filterEl.classList.remove('d-flex'); filterEl.classList.add('d-none'); }
+
+                content.innerHTML = `
+                <div class="container-fluid p-0">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm" style="background:var(--bg-card); border-left: 4px solid #0dcaf0 !important;">
+                                <div class="card-body">
+                                    <h6 class="text-uppercase fw-bold mb-2" style="color:var(--text-muted); font-size: 0.8rem;"><i class="bi bi-cpu"></i> Genel CPU Ortalaması</h6>
+                                    <h2 id="global-cpu-avg" class="mb-0" style="color:#0dcaf0;">Yükleniyor...</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm mt-3 mt-md-0" style="background:var(--bg-card); border-left: 4px solid #d63384 !important;">
+                                <div class="card-body">
+                                    <h6 class="text-uppercase fw-bold mb-2" style="color:var(--text-muted); font-size: 0.8rem;"><i class="bi bi-memory"></i> Genel RAM Ortalaması</h6>
+                                    <h2 id="global-ram-avg" class="mb-0" style="color:#d63384;">Yükleniyor...</h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-xl-3 col-lg-6 col-md-6">
+                            <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #198754 !important;">
+                                <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
+                                </div>
+                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <tbody id="best-cpu-body">
+                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xl-3 col-lg-6 col-md-6">
+                            <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #dc3545 !important;">
+                                <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
+                                </div>
+                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <tbody id="worst-cpu-body">
+                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xl-3 col-lg-6 col-md-6">
+                            <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #198754 !important;">
+                                <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
+                                </div>
+                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <tbody id="best-ram-body">
+                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xl-3 col-lg-6 col-md-6">
+                            <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #dc3545 !important;">
+                                <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
+                                </div>
+                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <tbody id="worst-ram-body">
+                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+
+                if (window.ui.loadReportsView) window.ui.loadReportsView();
+                break;
         }
+
     }
 
     // --- Alt Görünümler (Sayfalamaya Uygun Hale Getirildi) ---
@@ -1108,6 +1203,72 @@
                 if (!pgState.newRolePerm.assignedIds.includes(id)) pgState.newRolePerm.assignedIds.push(id);
             } else {
                 pgState.newRolePerm.assignedIds = pgState.newRolePerm.assignedIds.filter(x => x !== id);
+            }
+        },
+        loadReportsView: async () => {
+            try {
+                const report = await window.api.getPerformanceReport();
+
+                document.getElementById('global-cpu-avg').innerText = `%${report.globalAverageCpu}`;
+                document.getElementById('global-ram-avg').innerText = `%${report.globalAverageRam}`;
+
+                const bestCpuBody = document.getElementById('best-cpu-body');
+                const worstCpuBody = document.getElementById('worst-cpu-body');
+                const bestRamBody = document.getElementById('best-ram-body');
+                const worstRamBody = document.getElementById('worst-ram-body');
+
+                if (!report.devices || report.devices.length === 0) {
+                    const emptyMsg = `<tr><td class="text-center text-muted py-4">Değerlendirilecek cihaz metriği bulunamadı.</td></tr>`;
+                    bestCpuBody.innerHTML = emptyMsg; worstCpuBody.innerHTML = emptyMsg;
+                    bestRamBody.innerHTML = emptyMsg; worstRamBody.innerHTML = emptyMsg;
+                    return;
+                }
+
+                // 1. En İyi CPU (Ortalama Altı & Küçükten Büyüğe)
+                const bestCpu = report.devices
+                    .filter(d => d.averageCpu <= report.globalAverageCpu)
+                    .sort((a, b) => a.averageCpu - b.averageCpu);
+
+                // 2. En Kötü CPU (Ortalama Üstü & Büyükten Küçüğe)
+                const worstCpu = report.devices
+                    .filter(d => d.averageCpu > report.globalAverageCpu)
+                    .sort((a, b) => b.averageCpu - a.averageCpu);
+
+                // 3. En İyi RAM (Ortalama Altı & Küçükten Büyüğe)
+                const bestRam = report.devices
+                    .filter(d => d.averageRam <= report.globalAverageRam)
+                    .sort((a, b) => a.averageRam - b.averageRam);
+
+                // 4. En Kötü RAM (Ortalama Üstü & Büyükten Küçüğe)
+                const worstRam = report.devices
+                    .filter(d => d.averageRam > report.globalAverageRam)
+                    .sort((a, b) => b.averageRam - a.averageRam);
+
+                // Tablo satırlarını oluşturan yardımcı fonksiyon (İyi/Kötü metinleri çıkarıldı, sadece oran kaldı)
+                const generateRows = (arr, valKey, colorClass) => {
+                    if (arr.length === 0) return `<tr><td class="text-center text-muted py-3 fst-italic">Bu kategoride cihaz yok.</td></tr>`;
+
+                    return arr.map(d => `
+                        <tr style="border-bottom: 1px solid var(--border-color);">
+                            <td class="ps-4 fw-bold" style="color:var(--text-title);">${d.computerName}</td>
+                            <td class="text-end pe-4" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
+                        </tr>
+                    `).join('');
+                };
+
+                // Renklendirme ile tablolara basıyoruz
+                bestCpuBody.innerHTML = generateRows(bestCpu, 'averageCpu', 'success');
+                worstCpuBody.innerHTML = generateRows(worstCpu, 'averageCpu', 'danger');
+                bestRamBody.innerHTML = generateRows(bestRam, 'averageRam', 'success');
+                worstRamBody.innerHTML = generateRows(worstRam, 'averageRam', 'danger');
+
+            } catch (error) {
+                console.error("Rapor çekilirken hata:", error);
+                const errorMsg = `<tr><td class="text-center text-danger py-4"><i class="bi bi-exclamation-triangle"></i> Yüklenirken hata oluştu.</td></tr>`;
+                document.getElementById('best-cpu-body').innerHTML = errorMsg;
+                document.getElementById('worst-cpu-body').innerHTML = errorMsg;
+                document.getElementById('best-ram-body').innerHTML = errorMsg;
+                document.getElementById('worst-ram-body').innerHTML = errorMsg;
             }
         }
     };

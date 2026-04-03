@@ -28,4 +28,5 @@ public interface IComputerService
 
     // 9. Kullanıcının Etiketlerini Getir
     Task<object> GetMyTagsAsync(int userId, bool isAdmin);
+    Task<PerformanceReportDto> GetPerformanceReportAsync();
 }

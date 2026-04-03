@@ -109,7 +109,8 @@ public static class DbSeeder
                 new SidebarItem { Title = "Kayıt İstekleri", Icon = "bi bi-envelope-paper", TargetView = "requests", OrderIndex = 3 },
                 new SidebarItem { Title = "Kullanıcılar", Icon = "bi bi-people", TargetView = "users", OrderIndex = 4 },
                 new SidebarItem { Title = "Roller ve Yetkiler", Icon = "bi bi-shield-lock", TargetView = "roles", OrderIndex = 5 },
-                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", OrderIndex = 6 }
+                new SidebarItem { Title = "Etiketler", Icon = "bi bi-tags", TargetView = "tags", OrderIndex = 6 },
+                new SidebarItem { Title = "Raporlar", Icon = "bi bi-graph-up-arrow text-info",TargetView = "reports", OrderIndex = 7}
             };
 
             context.SidebarItems.AddRange(sidebarItems);
