@@ -41,21 +41,22 @@ public class OfflineDeviceMonitorService : BackgroundService
         var mailSender = scope.ServiceProvider.GetRequiredService<IMailSender>();
 
         var alertingConfig = _config.GetSection("Alerting");
-        var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
 
-        if (recipients == null || recipients.Count == 0) return;
+        // 1. Config'den Yönetici rol adını al
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
 
-        // Ayarları config'den çekiyoruz. Bulunamazsa varsayılan değerler (150 ve 15) kullanılır.
+        // 2. Sistemdeki tüm "Yönetici"leri tek seferde çekelim
+        var adminEmails = await context.Users
+            .Where(u => !u.IsDeleted && u.Roles.Any(r => r.Name == adminRoleName && !r.IsDeleted))
+            .Select(u => u.Email)
+            .ToListAsync(stoppingToken);
+
         int offlineThresholdSeconds = alertingConfig.GetValue<int>("OfflineThresholdSeconds", 150);
         int ignoreThresholdMinutes = alertingConfig.GetValue<int>("IgnoreThresholdMinutes", 15);
 
-        // Config'den gelen saniyeye göre çevrimdışı sayılma zamanı
         var offlineThreshold = DateTime.Now.AddSeconds(-offlineThresholdSeconds);
-
-        // Config'den gelen dakikaya göre çok eskiden ölmüş cihazları yoksayma süresi
         var ignoreThreshold = DateTime.Now.AddMinutes(-ignoreThresholdMinutes);
 
-        // Henüz maili atılmamış, belirlenen süreden uzun süredir yok olan AMA yoksayma süresi içinde kopmuş cihazlar
         var offlineComputers = await context.Computers
             .Where(c => !c.IsDeleted
                      && c.LastSeen <= offlineThreshold
@@ -65,16 +66,31 @@ public class OfflineDeviceMonitorService : BackgroundService
 
         foreach (var computer in offlineComputers)
         {
+            // 3. SADECE bu cihaza atanmış kullanıcıları bul
+            var assignedUserEmails = await context.UserComputerAccesses
+                .Where(uca => uca.ComputerId == computer.Id && !uca.IsDeleted && !uca.User.IsDeleted)
+                .Select(uca => uca.User.Email)
+                .ToListAsync(stoppingToken);
+
+            // Yönetici ve cihaza özel listeyi birleştirip mükerrer olanları filtrele
+            var finalRecipients = adminEmails
+                .Concat(assignedUserEmails)
+                .Where(email => !string.IsNullOrWhiteSpace(email))
+                .Distinct()
+                .ToList();
+
+            // Eğer e-posta atılacak kimse yoksa atla
+            if (finalRecipients.Count == 0) continue;
+
             string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
             string subject = $"🚨 CİHAZ ÇEVRİMDIŞI: {deviceName}";
             string body = $"Merhaba,\n\n{deviceName} ({computer.IpAddress}) isimli cihaz pasife dönmüştür.\nSon Veri Alınan Zaman: {computer.LastSeen}\n\nSistem Kontrol Zamanı: {DateTime.Now}";
 
-            foreach (var email in recipients)
+            foreach (var email in finalRecipients)
             {
                 await mailSender.SendAsync(email, subject, body);
             }
 
-            // Bir sonraki döngüde aynı maili tekrar atmaması için bayrağı işaretle
             computer.IsOfflineAlertSent = true;
         }
 

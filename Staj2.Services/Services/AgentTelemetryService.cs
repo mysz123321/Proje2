@@ -146,9 +146,30 @@ public class AgentTelemetryService : IAgentTelemetryService
         // =======================================================
         var alertsToSend = new List<(string Email, string Subject, string Body)>();
         var alertingConfig = _config.GetSection("Alerting");
-        var recipients = alertingConfig.GetSection("Recipients").Get<List<string>>();
 
-        if (recipients != null && recipients.Count > 0)
+        // 1. Config'den Yönetici rol adını al, yoksa "Yönetici" kullan
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+
+        // 2. Sistemdeki "Yönetici" rolüne sahip aktif kullanıcılar
+        var adminEmails = await _context.Users
+            .Where(u => !u.IsDeleted && u.Roles.Any(r => r.Name == adminRoleName && !r.IsDeleted))
+            .Select(u => u.Email)
+            .ToListAsync(ct);
+
+        // 3. Bu cihaza doğrudan atanmış aktif kullanıcılar (UserComputerAccess tablosu üzerinden)
+        var assignedUserEmails = await _context.UserComputerAccesses
+            .Where(uca => uca.ComputerId == computer.Id && !uca.IsDeleted && !uca.User.IsDeleted)
+            .Select(uca => uca.User.Email)
+            .ToListAsync(ct);
+
+        // Yönetici ve Atalı Kullanıcıları birleştir, tekrarlayan mailleri temizle (Distinct)
+        var finalRecipients = adminEmails
+            .Concat(assignedUserEmails)
+            .Where(email => !string.IsNullOrWhiteSpace(email))
+            .Distinct()
+            .ToList();
+
+        if (finalRecipients.Count > 0)
         {
             int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours", 1);
             string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
@@ -158,7 +179,9 @@ public class AgentTelemetryService : IAgentTelemetryService
             {
                 string subject = $"🚨 {title}: {deviceName}";
                 string fullBody = $"Merhaba,\n\n{deviceName} ({computer.IpAddress}) cihazında aşağıdaki limit aşımı tespit edilmiştir:\n\n{message}\n\n--------------------------------------------------\nZaman: {DateTime.Now}";
-                foreach (var email in recipients) alertsToSend.Add((email, subject, fullBody));
+
+                foreach (var email in finalRecipients)
+                    alertsToSend.Add((email, subject, fullBody));
             }
 
             // CPU Kontrolü
