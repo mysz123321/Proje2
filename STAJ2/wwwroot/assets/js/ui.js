@@ -1204,6 +1204,81 @@
             } else {
                 pgState.newRolePerm.assignedIds = pgState.newRolePerm.assignedIds.filter(x => x !== id);
             }
+        }, showReportDetails: async (computerId, computerName, metricType, diskName = null) => {
+            // 1. Modal UI Başlangıç Ayarları
+            document.getElementById('rdm-computer-name').innerText = computerName;
+            document.getElementById('rdm-metric-type').innerText = metricType;
+
+            document.getElementById('rdm-loading').style.display = 'block';
+            document.getElementById('rdm-content').style.display = 'none';
+            document.getElementById('rdm-loading').innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-2 text-muted small">Tüm zamanların verileri çekiliyor ve hesaplanıyor... (Bu işlem biraz sürebilir)</div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('reportDetailModal'));
+            modal.show();
+
+            try {
+                // 2. Geçmiş verileri çekmek için tarih aralığı oluştur (TÜM ZAMANLAR)
+                const now = new Date();
+                const allTimeStart = new Date('2000-01-01T00:00:00');
+
+                const formatToInput = (date) => {
+                    const offset = date.getTimezoneOffset() * 60000;
+                    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+                };
+
+                const start = formatToInput(allTimeStart);
+                const end = formatToInput(now);
+
+                // API'ye istek at
+                const data = await window.api.get(`/api/Computer/${computerId}/metrics-history?start=${start}&end=${end}`);
+
+                let values = [];
+
+                // 3. Verileri Filtrele (Eğer Disk seçildiyse diskleri, CPU/RAM seçildiyse cpuRam dizisini kullan)
+                if (diskName) {
+                    if (!data.disks || data.disks.length === 0) {
+                        document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç disk verisi bulunamadı.</div>';
+                        return;
+                    }
+
+                    // Gelen tüm disk verileri arasından, butona tıkladığımız spesifik diski (Örn: C:\) buluyoruz
+                    const specificDisks = data.disks.filter(d => d.diskName === diskName);
+                    if (specificDisks.length === 0) {
+                        document.getElementById('rdm-loading').innerHTML = `<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> ${diskName} için hiç veri bulunamadı.</div>`;
+                        return;
+                    }
+                    values = specificDisks.map(d => d.usedPercent);
+                } else {
+                    if (!data.cpuRam || data.cpuRam.length === 0) {
+                        document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç metrik verisi bulunamadı.</div>';
+                        return;
+                    }
+                    values = data.cpuRam.map(m => metricType === 'CPU' ? m.cpuUsage : m.ramUsage);
+                }
+
+                // 4. Matematiksel Hesaplamalar
+                const totalCount = values.length;
+                const maxVal = Math.max(...values);
+                const minVal = Math.min(...values);
+
+                const maxCount = values.filter(v => v === maxVal).length;
+                const minCount = values.filter(v => v === minVal).length;
+
+                // 5. Sonuçları Ekrana Yazdır
+                document.getElementById('rdm-total-count').innerText = totalCount + " Adet";
+                document.getElementById('rdm-max-val').innerText = `%${Math.round(maxVal)}`;
+                document.getElementById('rdm-min-val').innerText = `%${Math.round(minVal)}`;
+                document.getElementById('rdm-max-count').innerText = `${maxCount} Kez`;
+                document.getElementById('rdm-min-count').innerText = `${minCount} Kez`;
+
+                // Yükleniyor animasyonunu gizle, içeriği göster
+                document.getElementById('rdm-loading').style.display = 'none';
+                document.getElementById('rdm-content').style.display = 'block';
+
+            } catch (error) {
+                console.error("Metrik detayları çekilirken hata:", error);
+                document.getElementById('rdm-loading').innerHTML = `<div class="text-danger"><i class="bi bi-x-circle fs-4 d-block mb-2"></i> Veriler alınamadı: <br><small>${error.message}</small></div>`;
+            }
         },
         loadReportsView: async () => {
             try {
@@ -1251,14 +1326,27 @@
 
                 // Tablo satırlarını oluşturan yardımcı fonksiyon 
                 const generateRows = (arr, valKey, colorClass) => {
-                    if (arr.length === 0) return `<tr><td class="text-center text-muted py-3 fst-italic">Bu kategoride cihaz yok.</td></tr>`;
+                    if (arr.length === 0) return `<tr><td class="text-center text-muted py-3 fst-italic" colspan="2">Bu kategoride cihaz yok.</td></tr>`;
 
-                    return arr.map(d => `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td class="ps-4 fw-bold" style="color:var(--text-title);">${d.computerName}</td>
-                    <td class="text-end pe-4" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
-                </tr>
-            `).join('');
+                    // CPU mu RAM mi olduğunu tespit ediyoruz
+                    const metricType = valKey === 'averageCpu' ? 'CPU' : 'RAM';
+
+                    return arr.map(d => {
+                        // Backend id'yi computerId veya id olarak dönüyor olabilir, garantiye alalım
+                        const targetId = d.computerId || d.id;
+
+                        return `
+                        <tr style="border-bottom: 1px solid var(--border-color);">
+                            <td class="ps-4 fw-bold align-middle" style="color:var(--text-title);">
+                                ${d.computerName}
+                                <button class="btn btn-sm btn-link text-info p-0 ms-2" onclick="window.ui.showReportDetails(${targetId}, '${d.computerName}', '${metricType}')" title="Metrik Analizini Gör">
+                                    <i class="bi bi-info-circle-fill fs-5"></i>
+                                </button>
+                            </td>
+                            <td class="text-end pe-4 align-middle" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
+                        </tr>
+                        `;
+                    }).join('');
                 };
 
                 // Renklendirme ile tablolara basıyoruz
@@ -1340,10 +1428,19 @@
                                 textClass = "text-success fw-bold";
                             }
 
+                            // ID ve Disk adındaki olası ters slash (\) karakterlerini JS hatası vermemesi için kaçırıyoruz
+                            const targetId = device.computerId || device.id;
+                            const safeDiskName = disk.diskName.replace(/\\/g, '\\\\');
+
                             cardHtml += `
                 <div class="mb-3">
-                    <div class="d-flex justify-content-between mb-1" style="font-size: 0.9rem;">
-                        <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
+                    <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.9rem;">
+                        <div>
+                            <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
+                            <button class="btn btn-sm btn-link text-info p-0 ms-1" onclick="window.ui.showReportDetails(${targetId}, '${device.computerName}', 'Disk ${safeDiskName}', '${safeDiskName}')" title="Metrik Analizini Gör">
+                                <i class="bi bi-info-circle-fill"></i>
+                            </button>
+                        </div>
                         <span class="${textClass}">%${disk.averageUsedPercent}</span>
                     </div>
                     <div class="progress" style="height: 8px; background-color: var(--border-color, #334155);">

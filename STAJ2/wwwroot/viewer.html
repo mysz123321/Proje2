@@ -540,7 +540,55 @@
             </div>
         </div>
     </div>
-
+    <div id="reportDetailModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); color: var(--text-main);">
+                <div class="modal-header border-bottom border-secondary">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-info-circle text-info me-2"></i>
+                        <span id="rdm-computer-name" class="text-primary">Cihaz</span> - <span id="rdm-metric-type" class="text-warning">Metrik</span> Analizi
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div id="rdm-loading" class="text-center py-4">
+                        <div class="spinner-border text-info" role="status"></div>
+                        <div class="mt-2 text-muted small">Veriler çekiliyor ve hesaplanıyor...</div>
+                    </div>
+                    <div id="rdm-content" style="display:none;">
+                        <ul class="list-group list-group-flush" style="border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden;">
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-hover); color: var(--text-main); border-color: var(--border-color);">
+                                <span><i class="bi bi-bar-chart-fill me-2 text-primary"></i> Toplam Veri Sayısı</span>
+                                <span class="badge bg-primary rounded-pill fs-6" id="rdm-total-count">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-hover); color: var(--text-main); border-color: var(--border-color);">
+                                <span><i class="bi bi-arrow-up-circle-fill me-2 text-danger"></i> Maksimum Değer</span>
+                                <span class="badge bg-danger rounded-pill fs-6" id="rdm-max-val">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-card); color: var(--text-main); border-color: var(--border-color);">
+                                <span><i class="bi bi-hash me-2 text-muted"></i> Maks. Değer Tekrarı</span>
+                                <span class="badge bg-secondary rounded-pill fs-6" id="rdm-max-count">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-hover); color: var(--text-main); border-color: var(--border-color);">
+                                <span><i class="bi bi-arrow-down-circle-fill me-2 text-success"></i> Minimum Değer</span>
+                                <span class="badge bg-success rounded-pill fs-6" id="rdm-min-val">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-card); color: var(--text-main); border-color: var(--border-color);">
+                                <span><i class="bi bi-hash me-2 text-muted"></i> Min. Değer Tekrarı</span>
+                                <span class="badge bg-secondary rounded-pill fs-6" id="rdm-min-count">0</span>
+                            </li>
+                        </ul>
+                        <div class="mt-3 text-end text-muted" style="font-size: 0.7rem;">
+                            * Bu veriler cihazın tüm telemetri geçmişi baz alınarak hesaplanmıştır.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="userTagAccessModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg">
@@ -637,40 +685,40 @@
                 window.location.href = "/login.html";
             });
 
-    // --- MENÜ AÇMA/KAPAMA (TOGGLE) İŞLEMLERİ ---
-    const menuBtn = document.getElementById('menuToggleBtn');
-    const sidebar = document.getElementById('sidebar');
-    const mainWrapper = document.getElementById('main-wrapper');
+            // --- MENÜ AÇMA/KAPAMA (TOGGLE) İŞLEMLERİ ---
+            const menuBtn = document.getElementById('menuToggleBtn');
+            const sidebar = document.getElementById('sidebar');
+            const mainWrapper = document.getElementById('main-wrapper');
 
-    if (menuBtn && sidebar) {
-        menuBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); // Butona tıklamanın sayfa geneline yayılıp menüyü geri kapatmasını engeller
+            if (menuBtn && sidebar) {
+                menuBtn.addEventListener('click', function (e) {
+                    e.stopPropagation(); // Butona tıklamanın sayfa geneline yayılıp menüyü geri kapatmasını engeller
 
-            if(window.innerWidth <= 992) {
-                // Mobil: Kapalıdır, 'active' ile açılır/kapanır
-                sidebar.classList.toggle('active');
-            } else {
-                // PC: Açıktır, 'collapsed' ile kapanır, 'expanded' ile içerik büyür
-                sidebar.classList.toggle('collapsed');
-                if(mainWrapper) mainWrapper.classList.toggle('expanded');
+                    if (window.innerWidth <= 992) {
+                        // Mobil: Kapalıdır, 'active' ile açılır/kapanır
+                        sidebar.classList.toggle('active');
+                    } else {
+                        // PC: Açıktır, 'collapsed' ile kapanır, 'expanded' ile içerik büyür
+                        sidebar.classList.toggle('collapsed');
+                        if (mainWrapper) mainWrapper.classList.toggle('expanded');
+                    }
+                });
             }
+
+            // --- MOBİLDE SAYFAYA VEYA LİNKE TIKLAYINCA OTOMATİK KAPANMA ---
+            document.addEventListener('click', function (e) {
+                if (window.innerWidth <= 992 && sidebar) {
+                    // Eğer tıklanan yer menünün içi veya açma butonu DEĞİLSE menüyü kapat
+                    if (!sidebar.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
+                        sidebar.classList.remove('active');
+                    }
+                    // VEYA menünün içindeki bir sayfa linkine tıklandıysa menüyü kapat
+                    else if (e.target.closest('.nav-link')) {
+                        sidebar.classList.remove('active');
+                    }
+                }
+            });
         });
-    }
-
-    // --- MOBİLDE SAYFAYA VEYA LİNKE TIKLAYINCA OTOMATİK KAPANMA ---
-    document.addEventListener('click', function(e) {
-        if(window.innerWidth <= 992 && sidebar) {
-            // Eğer tıklanan yer menünün içi veya açma butonu DEĞİLSE menüyü kapat
-            if (!sidebar.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
-                sidebar.classList.remove('active');
-            }
-            // VEYA menünün içindeki bir sayfa linkine tıklandıysa menüyü kapat
-            else if (e.target.closest('.nav-link')) {
-                sidebar.classList.remove('active');
-            }
-        }
-    });
-});
     </script>
 </body>
 </html>
