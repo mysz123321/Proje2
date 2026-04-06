@@ -1209,6 +1209,9 @@
             try {
                 const report = await window.api.getPerformanceReport();
 
+                // Verilerin doğru gelip gelmediğini tarayıcı konsolunda (F12) görmek için log atalım
+                console.log("Gelen Performans Raporu:", report);
+
                 document.getElementById('global-cpu-avg').innerText = `%${report.globalAverageCpu}`;
                 document.getElementById('global-ram-avg').innerText = `%${report.globalAverageRam}`;
 
@@ -1219,56 +1222,174 @@
 
                 if (!report.devices || report.devices.length === 0) {
                     const emptyMsg = `<tr><td class="text-center text-muted py-4">Değerlendirilecek cihaz metriği bulunamadı.</td></tr>`;
-                    bestCpuBody.innerHTML = emptyMsg; worstCpuBody.innerHTML = emptyMsg;
-                    bestRamBody.innerHTML = emptyMsg; worstRamBody.innerHTML = emptyMsg;
+                    if (bestCpuBody) bestCpuBody.innerHTML = emptyMsg;
+                    if (worstCpuBody) worstCpuBody.innerHTML = emptyMsg;
+                    if (bestRamBody) bestRamBody.innerHTML = emptyMsg;
+                    if (worstRamBody) worstRamBody.innerHTML = emptyMsg;
                     return;
                 }
 
-                // 1. En İyi CPU (Ortalama Altı & Küçükten Büyüğe)
+                // 1. En İyi CPU
                 const bestCpu = report.devices
                     .filter(d => d.averageCpu <= report.globalAverageCpu)
                     .sort((a, b) => a.averageCpu - b.averageCpu);
 
-                // 2. En Kötü CPU (Ortalama Üstü & Büyükten Küçüğe)
+                // 2. En Kötü CPU
                 const worstCpu = report.devices
                     .filter(d => d.averageCpu > report.globalAverageCpu)
                     .sort((a, b) => b.averageCpu - a.averageCpu);
 
-                // 3. En İyi RAM (Ortalama Altı & Küçükten Büyüğe)
+                // 3. En İyi RAM
                 const bestRam = report.devices
                     .filter(d => d.averageRam <= report.globalAverageRam)
                     .sort((a, b) => a.averageRam - b.averageRam);
 
-                // 4. En Kötü RAM (Ortalama Üstü & Büyükten Küçüğe)
+                // 4. En Kötü RAM
                 const worstRam = report.devices
                     .filter(d => d.averageRam > report.globalAverageRam)
                     .sort((a, b) => b.averageRam - a.averageRam);
 
-                // Tablo satırlarını oluşturan yardımcı fonksiyon (İyi/Kötü metinleri çıkarıldı, sadece oran kaldı)
+                // Tablo satırlarını oluşturan yardımcı fonksiyon 
                 const generateRows = (arr, valKey, colorClass) => {
                     if (arr.length === 0) return `<tr><td class="text-center text-muted py-3 fst-italic">Bu kategoride cihaz yok.</td></tr>`;
 
                     return arr.map(d => `
-                        <tr style="border-bottom: 1px solid var(--border-color);">
-                            <td class="ps-4 fw-bold" style="color:var(--text-title);">${d.computerName}</td>
-                            <td class="text-end pe-4" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
-                        </tr>
-                    `).join('');
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td class="ps-4 fw-bold" style="color:var(--text-title);">${d.computerName}</td>
+                    <td class="text-end pe-4" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
+                </tr>
+            `).join('');
                 };
 
                 // Renklendirme ile tablolara basıyoruz
-                bestCpuBody.innerHTML = generateRows(bestCpu, 'averageCpu', 'success');
-                worstCpuBody.innerHTML = generateRows(worstCpu, 'averageCpu', 'danger');
-                bestRamBody.innerHTML = generateRows(bestRam, 'averageRam', 'success');
-                worstRamBody.innerHTML = generateRows(worstRam, 'averageRam', 'danger');
+                if (bestCpuBody) bestCpuBody.innerHTML = generateRows(bestCpu, 'averageCpu', 'success');
+                if (worstCpuBody) worstCpuBody.innerHTML = generateRows(worstCpu, 'averageCpu', 'danger');
+                if (bestRamBody) bestRamBody.innerHTML = generateRows(bestRam, 'averageRam', 'success');
+                if (worstRamBody) worstRamBody.innerHTML = generateRows(worstRam, 'averageRam', 'danger');
+
+                // ---------------------------------------------------------
+                // --- DİSK KARTLARI VE GENEL ORTALAMALAR KISMI          ---
+                // ---------------------------------------------------------
+
+                let diskSection = document.getElementById('diskSectionWrapper');
+
+                // EĞER KUTU SAYFADA YOKSA JAVASCRIPT İLE YARATIP EN ALTA EKLİYORUZ
+                if (!diskSection) {
+                    const mainContainer = document.getElementById('dynamic-content');
+                    if (mainContainer) {
+                        diskSection = document.createElement('div');
+                        diskSection.id = 'diskSectionWrapper';
+                        diskSection.className = 'mt-5 pt-3';
+                        mainContainer.appendChild(diskSection);
+                    }
+                }
+
+                // KUTU ARTIK KESİN VAR, İÇİNİ DOLDURALIM
+                if (diskSection) {
+
+                    // 1. ÜST KISIM: Genel Disk Ortalamaları (Esnek Genişlik - Boşluk Bırakmaz)
+                    let globalDisksHtml = '';
+                    if (report.globalDiskAverages && report.globalDiskAverages.length > 0) {
+                        // row'a justify-content-center ekledik ve altındaki kartları col-lg ile esnek yaptık
+                        globalDisksHtml = `<div class="row justify-content-center mb-4">`;
+                        report.globalDiskAverages.forEach(gd => {
+                            globalDisksHtml += `
+                    <div class="col-12 col-sm-6 col-lg mb-3">
+                        <div class="card h-100 shadow-sm" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
+                            <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
+                                <div class="fw-bold mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.9rem; letter-spacing: 1px; color: var(--text-muted, #94a3b8);">
+                                    <i class="bi bi-hdd-fill me-2 fs-5" style="color: #38bdf8;"></i>${gd.diskName} GENEL ORT.
+                                </div>
+                                <h2 class="fw-bolder mb-0" style="color: var(--text-main, #e2e8f0); font-family: monospace; font-size: 2rem;">
+                                    %${gd.averageUsedPercent}
+                                </h2>
+                            </div>
+                        </div>
+                    </div>`;
+                        });
+                        globalDisksHtml += `</div>`;
+                    }
+
+                    // 2. ALT KISIM: Cihazların Disk Kartları (Renk ve Tema Düzeltmeleri Uygulandı)
+                    let allDiskCardsHtml = '';
+
+                    report.devices.forEach(device => {
+                        // Eğer cihazın diski yoksa atla
+                        if (!device.disks || device.disks.length === 0) return;
+
+                        // Cihaz için KART yapısı
+                        let cardHtml = `
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
+                    <div class="card-header fw-bold" style="background-color: transparent; border-bottom: 1px solid var(--border-color, #334155); color: var(--text-main, #e2e8f0);">
+                        <i class="bi bi-hdd-network me-2" style="color: #38bdf8;"></i> ${device.computerName}
+                    </div>
+                    <div class="card-body" style="color: var(--text-main, #e2e8f0);">
+        `;
+
+                        // Cihazın içindeki her bir diski dön
+                        device.disks.forEach(disk => {
+                            let colorClass = "bg-primary"; // Nötr
+                            let textClass = "text-primary fw-bold";
+
+                            if (disk.diskStatus === "Kötü") {
+                                colorClass = "bg-danger";
+                                textClass = "text-danger fw-bold";
+                            } else if (disk.diskStatus === "İyi") {
+                                colorClass = "bg-success";
+                                textClass = "text-success fw-bold";
+                            }
+
+                            cardHtml += `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1" style="font-size: 0.9rem;">
+                        <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
+                        <span class="${textClass}">%${disk.averageUsedPercent}</span>
+                    </div>
+                    <div class="progress" style="height: 8px; background-color: var(--border-color, #334155);">
+                        <div class="progress-bar ${colorClass}" role="progressbar" style="width: ${disk.averageUsedPercent}%"></div>
+                    </div>
+                </div>
+            `;
+                        });
+
+                        cardHtml += `
+                    </div>
+                </div>
+            </div>
+        `;
+
+                        allDiskCardsHtml += cardHtml;
+                    });
+
+                    if (allDiskCardsHtml === '') {
+                        allDiskCardsHtml = `<div class="col-12 text-muted fst-italic">Henüz disk verisi toplanmamış.</div>`;
+                    }
+
+                    // 3. TÜM YAPIYI EKRANA BAS (Başlık + Rozetler + Kartlar)
+                    diskSection.innerHTML = `
+        <h5 class="fw-bold mb-3" style="color: var(--text-main, #e2e8f0);">
+            <i class="bi bi-device-hdd me-2" style="color: #38bdf8;"></i> Cihaz Disk Durumları
+        </h5>
+        ${globalDisksHtml}
+        <div class="row" id="diskReportsContainer">
+            ${allDiskCardsHtml}
+        </div>
+    `;
+                }
+                // --- DİSK KISMI BURADA BİTİYOR ---
 
             } catch (error) {
                 console.error("Rapor çekilirken hata:", error);
                 const errorMsg = `<tr><td class="text-center text-danger py-4"><i class="bi bi-exclamation-triangle"></i> Yüklenirken hata oluştu.</td></tr>`;
-                document.getElementById('best-cpu-body').innerHTML = errorMsg;
-                document.getElementById('worst-cpu-body').innerHTML = errorMsg;
-                document.getElementById('best-ram-body').innerHTML = errorMsg;
-                document.getElementById('worst-ram-body').innerHTML = errorMsg;
+
+                const bestCpuBody = document.getElementById('best-cpu-body');
+                if (bestCpuBody) {
+                    bestCpuBody.innerHTML = errorMsg;
+                    document.getElementById('worst-cpu-body').innerHTML = errorMsg;
+                    document.getElementById('best-ram-body').innerHTML = errorMsg;
+                    document.getElementById('worst-ram-body').innerHTML = errorMsg;
+                }
             }
         }
     };

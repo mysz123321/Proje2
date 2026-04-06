@@ -316,7 +316,7 @@ public class ComputerService : IComputerService
 
         if (!activeComputerIds.Any()) return new PerformanceReportDto();
 
-        // Sadece bu yetkili cihazların metriklerini grupla
+        // Sadece bu yetkili cihazların CPU/RAM metriklerini grupla
         var metricsSummary = await _db.ComputerMetrics
             .Where(m => activeComputerIds.Contains(m.ComputerId))
             .GroupBy(m => m.ComputerId)
@@ -330,6 +330,28 @@ public class ComputerService : IComputerService
 
         if (!metricsSummary.Any()) return new PerformanceReportDto();
 
+        // Cihaz bazında disklerin ortalaması
+        var diskMetricsSummary = await _db.DiskMetrics
+            .Where(m => activeComputerIds.Contains(m.ComputerDisk.ComputerId))
+            .GroupBy(m => new { m.ComputerDisk.ComputerId, m.ComputerDisk.DiskName })
+            .Select(g => new
+            {
+                ComputerId = g.Key.ComputerId,
+                DiskName = g.Key.DiskName,
+                AvgUsed = g.Average(m => m.UsedPercent)
+            })
+            .ToListAsync();
+
+        // YENİ MANTIK: Sistemdeki aynı isimli diskleri kendi içinde grupla (Örn: Bütün C'ler)
+        // Ve bu disklerin global ortalaması ile kaç tane olduklarını (Count) bul
+        var globalDiskStats = diskMetricsSummary
+            .GroupBy(d => d.DiskName)
+            .ToDictionary(g => g.Key, g => new
+            {
+                Count = g.Count(), // Kaç cihazda bu diskten var?
+                GlobalAvg = g.Average(x => x.AvgUsed) // Bu diskin tüm cihazlardaki ortalaması
+            });
+
         // Bilgisayar isimlerini ayrı çekiyoruz
         var computers = await _db.Computers
             .Where(c => activeComputerIds.Contains(c.Id))
@@ -341,10 +363,33 @@ public class ComputerService : IComputerService
         {
             ComputerId = m.ComputerId,
             ComputerName = computers.FirstOrDefault(c => c.Id == m.ComputerId)?.DisplayName
-                        ?? computers.FirstOrDefault(c => c.Id == m.ComputerId)?.MachineName
-                        ?? "Bilinmeyen Cihaz",
+                    ?? computers.FirstOrDefault(c => c.Id == m.ComputerId)?.MachineName
+                    ?? "Bilinmeyen Cihaz",
             AvgCpu = m.AvgCpu,
-            AvgRam = m.AvgRam
+            AvgRam = m.AvgRam,
+
+            // Bu cihaza ait diskleri filtrele
+            Disks = diskMetricsSummary
+            .Where(d => d.ComputerId == m.ComputerId)
+            .Select(d =>
+            {
+                // İlgili diskin (Örn "C:") global verilerini çekiyoruz
+                var stats = globalDiskStats[d.DiskName];
+                string status = "Nötr"; // Sadece 1 tane varsa varsayılan: Nötr
+
+                // Eğer sistemde o diskten 1'den fazla varsa, ortalamayla kıyasla
+                if (stats.Count > 1)
+                {
+                    status = d.AvgUsed > stats.GlobalAvg ? "Kötü" : "İyi";
+                }
+
+                return new DiskPerformanceDto
+                {
+                    DiskName = d.DiskName,
+                    AverageUsedPercent = Math.Round(d.AvgUsed, 2),
+                    DiskStatus = status // "İyi", "Kötü" veya "Nötr" dönecek
+                };
+            }).OrderBy(d => d.DiskName).ToList()
         }).ToList();
 
         double globalAvgCpu = deviceAverages.Average(d => d.AvgCpu);
@@ -354,6 +399,14 @@ public class ComputerService : IComputerService
         {
             GlobalAverageCpu = Math.Round(globalAvgCpu, 2),
             GlobalAverageRam = Math.Round(globalAvgRam, 2),
+
+            // YENİ EKLENEN: Global disk ortalamalarını DTO'ya aktarıyoruz
+            GlobalDiskAverages = globalDiskStats.Select(g => new GlobalDiskAverageDto
+            {
+                DiskName = g.Key,
+                AverageUsedPercent = Math.Round(g.Value.GlobalAvg, 2)
+            }).OrderBy(x => x.DiskName).ToList(),
+
             Devices = deviceAverages.Select(d => new DevicePerformanceDto
             {
                 ComputerId = d.ComputerId,
@@ -361,7 +414,8 @@ public class ComputerService : IComputerService
                 AverageCpu = Math.Round(d.AvgCpu, 2),
                 AverageRam = Math.Round(d.AvgRam, 2),
                 CpuStatus = d.AvgCpu <= globalAvgCpu ? "İyi" : "Kötü",
-                RamStatus = d.AvgRam <= globalAvgRam ? "İyi" : "Kötü"
+                RamStatus = d.AvgRam <= globalAvgRam ? "İyi" : "Kötü",
+                Disks = d.Disks
             })
             .OrderByDescending(d => d.AverageCpu)
             .ToList()
