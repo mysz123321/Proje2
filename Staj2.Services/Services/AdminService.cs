@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
@@ -12,12 +13,14 @@ public class AdminService : IAdminService
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly IMailSender _mail;
+    private readonly IMemoryCache _cache;
 
-    public AdminService(AppDbContext db , IConfiguration config, IMailSender mail)
+    public AdminService(AppDbContext db , IConfiguration config, IMailSender mail, IMemoryCache cache)
     {
         _db = db;
         _config = config;
         _mail = mail;
+        _cache = cache;
     }
 
     public async Task<object> GetRolesAsync()
@@ -351,6 +354,7 @@ public class AdminService : IAdminService
             _db.UserComputerAccesses.Add(new UserComputerAccess { UserId = userId, ComputerId = cid });
 
         await _db.SaveChangesAsync();
+        _cache.Remove($"PerformanceReport_User_{userId}");
         return null; // Başarılı
     }
 

@@ -21,6 +21,7 @@ public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
     private readonly IConfiguration _config;
+
     public AdminController(IAdminService adminService, IConfiguration config)
     {
         _adminService = adminService;

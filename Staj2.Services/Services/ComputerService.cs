@@ -287,21 +287,38 @@ public class ComputerService : IComputerService
         var tags = await query.Select(t => new { t.Id, t.Name }).ToListAsync();
         return tags;
     }
-    public async Task<PerformanceReportDto> GetPerformanceReportAsync()
+    public async Task<PerformanceReportDto> GetPerformanceReportAsync(int userId, bool isAdmin)
     {
-        const string cacheKey = "AllTimePerformanceReport";
+        // 1. CACHE ANAHTARINI KULLANICIYA ÖZEL YAPTIK
+        string cacheKey = $"PerformanceReport_User_{userId}";
 
-        // 1. ADIM CACHE KONTROLÜ: Rapor RAM'de (Cache) var mı? Varsa veritabanını hiç yormadan anında (0 sn) gönder!
         if (_cache.TryGetValue(cacheKey, out PerformanceReportDto? cachedReport) && cachedReport != null)
         {
             return cachedReport;
         }
 
-        var activeComputerIds = await _db.Computers.Select(c => c.Id).ToListAsync();
+        var query = _db.Computers.AsQueryable();
 
-        // 2. Metrikleri çekerken SADECE bu aktif cihazların ID'sine sahip olanları grupla
+        // 2. YETKİ FİLTRELEMESİNİ UYGULUYORUZ
+        if (!isAdmin)
+        {
+            var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
+            var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
+
+            // Kullanıcının erişimi olan veya erişimi olan bir etikete sahip olan cihazlar
+            query = query.Where(c =>
+                accCompIds.Contains(c.Id) ||
+                _db.ComputerTags.Any(ct => ct.ComputerId == c.Id && !ct.IsDeleted && accTagIds.Contains(ct.TagId))
+            );
+        }
+
+        var activeComputerIds = await query.Select(c => c.Id).ToListAsync();
+
+        if (!activeComputerIds.Any()) return new PerformanceReportDto();
+
+        // Sadece bu yetkili cihazların metriklerini grupla
         var metricsSummary = await _db.ComputerMetrics
-            .Where(m => activeComputerIds.Contains(m.ComputerId)) // <--- SİHİRLİ DOKUNUŞ BURASI
+            .Where(m => activeComputerIds.Contains(m.ComputerId))
             .GroupBy(m => m.ComputerId)
             .Select(g => new
             {
@@ -313,12 +330,13 @@ public class ComputerService : IComputerService
 
         if (!metricsSummary.Any()) return new PerformanceReportDto();
 
-        // Bilgisayar isimlerini ayrı, hafif bir sorguyla çekiyoruz
+        // Bilgisayar isimlerini ayrı çekiyoruz
         var computers = await _db.Computers
+            .Where(c => activeComputerIds.Contains(c.Id))
             .Select(c => new { c.Id, c.DisplayName, c.MachineName })
             .ToListAsync();
 
-        // İki veriyi (Ortalamalar ve İsimler) birleştiriyoruz
+        // İki veriyi birleştir
         var deviceAverages = metricsSummary.Select(m => new
         {
             ComputerId = m.ComputerId,
@@ -329,7 +347,6 @@ public class ComputerService : IComputerService
             AvgRam = m.AvgRam
         }).ToList();
 
-        // Genel ortalamayı hesapla
         double globalAvgCpu = deviceAverages.Average(d => d.AvgCpu);
         double globalAvgRam = deviceAverages.Average(d => d.AvgRam);
 
@@ -350,8 +367,7 @@ public class ComputerService : IComputerService
             .ToList()
         };
 
-        // 3. ADIM CACHE'E KAYDETME: Hesaplanmış bu ağır raporu 5 Dakikalığına RAM'e kaydet.
-        // 5 dakika boyunca sayfaya giren herkes anında veriyi görecek.
+        // Cache'e kullanıcıya özel anahtarla kaydet
         _cache.Set(cacheKey, report, TimeSpan.FromSeconds(30));
 
         return report;

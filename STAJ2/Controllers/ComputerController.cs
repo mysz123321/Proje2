@@ -149,7 +149,8 @@ public class ComputerController : ControllerBase
     [HttpGet("performance-report")]
     public async Task<IActionResult> GetPerformanceReport()
     {
-        var report = await _computerService.GetPerformanceReportAsync();
+        // GetUserId() ve IsAdmin() yardımcı metotlarını parametre olarak ekliyoruz
+        var report = await _computerService.GetPerformanceReportAsync(GetUserId(), IsAdmin());
         return Ok(report);
     }
 }
