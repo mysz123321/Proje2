@@ -153,4 +153,13 @@ public class ComputerController : ControllerBase
         var report = await _computerService.GetPerformanceReportAsync(GetUserId(), IsAdmin());
         return Ok(report);
     }
+
+    [HttpGet("{id:int}/metrics-summary")]
+    public async Task<IActionResult> GetMetricsSummary(int id, [FromQuery] string metricType, [FromQuery] string? diskName = null)
+    {
+        // Not: _computerService.GetMetricsSummaryAsync metodunu Interface ve Servis sınıfınıza eklemeniz gerekecektir.
+        var result = await _computerService.GetMetricsSummaryAsync(id, metricType, diskName);
+        return Ok(result);
+    }
+
 }

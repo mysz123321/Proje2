@@ -426,4 +426,52 @@ public class ComputerService : IComputerService
 
         return report;
     }
+
+    public async Task<MetricSummaryDto> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName)
+    {
+        var summary = new MetricSummaryDto();
+
+        if (metricType == "CPU" || metricType == "RAM")
+        {
+            var query = _db.ComputerMetrics.Where(m => m.ComputerId == computerId);
+            summary.TotalCount = await query.CountAsync();
+
+            if (summary.TotalCount > 0)
+            {
+                if (metricType == "CPU")
+                {
+                    summary.MaxVal = await query.MaxAsync(m => m.CpuUsage);
+                    summary.MinVal = await query.MinAsync(m => m.CpuUsage);
+                    summary.MaxCount = await query.CountAsync(m => m.CpuUsage == summary.MaxVal);
+                    summary.MinCount = await query.CountAsync(m => m.CpuUsage == summary.MinVal);
+                }
+                else // RAM
+                {
+                    summary.MaxVal = await query.MaxAsync(m => m.RamUsage);
+                    summary.MinVal = await query.MinAsync(m => m.RamUsage);
+                    summary.MaxCount = await query.CountAsync(m => m.RamUsage == summary.MaxVal);
+                    summary.MinCount = await query.CountAsync(m => m.RamUsage == summary.MinVal);
+                }
+            }
+        }
+        else if (metricType.StartsWith("Disk") && !string.IsNullOrEmpty(diskName))
+        {
+            // DÜZELTİLEN KISIM: m.ComputerId yerine m.ComputerDisk.ComputerId ve 
+            // m.DiskName yerine m.ComputerDisk.DiskName kullanıyoruz.
+            var query = _db.DiskMetrics
+                .Where(m => m.ComputerDisk.ComputerId == computerId && m.ComputerDisk.DiskName == diskName);
+
+            summary.TotalCount = await query.CountAsync();
+
+            if (summary.TotalCount > 0)
+            {
+                summary.MaxVal = await query.MaxAsync(m => m.UsedPercent);
+                summary.MinVal = await query.MinAsync(m => m.UsedPercent);
+                summary.MaxCount = await query.CountAsync(m => m.UsedPercent == summary.MaxVal);
+                summary.MinCount = await query.CountAsync(m => m.UsedPercent == summary.MinVal);
+            }
+        }
+
+        return summary;
+    }
 }

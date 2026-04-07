@@ -15,7 +15,13 @@
         userRoles: { data: [], assignedIds: [], page: 1 },
         userComp: { data: [], filtered: [], assignedIds: [], page: 1 },
         userTag: { data: [], assignedIds: [], page: 1 },
-        newRolePerm: { data: [], assignedIds: [], page: 1 }
+        newRolePerm: { data: [], assignedIds: [], page: 1 },
+        reports: {
+            bestCpu: { data: [], page: 1 },
+            worstCpu: { data: [], page: 1 },
+            bestRam: { data: [], page: 1 },
+            worstRam: { data: [], page: 1 }
+        }
     };
 
     function renderPagination(containerId, currentPage, totalItems, itemsPerPage, changePageFnString) {
@@ -293,12 +299,15 @@
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
                                     <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
                                 </div>
-                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <tbody id="best-cpu-body">
-                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
-                                        </tbody>
-                                    </table>
+                                <div class="card-body p-0 d-flex flex-column justify-content-between">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <tbody id="best-cpu-body">
+                                                <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="bestCpuPg" class="py-2"></div>
                                 </div>
                             </div>
                         </div>
@@ -308,12 +317,15 @@
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
                                     <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
                                 </div>
-                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <tbody id="worst-cpu-body">
-                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
-                                        </tbody>
-                                    </table>
+                                <div class="card-body p-0 d-flex flex-column justify-content-between">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <tbody id="worst-cpu-body">
+                                                <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="worstCpuPg" class="py-2"></div>
                                 </div>
                             </div>
                         </div>
@@ -323,12 +335,15 @@
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
                                     <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
                                 </div>
-                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <tbody id="best-ram-body">
-                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
-                                        </tbody>
-                                    </table>
+                                <div class="card-body p-0 d-flex flex-column justify-content-between">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <tbody id="best-ram-body">
+                                                <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="bestRamPg" class="py-2"></div>
                                 </div>
                             </div>
                         </div>
@@ -338,15 +353,19 @@
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
                                     <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
                                 </div>
-                                <div class="card-body p-0 table-responsive" style="max-height: 350px; overflow-y: auto;">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <tbody id="worst-ram-body">
-                                            <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
-                                        </tbody>
-                                    </table>
+                                <div class="card-body p-0 d-flex flex-column justify-content-between">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <tbody id="worst-ram-body">
+                                                <tr><td class="text-center py-4 text-muted">Hesaplanıyor...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="worstRamPg" class="py-2"></div>
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>`;
 
@@ -1204,72 +1223,41 @@
             } else {
                 pgState.newRolePerm.assignedIds = pgState.newRolePerm.assignedIds.filter(x => x !== id);
             }
-        }, showReportDetails: async (computerId, computerName, metricType, diskName = null) => {
+        },
+        showReportDetails: async (computerId, computerName, metricType, diskName = null) => {
             // 1. Modal UI Başlangıç Ayarları
             document.getElementById('rdm-computer-name').innerText = computerName;
             document.getElementById('rdm-metric-type').innerText = metricType;
 
             document.getElementById('rdm-loading').style.display = 'block';
             document.getElementById('rdm-content').style.display = 'none';
-            document.getElementById('rdm-loading').innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-2 text-muted small">Tüm zamanların verileri çekiliyor ve hesaplanıyor... (Bu işlem biraz sürebilir)</div>';
+            document.getElementById('rdm-loading').innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-2 text-muted small">Performanslı veritabanı analizi yapılıyor...</div>';
 
             const modal = new bootstrap.Modal(document.getElementById('reportDetailModal'));
             modal.show();
 
             try {
-                // 2. Geçmiş verileri çekmek için tarih aralığı oluştur (TÜM ZAMANLAR)
-                const now = new Date();
-                const allTimeStart = new Date('2000-01-01T00:00:00');
-
-                const formatToInput = (date) => {
-                    const offset = date.getTimezoneOffset() * 60000;
-                    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-                };
-
-                const start = formatToInput(allTimeStart);
-                const end = formatToInput(now);
-
-                // API'ye istek at
-                const data = await window.api.get(`/api/Computer/${computerId}/metrics-history?start=${start}&end=${end}`);
-
-                let values = [];
-
-                // 3. Verileri Filtrele (Eğer Disk seçildiyse diskleri, CPU/RAM seçildiyse cpuRam dizisini kullan)
+                // 2. Yeni Performanslı Endpoint'e İstek At (Sadece hesaplanmış 5 veri döner)
+                let apiUrl = `/api/Computer/${computerId}/metrics-summary?metricType=${metricType}`;
                 if (diskName) {
-                    if (!data.disks || data.disks.length === 0) {
-                        document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç disk verisi bulunamadı.</div>';
-                        return;
-                    }
-
-                    // Gelen tüm disk verileri arasından, butona tıkladığımız spesifik diski (Örn: C:\) buluyoruz
-                    const specificDisks = data.disks.filter(d => d.diskName === diskName);
-                    if (specificDisks.length === 0) {
-                        document.getElementById('rdm-loading').innerHTML = `<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> ${diskName} için hiç veri bulunamadı.</div>`;
-                        return;
-                    }
-                    values = specificDisks.map(d => d.usedPercent);
-                } else {
-                    if (!data.cpuRam || data.cpuRam.length === 0) {
-                        document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç metrik verisi bulunamadı.</div>';
-                        return;
-                    }
-                    values = data.cpuRam.map(m => metricType === 'CPU' ? m.cpuUsage : m.ramUsage);
+                    // Disk adındaki özel karakterleri encode ediyoruz (Örn: C:\ -> C%3A%5C)
+                    apiUrl += `&diskName=${encodeURIComponent(diskName)}`;
                 }
 
-                // 4. Matematiksel Hesaplamalar
-                const totalCount = values.length;
-                const maxVal = Math.max(...values);
-                const minVal = Math.min(...values);
+                const summary = await window.api.get(apiUrl);
 
-                const maxCount = values.filter(v => v === maxVal).length;
-                const minCount = values.filter(v => v === minVal).length;
+                // Eğer hiç veri yoksa
+                if (summary.totalCount === 0) {
+                    document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç veri bulunamadı.</div>';
+                    return;
+                }
 
-                // 5. Sonuçları Ekrana Yazdır
-                document.getElementById('rdm-total-count').innerText = totalCount + " Adet";
-                document.getElementById('rdm-max-val').innerText = `%${Math.round(maxVal)}`;
-                document.getElementById('rdm-min-val').innerText = `%${Math.round(minVal)}`;
-                document.getElementById('rdm-max-count').innerText = `${maxCount} Kez`;
-                document.getElementById('rdm-min-count').innerText = `${minCount} Kez`;
+                // 3. Backend'den gelen hazır sonuçları doğrudan Ekrana Yazdır
+                document.getElementById('rdm-total-count').innerText = summary.totalCount + " Adet";
+                document.getElementById('rdm-max-val').innerText = `%${Math.round(summary.maxVal)}`;
+                document.getElementById('rdm-min-val').innerText = `%${Math.round(summary.minVal)}`;
+                document.getElementById('rdm-max-count').innerText = `${summary.maxCount} Kez`;
+                document.getElementById('rdm-min-count').innerText = `${summary.minCount} Kez`;
 
                 // Yükleniyor animasyonunu gizle, içeriği göster
                 document.getElementById('rdm-loading').style.display = 'none';
@@ -1279,7 +1267,48 @@
                 console.error("Metrik detayları çekilirken hata:", error);
                 document.getElementById('rdm-loading').innerHTML = `<div class="text-danger"><i class="bi bi-x-circle fs-4 d-block mb-2"></i> Veriler alınamadı: <br><small>${error.message}</small></div>`;
             }
+        },// --- YENİ EKLENEN: RAPORLAR İÇİN SAYFALAMA VE RENDER FONKSİYONLARI ---
+        renderReportList: (stateKey, tbodyId, valKey, colorClass) => {
+            const tbody = document.getElementById(tbodyId);
+            if (!tbody) return;
+
+            const ITEMS_PER_PAGE_REPORTS = 2; // İstediğin gibi max 8 satır
+            const state = pgState.reports[stateKey];
+            const start = (state.page - 1) * ITEMS_PER_PAGE_REPORTS;
+            const paginated = state.data.slice(start, start + ITEMS_PER_PAGE_REPORTS);
+
+            if (state.data.length === 0) {
+                tbody.innerHTML = `<tr><td class="text-center text-muted py-3 fst-italic" colspan="2">Bu kategoride cihaz yok.</td></tr>`;
+                document.getElementById(stateKey + 'Pg').innerHTML = '';
+                return;
+            }
+
+            const metricType = valKey === 'averageCpu' ? 'CPU' : 'RAM';
+
+            tbody.innerHTML = paginated.map(d => {
+                const targetId = d.computerId || d.id;
+                return `
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td class="ps-4 fw-bold align-middle" style="color:var(--text-title);">
+                        ${d.computerName}
+                        <button class="btn btn-sm btn-link text-info p-0 ms-2" onclick="window.ui.showReportDetails(${targetId}, '${d.computerName}', '${metricType}')" title="Metrik Analizini Gör">
+                            <i class="bi bi-info-circle-fill fs-5"></i>
+                        </button>
+                    </td>
+                    <td class="text-end pe-4 align-middle" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
+                </tr>`;
+            }).join('');
+
+            // Pagination butonlarını oluştur
+            renderPagination(stateKey + 'Pg', state.page, state.data.length, ITEMS_PER_PAGE_REPORTS, `ui.changeReportPage_${stateKey}`);
         },
+
+        // Sayfa değiştirme tetikleyicileri
+        changeReportPage_bestCpu: (p) => { pgState.reports.bestCpu.page = p; ui.renderReportList('bestCpu', 'best-cpu-body', 'averageCpu', 'success'); },
+        changeReportPage_worstCpu: (p) => { pgState.reports.worstCpu.page = p; ui.renderReportList('worstCpu', 'worst-cpu-body', 'averageCpu', 'danger'); },
+        changeReportPage_bestRam: (p) => { pgState.reports.bestRam.page = p; ui.renderReportList('bestRam', 'best-ram-body', 'averageRam', 'success'); },
+        changeReportPage_worstRam: (p) => { pgState.reports.worstRam.page = p; ui.renderReportList('worstRam', 'worst-ram-body', 'averageRam', 'danger'); },
+
         loadReportsView: async () => {
             try {
                 const report = await window.api.getPerformanceReport();
@@ -1290,70 +1319,32 @@
                 document.getElementById('global-cpu-avg').innerText = `%${report.globalAverageCpu}`;
                 document.getElementById('global-ram-avg').innerText = `%${report.globalAverageRam}`;
 
-                const bestCpuBody = document.getElementById('best-cpu-body');
-                const worstCpuBody = document.getElementById('worst-cpu-body');
-                const bestRamBody = document.getElementById('best-ram-body');
-                const worstRamBody = document.getElementById('worst-ram-body');
-
                 if (!report.devices || report.devices.length === 0) {
                     const emptyMsg = `<tr><td class="text-center text-muted py-4">Değerlendirilecek cihaz metriği bulunamadı.</td></tr>`;
-                    if (bestCpuBody) bestCpuBody.innerHTML = emptyMsg;
-                    if (worstCpuBody) worstCpuBody.innerHTML = emptyMsg;
-                    if (bestRamBody) bestRamBody.innerHTML = emptyMsg;
-                    if (worstRamBody) worstRamBody.innerHTML = emptyMsg;
+                    document.getElementById('best-cpu-body').innerHTML = emptyMsg;
+                    document.getElementById('worst-cpu-body').innerHTML = emptyMsg;
+                    document.getElementById('best-ram-body').innerHTML = emptyMsg;
+                    document.getElementById('worst-ram-body').innerHTML = emptyMsg;
                     return;
                 }
 
-                // 1. En İyi CPU
-                const bestCpu = report.devices
-                    .filter(d => d.averageCpu <= report.globalAverageCpu)
-                    .sort((a, b) => a.averageCpu - b.averageCpu);
+                // 1. Verileri Filtrele ve Sırala
+                const bestCpu = report.devices.filter(d => d.averageCpu <= report.globalAverageCpu).sort((a, b) => a.averageCpu - b.averageCpu);
+                const worstCpu = report.devices.filter(d => d.averageCpu > report.globalAverageCpu).sort((a, b) => b.averageCpu - a.averageCpu);
+                const bestRam = report.devices.filter(d => d.averageRam <= report.globalAverageRam).sort((a, b) => a.averageRam - b.averageRam);
+                const worstRam = report.devices.filter(d => d.averageRam > report.globalAverageRam).sort((a, b) => b.averageRam - a.averageRam);
 
-                // 2. En Kötü CPU
-                const worstCpu = report.devices
-                    .filter(d => d.averageCpu > report.globalAverageCpu)
-                    .sort((a, b) => b.averageCpu - a.averageCpu);
+                // 2. State'e atama
+                pgState.reports.bestCpu.data = bestCpu; pgState.reports.bestCpu.page = 1;
+                pgState.reports.worstCpu.data = worstCpu; pgState.reports.worstCpu.page = 1;
+                pgState.reports.bestRam.data = bestRam; pgState.reports.bestRam.page = 1;
+                pgState.reports.worstRam.data = worstRam; pgState.reports.worstRam.page = 1;
 
-                // 3. En İyi RAM
-                const bestRam = report.devices
-                    .filter(d => d.averageRam <= report.globalAverageRam)
-                    .sort((a, b) => a.averageRam - b.averageRam);
-
-                // 4. En Kötü RAM
-                const worstRam = report.devices
-                    .filter(d => d.averageRam > report.globalAverageRam)
-                    .sort((a, b) => b.averageRam - a.averageRam);
-
-                // Tablo satırlarını oluşturan yardımcı fonksiyon 
-                const generateRows = (arr, valKey, colorClass) => {
-                    if (arr.length === 0) return `<tr><td class="text-center text-muted py-3 fst-italic" colspan="2">Bu kategoride cihaz yok.</td></tr>`;
-
-                    // CPU mu RAM mi olduğunu tespit ediyoruz
-                    const metricType = valKey === 'averageCpu' ? 'CPU' : 'RAM';
-
-                    return arr.map(d => {
-                        // Backend id'yi computerId veya id olarak dönüyor olabilir, garantiye alalım
-                        const targetId = d.computerId || d.id;
-
-                        return `
-                        <tr style="border-bottom: 1px solid var(--border-color);">
-                            <td class="ps-4 fw-bold align-middle" style="color:var(--text-title);">
-                                ${d.computerName}
-                                <button class="btn btn-sm btn-link text-info p-0 ms-2" onclick="window.ui.showReportDetails(${targetId}, '${d.computerName}', '${metricType}')" title="Metrik Analizini Gör">
-                                    <i class="bi bi-info-circle-fill fs-5"></i>
-                                </button>
-                            </td>
-                            <td class="text-end pe-4 align-middle" style="font-family: monospace; font-size: 1.1rem; color: var(--bs-${colorClass});">%${d[valKey]}</td>
-                        </tr>
-                        `;
-                    }).join('');
-                };
-
-                // Renklendirme ile tablolara basıyoruz
-                if (bestCpuBody) bestCpuBody.innerHTML = generateRows(bestCpu, 'averageCpu', 'success');
-                if (worstCpuBody) worstCpuBody.innerHTML = generateRows(worstCpu, 'averageCpu', 'danger');
-                if (bestRamBody) bestRamBody.innerHTML = generateRows(bestRam, 'averageRam', 'success');
-                if (worstRamBody) worstRamBody.innerHTML = generateRows(worstRam, 'averageRam', 'danger');
+                // 3. Tabloları Sayfalama İle Çizdir
+                ui.renderReportList('bestCpu', 'best-cpu-body', 'averageCpu', 'success');
+                ui.renderReportList('worstCpu', 'worst-cpu-body', 'averageCpu', 'danger');
+                ui.renderReportList('bestRam', 'best-ram-body', 'averageRam', 'success');
+                ui.renderReportList('worstRam', 'worst-ram-body', 'averageRam', 'danger');
 
                 // ---------------------------------------------------------
                 // --- DİSK KARTLARI VE GENEL ORTALAMALAR KISMI          ---
@@ -1378,27 +1369,26 @@
                     // 1. ÜST KISIM: Genel Disk Ortalamaları (Esnek Genişlik - Boşluk Bırakmaz)
                     let globalDisksHtml = '';
                     if (report.globalDiskAverages && report.globalDiskAverages.length > 0) {
-                        // row'a justify-content-center ekledik ve altındaki kartları col-lg ile esnek yaptık
                         globalDisksHtml = `<div class="row justify-content-center mb-4">`;
                         report.globalDiskAverages.forEach(gd => {
                             globalDisksHtml += `
-                    <div class="col-12 col-sm-6 col-lg mb-3">
-                        <div class="card h-100 shadow-sm" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
-                            <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
-                                <div class="fw-bold mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.9rem; letter-spacing: 1px; color: var(--text-muted, #94a3b8);">
-                                    <i class="bi bi-hdd-fill me-2 fs-5" style="color: #38bdf8;"></i>${gd.diskName} GENEL ORT.
+                            <div class="col-12 col-sm-6 col-lg mb-3">
+                                <div class="card h-100 shadow-sm" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
+                                    <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
+                                        <div class="fw-bold mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.9rem; letter-spacing: 1px; color: var(--text-muted, #94a3b8);">
+                                            <i class="bi bi-hdd-fill me-2 fs-5" style="color: #38bdf8;"></i>${gd.diskName} GENEL ORT.
+                                        </div>
+                                        <h2 class="fw-bolder mb-0" style="color: var(--text-main, #e2e8f0); font-family: monospace; font-size: 2rem;">
+                                            %${gd.averageUsedPercent}
+                                        </h2>
+                                    </div>
                                 </div>
-                                <h2 class="fw-bolder mb-0" style="color: var(--text-main, #e2e8f0); font-family: monospace; font-size: 2rem;">
-                                    %${gd.averageUsedPercent}
-                                </h2>
-                            </div>
-                        </div>
-                    </div>`;
+                            </div>`;
                         });
                         globalDisksHtml += `</div>`;
                     }
 
-                    // 2. ALT KISIM: Cihazların Disk Kartları (Renk ve Tema Düzeltmeleri Uygulandı)
+                    // 2. ALT KISIM: Cihazların Disk Kartları
                     let allDiskCardsHtml = '';
 
                     report.devices.forEach(device => {
@@ -1407,13 +1397,13 @@
 
                         // Cihaz için KART yapısı
                         let cardHtml = `
-            <div class="col-md-4 mb-4">
-                <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
-                    <div class="card-header fw-bold" style="background-color: transparent; border-bottom: 1px solid var(--border-color, #334155); color: var(--text-main, #e2e8f0);">
-                        <i class="bi bi-hdd-network me-2" style="color: #38bdf8;"></i> ${device.computerName}
-                    </div>
-                    <div class="card-body" style="color: var(--text-main, #e2e8f0);">
-        `;
+                        <div class="col-md-4 mb-4">
+                            <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
+                                <div class="card-header fw-bold" style="background-color: transparent; border-bottom: 1px solid var(--border-color, #334155); color: var(--text-main, #e2e8f0);">
+                                    <i class="bi bi-hdd-network me-2" style="color: #38bdf8;"></i> ${device.computerName}
+                                </div>
+                                <div class="card-body" style="color: var(--text-main, #e2e8f0);">
+                        `;
 
                         // Cihazın içindeki her bir diski dön
                         device.disks.forEach(disk => {
@@ -1433,28 +1423,28 @@
                             const safeDiskName = disk.diskName.replace(/\\/g, '\\\\');
 
                             cardHtml += `
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.9rem;">
-                        <div>
-                            <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
-                            <button class="btn btn-sm btn-link text-info p-0 ms-1" onclick="window.ui.showReportDetails(${targetId}, '${device.computerName}', 'Disk ${safeDiskName}', '${safeDiskName}')" title="Metrik Analizini Gör">
-                                <i class="bi bi-info-circle-fill"></i>
-                            </button>
-                        </div>
-                        <span class="${textClass}">%${disk.averageUsedPercent}</span>
-                    </div>
-                    <div class="progress" style="height: 8px; background-color: var(--border-color, #334155);">
-                        <div class="progress-bar ${colorClass}" role="progressbar" style="width: ${disk.averageUsedPercent}%"></div>
-                    </div>
-                </div>
-            `;
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.9rem;">
+                                    <div>
+                                        <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
+                                        <button class="btn btn-sm btn-link text-info p-0 ms-1" onclick="window.ui.showReportDetails(${targetId}, '${device.computerName}', 'Disk ${safeDiskName}', '${safeDiskName}')" title="Metrik Analizini Gör">
+                                            <i class="bi bi-info-circle-fill"></i>
+                                        </button>
+                                    </div>
+                                    <span class="${textClass}">%${disk.averageUsedPercent}</span>
+                                </div>
+                                <div class="progress" style="height: 8px; background-color: var(--border-color, #334155);">
+                                    <div class="progress-bar ${colorClass}" role="progressbar" style="width: ${disk.averageUsedPercent}%"></div>
+                                </div>
+                            </div>
+                            `;
                         });
 
                         cardHtml += `
-                    </div>
-                </div>
-            </div>
-        `;
+                                </div>
+                            </div>
+                        </div>
+                        `;
 
                         allDiskCardsHtml += cardHtml;
                     });
@@ -1465,14 +1455,14 @@
 
                     // 3. TÜM YAPIYI EKRANA BAS (Başlık + Rozetler + Kartlar)
                     diskSection.innerHTML = `
-        <h5 class="fw-bold mb-3" style="color: var(--text-main, #e2e8f0);">
-            <i class="bi bi-device-hdd me-2" style="color: #38bdf8;"></i> Cihaz Disk Durumları
-        </h5>
-        ${globalDisksHtml}
-        <div class="row" id="diskReportsContainer">
-            ${allDiskCardsHtml}
-        </div>
-    `;
+                    <h5 class="fw-bold mb-3" style="color: var(--text-main, #e2e8f0);">
+                        <i class="bi bi-device-hdd me-2" style="color: #38bdf8;"></i> Cihaz Disk Durumları
+                    </h5>
+                    ${globalDisksHtml}
+                    <div class="row" id="diskReportsContainer">
+                        ${allDiskCardsHtml}
+                    </div>
+                    `;
                 }
                 // --- DİSK KISMI BURADA BİTİYOR ---
 
@@ -1489,7 +1479,7 @@
                 }
             }
         }
-    };
+    }; // window.ui nesnesinin bitişi
 
     // --- Tema Başlatma (Sayfa Yüklenince) ---
     (function initTheme() {
