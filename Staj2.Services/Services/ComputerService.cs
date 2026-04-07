@@ -153,6 +153,9 @@ public class ComputerService : IComputerService
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (TÜM VALIDASYONLAR EKLENDİ)
     public async Task<(bool isBadRequest, string? errorMessage, object? data)> GetMetricsHistoryAsync(int id, string start, string end)
     {
+        if (id <= 0)
+            return (true, "Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.", null);
+
         // JS'den taşınan kural 1: Boş bırakılamaz
         if (string.IsNullOrWhiteSpace(start) || string.IsNullOrWhiteSpace(end))
             return (true, "Lütfen tarih aralığı seçiniz.", null);

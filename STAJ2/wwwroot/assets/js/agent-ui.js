@@ -96,8 +96,7 @@ function renderTable() {
     const canRename = window.auth.hasPermission("Computer.Rename");
     const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
-    const canFilterHistory = window.auth.hasPermission("Computer.Filter");
-    const canEdit = canRename || canSetThreshold || canAssignTag || canFilterHistory;
+    const canEdit = canRename || canSetThreshold || canAssignTag ;
 
     const now = new Date().getTime();
 
@@ -122,7 +121,6 @@ function renderTable() {
         let actionButtons = '';
         if (canEdit) {
             actionButtons = `<div class="d-flex align-items-center gap-1">`;
-            if (canFilterHistory) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openHistoryModal(${a.computerId})" title="Geçmiş Analizi"><i class="bi bi-clock-history fs-6 text-info"></i></button>`;
             if (canSetThreshold) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openThresholdSettings(${a.computerId})" title="Sınırları Düzenle"><i class="bi bi-sliders fs-6 text-warning"></i></button>`;
             if (canAssignTag) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="openTagModal(${a.computerId})" title="Etiketle"><i class="bi bi-tags fs-6 text-success"></i></button>`;
             if (canRename) actionButtons += `<button class="btn btn-sm btn-ghost p-1 border-0" onclick="handleRename(${a.computerId}, '${a.displayName || a.machineName}')" title="İsim Değiştir"><i class="bi bi-pencil fs-6 text-primary"></i></button>`;
@@ -351,9 +349,33 @@ window.saveThresholdsWithValidation = async () => {
 
 // --- 3. GEÇMİŞ METRİK FONKSİYONLARI (GRAFİKLİ SOL MENÜLÜ YAPI) ---
 
-window.openHistoryModal = (id) => {
-    document.getElementById("historyComputerId").value = id;
+window.openHistoryModal = async (id) => {
+    // 1. Sayfayı History moduna geçir (Modal yerine tam sayfa)
+    ui.switchView('history');
 
+    // 2. Dropdown'un bilgisayarlarla dolmasını sağla
+    if (window.ui.loadHistoryComputers) {
+        await window.ui.loadHistoryComputers();
+    }
+
+    // 3. Tıklanan cihazı Dropdown'da otomatik seç
+    const selectEl = document.getElementById("historyPageComputerSelect");
+    if (selectEl) {
+        selectEl.value = id;
+    }
+
+    // 4. Tarihleri son 24 saat olarak ayarla
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    const formatToInput = (date) => {
+        const offset = date.getTimezoneOffset() * 60000;
+        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    };
+
+    document.getElementById("historyStart").value = formatToInput(yesterday);
+    document.getElementById("historyEnd").value = formatToInput(now);
+
+    // 5. Grafikleri çizmeden önce temizle
     if (historyCharts.cpu) historyCharts.cpu.destroy();
     if (historyCharts.ram) historyCharts.ram.destroy();
     Object.values(historyCharts.disks).forEach(chart => chart.destroy());
@@ -365,48 +387,35 @@ window.openHistoryModal = (id) => {
     const diskCheckboxes = document.getElementById("diskCheckboxes");
     if (diskCheckboxes) diskCheckboxes.innerHTML = "";
 
-    const diskFiltersContainer = document.getElementById("diskFiltersContainer");
-    if (diskFiltersContainer) diskFiltersContainer.style.display = "none";
-
-    document.getElementById("historyResults").style.display = "none";
-    document.getElementById("historyPlaceholder").style.display = "block";
-
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-
-    const formatToInput = (date) => {
-        const offset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-    };
-
-    document.getElementById("historyStart").value = formatToInput(yesterday);
-    document.getElementById("historyEnd").value = formatToInput(now);
-
-    new bootstrap.Modal(document.getElementById("historyModal")).show();
+    // 6. Verileri otomatik getir
+    window.fetchHistoryMetrics();
 };
 
 window.fetchHistoryMetrics = async () => {
-    const id = document.getElementById("historyComputerId").value;
+    const selectEl = document.getElementById("historyPageComputerSelect");
+
+    // Eğer ID yoksa null gitmesin, 0 gitsin ki Backend (Controller) bunu yakalayıp uygun hata mesajını dönebilsin.
+    const id = selectEl && selectEl.value ? selectEl.value : 0;
+
     const start = document.getElementById("historyStart").value;
     const end = document.getElementById("historyEnd").value;
 
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
 
-    placeholder.innerHTML = '<div class="text-center py-5 mt-5"><div class="spinner-border text-info"></div><div class="mt-3 text-muted">Veriler analiz ediliyor...</div></div>';
+    placeholder.innerHTML = '<div class="text-center py-5 mt-5"><div class="spinner-border text-info"></div><div class="mt-3 fw-bold" style="color: var(--text-muted);">Veriler analiz ediliyor...</div></div>';
     placeholder.style.display = "block";
     results.style.display = "none";
     document.getElementById("diskFiltersContainer").style.display = "none";
 
     try {
-        // Tüm tarih kontrollerini (boş mu, 7 gün mü vs) Backend halledecek.
+        // Herhangi bir frontend kontrolü yapmadan tüm sorumluluğu Backend'e atıyoruz.
         const data = await api.get(`/api/Computer/${id}/metrics-history?start=${start}&end=${end}`);
 
         if (!data.cpuRam || data.cpuRam.length === 0) {
-            placeholder.innerHTML = '<div class="text-center py-5 mt-5"><h5 class="text-muted fw-light mt-4">Bu tarih aralığında kayıt bulunamadı.</h5></div>';
+            placeholder.innerHTML = '<div class="text-center py-5 mt-5"><h5 class="fw-light mt-4" style="color: var(--text-title);">Bu tarih aralığında kayıt bulunamadı.</h5></div>';
             return;
         }
-
         currentHistoryData = data;
 
         if (currentHistoryData.cpuRam) {
@@ -424,8 +433,18 @@ window.fetchHistoryMetrics = async () => {
         generateDiskFilters(data.disks);
 
     } catch (e) {
-        // Backend'den fırlatılan tarih validasyon hataları tam olarak burada ekrana basılacak
-        placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger"><i class="bi bi-exclamation-triangle me-2 d-block display-4 mb-3"></i> ${e.message}</div>`;
+        // BACKEND'DEN GELEN DİNAMİK YAPIYI DİREKT KULLANIYORUZ
+        Swal.fire({
+            title: e.title || 'İşlem Başarısız',
+            text: e.message,
+            icon: 'warning'
+        });
+
+        placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger opacity-75">
+            <i class="bi bi-exclamation-circle me-2 d-block display-4 mb-3"></i> 
+            <h5 style="color: var(--text-title);">Analiz Gerçekleştirilemedi</h5>
+            <small class="fw-bold" style="color: var(--text-muted);">Lütfen geçerli değerler seçerek tekrar deneyin.</small>
+        </div>`;
     }
 };
 
@@ -580,10 +599,9 @@ window.renderAllComputersTable = () => {
     const canRename = window.auth.hasPermission("Computer.Rename");
     const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
-    const canFilterHistory = window.auth.hasPermission("Computer.Filter");
     const canDelete = window.auth.hasPermission("Computer.Delete");
 
-    const canEdit = canRename || canSetThreshold || canAssignTag || canFilterHistory || canDelete;
+    const canEdit = canRename || canSetThreshold || canAssignTag  || canDelete;
 
     const filtered = selectedAllTags.length === 0
         ? allSystemComputers
@@ -614,8 +632,6 @@ window.renderAllComputersTable = () => {
             if (canSetThreshold) actionButtons += `<button class="btn warning small" onclick="openThresholdSettings(${c.id})" title="Limit Ayarları">⚙️</button>`;
             if (canAssignTag) actionButtons += `<button class="btn btn-tag small" onclick="openTagModal(${c.id})" title="Etiketle">🏷️</button>`;
         }
-
-        if (canFilterHistory) actionButtons += `<button class="btn btn-history small" onclick="openHistoryModal(${c.id})" title="Geçmiş Kayıtlar"><i class="bi bi-list-ul"></i></button>`;
 
         if (!c.isActive && !c.isDeleted && canDelete) {
             actionButtons += `<button class="btn danger small" onclick="deleteComputer(${c.id})" title="Sil">🗑️</button>`;

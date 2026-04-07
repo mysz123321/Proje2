@@ -259,6 +259,90 @@
                 ui.loadTagTable();
                 break;
 
+            case 'history':
+                title.innerText = "Geçmiş Metrikler";
+                subtitle.innerText = "Cihazların CPU, RAM ve Disk geçmişlerini detaylı olarak inceleyin.";
+
+                // Filtre alanını gizle (Geçmiş sayfasında kendi filtrelerimiz olacak)
+                const historyFilterEl = document.getElementById('globalFilters');
+                if (historyFilterEl) { historyFilterEl.classList.remove('d-flex'); historyFilterEl.classList.add('d-none'); }
+
+                content.innerHTML = `
+                <div class="row h-100" style="min-height: 75vh;">
+                    <div class="col-lg-3 border-end border-secondary pe-lg-4 mb-4" style="border-color: var(--border-color) !important;">
+                        <div class="card border-0 shadow-sm" style="background:var(--bg-card); position: sticky; top: 20px;">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders"></i> Kontrol Paneli</h5>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small mb-1" style="color:var(--text-muted);">CİHAZ SEÇİMİ</label>
+                                    <select id="historyPageComputerSelect" class="form-select" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                        <option value="">Yükleniyor...</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small mb-1" style="color:var(--text-muted);">BAŞLANGIÇ ZAMANI</label>
+                                    <input type="datetime-local" id="historyStart" class="form-control" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small mb-1" style="color:var(--text-muted);">BİTİŞ ZAMANI</label>
+                                    <input type="datetime-local" id="historyEnd" class="form-control" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                </div>
+
+                                <button class="btn btn-primary w-100 fw-bold shadow-sm mb-4" onclick="fetchHistoryMetrics()">
+                                    <i class="bi bi-search me-2"></i> Getir ve Çiz
+                                </button>
+
+                                <div id="diskFiltersContainer" style="display:none; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <i class="bi bi-hdd-network text-info me-2"></i>
+                                        <h6 class="mb-0 small fw-bold text-uppercase" style="color:var(--text-muted);">Diskleri Göster</h6>
+                                    </div>
+                                    <div id="diskCheckboxes" class="row g-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-9 ps-lg-4">
+                        <div id="historyPlaceholder" class="text-center py-5 mt-5" style="display: block;">
+                            <div class="opacity-50 mb-3" style="color: var(--text-muted);">
+                                <i class="bi bi-graph-up display-1"></i>
+                            </div>
+                            <h4 class="fw-light" style="color: var(--text-title);">Lütfen sol taraftan cihaz ve tarih seçerek analize başlayın.</h4>
+                        </div>
+
+                        <div id="historyResults" style="display:none; width: 100%;">
+                            <div id="chartsContainer" class="d-flex flex-column gap-4 w-100 pb-4">
+                                <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
+                                    <div class="card-header border-bottom border-secondary text-info fw-bold"><i class="bi bi-cpu"></i> CPU Kullanımı</div>
+                                    <div class="card-body p-2" style="overflow: hidden;">
+                                        <div style="position: relative; height: 250px; width: 100%;">
+                                            <canvas id="cpuChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
+                                    <div class="card-header border-bottom border-secondary text-danger fw-bold"><i class="bi bi-memory"></i> RAM Kullanımı</div>
+                                    <div class="card-body p-2" style="overflow: hidden;">
+                                        <div style="position: relative; height: 250px; width: 100%;">
+                                            <canvas id="ramChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="dynamicDiskCharts" class="d-flex flex-column gap-4"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+
+                // Sayfa yüklendiğinde Cihazları dropdown'a dolduracak fonksiyonu çağırıyoruz
+                if (window.ui.loadHistoryComputers) window.ui.loadHistoryComputers();
+                break;
             case 'reports':
                 title.innerText = "Performans Raporları";
                 subtitle.innerText = "Cihazların CPU ve RAM ortalamalarına göre detaylı analizi.";
@@ -1175,6 +1259,30 @@
                 pgState.newRolePerm.assignedIds = pgState.newRolePerm.assignedIds.filter(x => x !== id);
             }
         },
+
+        loadHistoryComputers: async () => {
+            const selectEl = document.getElementById('historyPageComputerSelect');
+            if (!selectEl) return;
+
+            try {
+                // HATA BURADAYDI: Admin endpoint'i yerine standart ve güvenli endpoint'i kullanıyoruz.
+                // Bu sayede kullanıcı sadece kendi yetkisi olan (görebildiği) cihazları listede görecek.
+                const computers = await api.get('/api/Computer');
+                const activeComputers = computers.filter(c => !c.isDeleted);
+
+                let optionsHtml = '<option value="">-- Cihaz Seçiniz --</option>';
+                activeComputers.forEach(c => {
+                    optionsHtml += `<option value="${c.id}">${c.displayName || c.machineName}</option>`;
+                });
+
+                selectEl.innerHTML = optionsHtml;
+            } catch (e) {
+                // Eğer hata olursa konsola yazdırsın ama sistemi patlatıp logout atmasın
+                console.warn("Cihazlar yüklenirken bir hata oluştu:", e);
+                selectEl.innerHTML = '<option value="">Cihazlar yüklenemedi</option>';
+            }
+        },
+
         showReportDetails: async (computerId, computerName, metricType, diskName = null) => {
             document.getElementById('rdm-computer-name').innerText = computerName;
             document.getElementById('rdm-metric-type').innerText = metricType;

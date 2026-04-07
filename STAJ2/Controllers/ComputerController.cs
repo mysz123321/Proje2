@@ -106,19 +106,19 @@ public class ComputerController : ControllerBase
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
     [HttpGet("{id:int}/metrics-history")]
     [HasPermission(AppPermissions.Computer_Filter)]
-    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string start, [FromQuery] string end)
+    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string? start, [FromQuery] string? end)
     {
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end);
 
         if (result.isBadRequest)
-            return BadRequest(new { message = result.errorMessage });
+            return BadRequest(new { message = result.errorMessage, title = "Uyarı" });
 
         return Ok(result.data);
     }
 
     // 7. Tüm Cihazları Getir
     [HttpGet]
-    [HasPermission(AppPermissions.Computer_Read)]
+    [HasPermission(AppPermissions.Computer_Read, AppPermissions.Computer_Filter)]
     public async Task<IActionResult> GetAllComputers()
     {
         var result = await _computerService.GetAllComputersAsync(GetUserId(), IsAdmin());
