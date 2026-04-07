@@ -4,36 +4,36 @@ namespace Staj2.Services.Interfaces;
 
 public interface IAdminService
 {
+    // Roller ve Yetkiler
     Task<object> GetRolesAsync();
     Task<object> GetAllPermissionsAsync();
     Task<List<int>> GetRolePermissionsAsync(int roleId);
-    Task<string?> CreateRoleAsync(CreateRoleRequest request, int? currentUserId);
-    Task<string?> UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsRequest request, int? currentUserId);
-    Task<string?> DeleteRoleAsync(int id, int? currentUserId);
 
+    // YENİ DÖNÜŞ TİPİ: (bool isSuccess, string message)
+    Task<(bool isSuccess, string message)> CreateRoleAsync(CreateRoleRequest request, int? currentUserId);
+    Task<(bool isSuccess, string message)> UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsRequest request, int? currentUserId);
+    Task<(bool isSuccess, string message)> DeleteRoleAsync(int id, int? currentUserId);
+
+    // Kullanıcılar
     Task<object> GetAllUsersAsync();
-    Task<string?> DeleteUserAsync(int id, int? currentUserId);
-    Task<string?> ChangeUserRolesAsync(int userId, ChangeRolesRequest request);
+    Task<(bool isSuccess, string message)> DeleteUserAsync(int id, int? currentUserId);
+    Task<(bool isSuccess, string message)> ChangeUserRolesAsync(int userId, ChangeRolesRequest request);
 
-    // --- KAYIT İSTEKLERİ YÖNETİMİ ---
+    // Kayıt İstekleri
     Task<object> GetPendingRequestsAsync();
+    Task<(bool IsSuccess, string message)> RejectRequestAsync(RejectRegistrationRequest request, int? adminId);
+    Task<(bool IsSuccess, string message)> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId);
 
-    // DÖNÜŞ TİPİ SADELEŞTİRİLDİ: Sadece başarı durumu ve hata mesajı dönüyor.
-    Task<(bool IsSuccess, string? ErrorMessage)> RejectRequestAsync(RejectRegistrationRequest request, int? adminId);
-
-    // DÖNÜŞ TİPİ SADELEŞTİRİLDİ: Sadece başarı durumu ve hata mesajı dönüyor.
-    Task<(bool IsSuccess, string? ErrorMessage)> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId);
-
-    // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
+    // Erişimler (Cihaz/Etiket)
     Task<object?> GetUserAccessAsync(int userId);
-    Task<string?> AssignComputersAsync(int userId, AssignComputersRequest req);
-    Task<string?> AssignTagsAsync(int userId, AssignTagsRequest req);
+    Task<(bool isSuccess, string message)> AssignComputersAsync(int userId, AssignComputersRequest req);
+    Task<(bool isSuccess, string message)> AssignTagsAsync(int userId, AssignTagsRequest req);
     Task<object> GetAllComputersForAssignmentAsync();
 
-    // --- ETİKET YÖNETİMİ ---
+    // Etiketler
     Task<object> GetTagsAsync();
-    Task<(bool IsSuccess, string? ErrorMessage, object? CreatedTag)> CreateTagAsync(TagCreateRequest request, int? userId);
-    Task<string?> DeleteTagAsync(int id, int? currentUserId);
-    Task<string?> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req);
+    Task<(bool IsSuccess, string message, object? CreatedTag)> CreateTagAsync(TagCreateRequest request, int? userId);
+    Task<(bool isSuccess, string message)> DeleteTagAsync(int id, int? currentUserId);
+    Task<(bool isSuccess, string message)> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req);
     Task<List<int>> GetTagAssignedComputerIdsAsync(int tagId);
 }

@@ -2,8 +2,8 @@
 
 (function () {
     // --- SAYFALAMA VE HAFIZA (STATE) YÖNETİMİ ---
-    const ITEMS_PER_PAGE = 7; // Ana tablolar için sayfadaki eleman sayısı
-    const MODAL_ITEMS_PER_PAGE = 6; // Modallar için sayfadaki eleman sayısı
+    const ITEMS_PER_PAGE = 7;
+    const MODAL_ITEMS_PER_PAGE = 6;
 
     let pgState = {
         requests: { data: [], roles: [], page: 1 },
@@ -72,23 +72,19 @@
             }, 200);
         }
     }
-    
+
     // --- Sidebar ---
     async function renderSidebar() {
         const nav = document.getElementById('main-nav');
         if (!nav) return;
 
         try {
-            // Doğrudan dinamik menü elemanlarını API'den çek (Backend sadece yetkimiz olanları gönderir)
             const sidebarItems = await api.get('/api/Ui/sidebar-items');
-
             let html = '';
 
-            // YENİ SİSTEM: Artık isProtected flag'ine göre ayırıyoruz
             const mainItems = sidebarItems.filter(item => !item.isProtected);
             const adminItems = sidebarItems.filter(item => item.isProtected);
 
-            // 1. Herkese Açık / Temel Menüleri Oluştur
             mainItems.forEach(item => {
                 const isActive = item.targetView === 'computers' ? 'active' : '';
 
@@ -100,7 +96,6 @@
         </li>`;
             });
 
-            // 2. Yönetim Paneli Menülerini Oluştur
             if (adminItems.length > 0) {
                 html += `
         <li class="px-4 mt-4 mb-2">
@@ -140,7 +135,6 @@
         const activeNav = document.getElementById(`nav-${view}`);
         if (activeNav) activeNav.classList.add('active');
 
-        // Filtrenin Sadece Belirli Sayfalarda Görünmesi
         const filterEl = document.getElementById('globalFilters');
         if (filterEl) {
             if (['computers', 'all-computers', 'tags'].includes(view)) {
@@ -269,8 +263,8 @@
                 title.innerText = "Performans Raporları";
                 subtitle.innerText = "Cihazların CPU ve RAM ortalamalarına göre detaylı analizi.";
 
-                const filterEl = document.getElementById('globalFilters');
-                if (filterEl) { filterEl.classList.remove('d-flex'); filterEl.classList.add('d-none'); }
+                const reportFilterEl = document.getElementById('globalFilters');
+                if (reportFilterEl) { reportFilterEl.classList.remove('d-flex'); reportFilterEl.classList.add('d-none'); }
 
                 content.innerHTML = `
                 <div class="container-fluid p-0">
@@ -403,11 +397,8 @@
 
     async function loadUsersView(container) {
         try {
-            // Sadece kullanıcıları çekiyoruz
             const users = await api.get("/api/Admin/users");
-
             pgState.users.data = users;
-            // pgState.users.actions sildik
             pgState.users.page = 1;
 
             container.innerHTML = `
@@ -442,11 +433,9 @@
     async function loadRolesView(container) {
         try {
             const roles = await api.get("/api/Admin/roles");
-            // Sabit string yerine APP_CONFIG kullanımı
             pgState.roles.data = roles.filter(r => r.name !== window.APP_CONFIG.ADMIN_ROLE_NAME);
             pgState.roles.page = 1;
 
-            // KONTROL: Sadece Role.Manage yetkisi olanlar butonu görebilir
             const canManageRoles = window.auth.hasPermission('Role.Manage');
             const addRoleBtn = canManageRoles ? `<button class="btn btn-success btn-sm" onclick="ui.openCreateRoleModal()">+ Yeni Rol Ekle</button>` : '';
 
@@ -498,7 +487,6 @@
         renderSidebar, switchView, toggleTheme,
 
         approveRequest: async (id) => {
-            // 1. Tarayıcı varsayılan "confirm" yerine SweetAlert2 Onay Penceresi
             const result = await Swal.fire({
                 title: 'Onaylıyor musunuz?',
                 text: "Bu kullanıcıyı onaylamak istiyor musunuz?",
@@ -508,10 +496,8 @@
                 cancelButtonText: 'İptal'
             });
 
-            // Eğer iptale basılırsa işlemi durdur
             if (!result.isConfirmed) return;
 
-            // 2. SİZİN KODUNUZ: İşlem yapılan butonu bul ve loading durumuna al
             const approveBtn = document.querySelector(`button[onclick="ui.approveRequest(${id})"]`);
             const rejectBtn = document.querySelector(`button[onclick="ui.rejectRequest(${id})"]`);
 
@@ -524,16 +510,13 @@
 
             try {
                 const roleId = document.getElementById(`reqRole_${id}`).value;
-                await api.post(`/api/admin/requests/approve/${id}`, { newRoleId: parseInt(roleId) });
+                const response = await api.post(`/api/admin/requests/approve/${id}`, { newRoleId: parseInt(roleId) });
 
-                // 3. Tarayıcı varsayılan "alert" yerine SweetAlert2 Başarı Mesajı
-                Swal.fire('Onaylandı', 'Kullanıcı onaylandı ve bilgilendirme maili gönderildi.', 'success');
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
                 ui.switchView('requests');
             } catch (e) {
-                // 4. Tarayıcı varsayılan "alert" yerine SweetAlert2 Hata Mesajı
-                Swal.fire('Hata', e.message || "Bir hata oluştu.", 'error');
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
 
-                // SİZİN KODUNUZ: Hata olursa butonları eski haline getir
                 if (approveBtn) {
                     approveBtn.innerHTML = approveBtn.dataset.originalText;
                     approveBtn.disabled = false;
@@ -543,7 +526,6 @@
         },
 
         rejectRequest: async (id) => {
-            // 1. Tarayıcı varsayılan "prompt" yerine SweetAlert2 Girdi Penceresi
             const { value: reason } = await Swal.fire({
                 title: 'Ret Sebebi',
                 input: 'textarea',
@@ -552,15 +534,12 @@
                 confirmButtonText: 'Reddet',
                 cancelButtonText: 'İptal',
                 inputValidator: (value) => {
-                    if (!value) return 'Ret sebebi boş bırakılamaz!';
-                    if (value.length > 200) return 'Ret sebebi 200 karakterden uzun olamaz.';
+                    if (!value) return 'Ret sebebi boş bırakılamaz!'; // Kullanıcı iptale basmak yerine boş gönderemesin diye ufak bir UI UX kuralı olarak kaldı
                 }
             });
 
-            // Eğer iptale basılırsa veya boş geçilirse işlemi durdur
             if (!reason) return;
 
-            // 2. SİZİN KODUNUZ: Butonları bul ve yükleniyor (spinner) moduna al
             const approveBtn = document.querySelector(`button[onclick="ui.approveRequest(${id})"]`);
             const rejectBtn = document.querySelector(`button[onclick="ui.rejectRequest(${id})"]`);
 
@@ -572,16 +551,13 @@
             if (approveBtn) approveBtn.disabled = true;
 
             try {
-                await api.post(`/api/admin/requests/reject`, { requestId: id, rejectionReason: reason });
+                const response = await api.post(`/api/admin/requests/reject`, { requestId: id, rejectionReason: reason });
 
-                // 3. Tarayıcı varsayılan "alert" yerine SweetAlert2 Başarı Mesajı
-                Swal.fire('Reddedildi', 'Talep reddedildi ve bilgilendirme maili gönderildi.', 'success');
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
                 ui.switchView('requests');
             } catch (e) {
-                // 4. Tarayıcı varsayılan "alert" yerine SweetAlert2 Hata Mesajı
-                Swal.fire('Hata', e.message || "Bir hata oluştu.", 'error');
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
 
-                // SİZİN KODUNUZ: Hata durumunda butonları eski haline getir
                 if (rejectBtn) {
                     rejectBtn.innerHTML = rejectBtn.dataset.originalText;
                     rejectBtn.disabled = false;
@@ -591,7 +567,6 @@
         },
         deleteUser: async (id) => {
             const result = await Swal.fire({
-                title: 'Emin misiniz?',
                 text: "Kullanıcı silinsin mi?",
                 icon: 'warning',
                 showCancelButton: true,
@@ -603,10 +578,10 @@
 
             if (result.isConfirmed) {
                 try {
-                    await api.del(`/api/Admin/users/${id}`);
-                    Swal.fire('Silindi!', 'Kullanıcı silindi.', 'success');
+                    const response = await api.del(`/api/Admin/users/${id}`);
+                    Swal.fire({ title: response.title, text: response.message, icon: 'success' });
                     ui.switchView('users');
-                } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
             }
         },
 
@@ -649,22 +624,18 @@
 
                 let actionButtons = '';
 
-                // Roller Butonu
                 if (window.auth.hasPermission('User.ManageRoles')) {
                     actionButtons += `<button class="btn btn-outline-primary btn-sm" onclick="ui.openUserRolesModal(${u.id}, '${u.username}')" title="Roller"><i class="bi bi-shield-check"></i> Roller</button> `;
                 }
 
-                // Cihazlar Butonu
                 if (window.auth.hasPermission('User.ManageComputers')) {
                     actionButtons += `<button class="btn btn-outline-success btn-sm" onclick="ui.openUserComputerAccessModal(${u.id}, '${u.username}')" title="Cihazlar"><i class="bi bi-pc-display"></i> Cihazlar</button> `;
                 }
 
-                // Etiketler Butonu
                 if (window.auth.hasPermission('User.ManageTags')) {
                     actionButtons += `<button class="btn btn-outline-warning btn-sm" onclick="ui.openUserTagAccessModal(${u.id}, '${u.username}')" title="Etiketler"><i class="bi bi-tags"></i> Etiketler</button> `;
                 }
 
-                // Sil Butonu (Hem Yönetici rolüne hem de Role yönetimi iznine sahip mi diye bakıyoruz)
                 if (window.auth.hasRole('Yönetici') && window.auth.hasPermission('User.ManageRoles')) {
                     if (isAdmin) {
                         actionButtons += `<span class="btn btn-sm disabled opacity-25" title="Yönetici Silinemez"><i class="bi bi-shield-lock-fill"></i></span> `;
@@ -700,7 +671,6 @@
             const start = (state.page - 1) * ITEMS_PER_PAGE;
             const paginated = state.data.slice(start, start + ITEMS_PER_PAGE);
 
-            // Yetkisi olanlara sil butonunu da gösterelim
             const canManageRoles = window.auth.hasPermission('Role.Manage');
 
             let rows = paginated.map(r => `<tr>
@@ -757,19 +727,19 @@
         createNewTag: async () => {
             const nameInput = document.getElementById("newTagName");
             const name = nameInput.value.trim();
-            if (name) {
-                try {
-                    await api.post("/api/Admin/tags", { name });
-                    nameInput.value = "";
-                    await switchView('tags');
-                    if (window.loadFilterTags) window.loadFilterTags();
-                    Swal.fire({ title: 'Başarılı', text: 'Etiket Eklendi!', icon: 'success', timer: 1500, showConfirmButton: false });
-                } catch (e) { Swal.fire('Hata', "Etiket eklenirken hata: " + e.message, 'error'); }
+
+            try {
+                const response = await api.post("/api/Admin/tags", { name });
+                nameInput.value = "";
+                await switchView('tags');
+                if (window.loadFilterTags) window.loadFilterTags();
+                Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) {
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
             }
         },
         deleteTag: async (id) => {
             const result = await Swal.fire({
-                title: 'Silmek İstediğinize Emin misiniz?',
                 text: "Etiket silinecektir.",
                 icon: 'warning',
                 showCancelButton: true,
@@ -780,11 +750,11 @@
 
             if (result.isConfirmed) {
                 try {
-                    await api.del(`/api/Admin/tags/${id}`);
+                    const response = await api.del(`/api/Admin/tags/${id}`);
                     ui.switchView('tags');
                     if (window.loadFilterTags) window.loadFilterTags();
-                    Swal.fire('Silindi', 'Etiket silindi.', 'success');
-                } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                    Swal.fire({ title: response.title, text: response.message, icon: 'success' });
+                } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
             }
         },
 
@@ -792,7 +762,6 @@
         openAssignModal: async (tagId, tagName) => {
             document.getElementById("assignTagId").value = tagId;
 
-            // YENİ EKLENEN: Arama kutusunu sıfırla
             const searchInput = document.getElementById("tagAssignSearchInput");
             if (searchInput) searchInput.value = "";
 
@@ -820,7 +789,6 @@
             const state = pgState.tagAssign;
             const start = (state.page - 1) * MODAL_ITEMS_PER_PAGE;
 
-            // YENİ EKLENEN: state.data yerine state.filtered kullanıyoruz
             const paginated = state.filtered.slice(start, start + MODAL_ITEMS_PER_PAGE);
 
             if (state.filtered.length === 0) {
@@ -838,7 +806,6 @@
                     <small class="text-muted flex-shrink-0" style="font-family:monospace;">${c.ipAddress || 'IP Yok'}</small>
                 </label>`).join('');
 
-            // YENİ EKLENEN: Sayfalama için de state.filtered.length kullanıyoruz
             renderPagination('tagAssignPg', state.page, state.filtered.length, MODAL_ITEMS_PER_PAGE, 'ui.changeTagAssignPage');
         },
         changeTagAssignPage: (p) => { pgState.tagAssign.page = p; ui.renderTagAssignList(); },
@@ -849,10 +816,10 @@
         saveTagAssignments: async () => {
             const tagId = document.getElementById("assignTagId").value;
             try {
-                await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: pgState.tagAssign.assignedIds });
+                const response = await api.post(`/api/Admin/tags/${tagId}/assign-computers`, { computerIds: pgState.tagAssign.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById("tagAssignModal")).hide();
-                Swal.fire('Başarılı', 'Atama işlemi başarılı!', 'success');
-            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
         },
 
         // --- ROL YETKİLERİ MODALI ---
@@ -904,10 +871,10 @@
         saveRolePermissions: async () => {
             const roleId = document.getElementById('editRoleIdInput').value;
             try {
-                await api.post(`/api/Admin/roles/${roleId}/permissions`, { permissionIds: pgState.rolePerm.assignedIds });
+                const response = await api.post(`/api/Admin/roles/${roleId}/permissions`, { permissionIds: pgState.rolePerm.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('rolePermissionsModal')).hide();
-                Swal.fire('Başarılı', 'Yetkiler başarıyla güncellendi. Değişikliklerin size yansıması için çıkış yapıp tekrar girmelisiniz.', 'success');
-            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
+            } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
         },
 
         // --- KULLANICI ROLLERİ MODALI ---
@@ -954,31 +921,21 @@
         saveUserRoles: async () => {
             const userId = parseInt(document.getElementById('editUserRole_UserId').value);
             const selectedRoleIds = pgState.userRoles.assignedIds;
-            const adminRole = pgState.userRoles.data.find(r => r.name === window.APP_CONFIG.ADMIN_ROLE_NAME);
-            const isAdminSelected = adminRole && selectedRoleIds.includes(adminRole.id);
 
             try {
-                if (!isAdminSelected) {
-                    const allUsers = await api.get('/api/Admin/users');
-                    const adminCount = allUsers.filter(u => u.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME)).length;
-                    const currentUser = allUsers.find(u => u.id === userId);
-                    const isCurrentlyAdmin = currentUser && currentUser.roles.includes(window.APP_CONFIG.ADMIN_ROLE_NAME);
+                // Hiçbir kontrol yapmadan direkt Backend'e gönder!
+                const response = await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: selectedRoleIds });
 
-                    if (isCurrentlyAdmin && adminCount <= 1) {
-                        return Swal.fire('Eylem Reddedildi', 'Sistemde kalan son yönetici yetkisini kaldıramazsınız!', 'warning');
-                    }
-                }
-
-                await api.put(`/api/Admin/users/${userId}/change-roles`, { newRoleIds: selectedRoleIds });
                 bootstrap.Modal.getInstance(document.getElementById('userRolesModal')).hide();
                 ui.switchView('users');
-                Swal.fire('Başarılı', 'Roller başarıyla güncellendi.', 'success');
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
             } catch (e) {
-                Swal.fire('Hata', e.message, 'error');
+                // Eğer son yöneticiyse, Backend'den gelen "Sistemde kalan son..." uyarısı burada patlayacak.
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
             }
         },
 
-        // --- KULLANICI CİHAZ ERİŞİMİ MODALI (Arama Filtresi Dahil) ---
+        // --- KULLANICI CİHAZ ERİŞİMİ MODALI ---
         openUserComputerAccessModal: async (userId, username) => {
             document.getElementById('accessModal_UserId').value = userId;
             document.getElementById('computerAccessUserName').innerText = username;
@@ -1047,10 +1004,10 @@
         saveUserComputerAccess: async () => {
             const userId = document.getElementById('accessModal_UserId').value;
             try {
-                await api.post(`/api/Admin/users/${userId}/assign-computers`, { computerIds: pgState.userComp.assignedIds });
+                const response = await api.post(`/api/Admin/users/${userId}/assign-computers`, { computerIds: pgState.userComp.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userComputerAccessModal')).hide();
-                Swal.fire({ title: 'Başarılı', icon: 'success', timer: 1500, showConfirmButton: false });
-            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
         },
 
         // --- KULLANICI ETİKET ERİŞİMİ MODALI ---
@@ -1104,11 +1061,11 @@
         saveUserTagAccess: async () => {
             const userId = document.getElementById('tagAccessModal_UserId').value;
             try {
-                await api.post(`/api/Admin/users/${userId}/assign-tags`, { tagIds: pgState.userTag.assignedIds });
+                const response = await api.post(`/api/Admin/users/${userId}/assign-tags`, { tagIds: pgState.userTag.assignedIds });
                 bootstrap.Modal.getInstance(document.getElementById('userTagAccessModal')).hide();
                 if (window.loadFilterTags) window.loadFilterTags();
-                Swal.fire({ title: 'Başarılı', icon: 'success', timer: 1500, showConfirmButton: false });
-            } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+                Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+            } catch (e) { Swal.fire({ title: e.title, text: e.message, icon: 'warning' }); }
         },
         filterTagAssignComputers: () => {
             const input = document.getElementById('tagAssignSearchInput').value.toLowerCase();
@@ -1124,7 +1081,6 @@
             const permsContainer = document.getElementById('newRolePermsContainer');
             permsContainer.innerHTML = '<div class="text-center w-100 py-3"><div class="spinner-border text-info spinner-border-sm"></div></div>';
 
-            // Sayfalandırma div'i yoksa oluştur
             let pgDiv = document.getElementById('newRolePermPg');
             if (!pgDiv) {
                 pgDiv = document.createElement('div');
@@ -1140,9 +1096,9 @@
             try {
                 const allPerms = await api.get('/api/Admin/permissions');
                 pgState.newRolePerm.data = allPerms;
-                pgState.newRolePerm.assignedIds = []; // Seçimleri sıfırla
+                pgState.newRolePerm.assignedIds = [];
                 pgState.newRolePerm.page = 1;
-                ui.renderNewRolePermList(); // Listeyi render et
+                ui.renderNewRolePermList();
             } catch (e) {
                 permsContainer.innerHTML = `<div class="text-danger small px-2">Yetkiler yüklenemedi: ${e.message}</div>`;
             }
@@ -1150,21 +1106,19 @@
 
         saveNewRole: async () => {
             const roleName = document.getElementById('newRoleNameInput').value.trim();
-            if (!roleName) { return Swal.fire('Uyarı', 'Lütfen rol adı giriniz.', 'warning'); }
             const selectedPerms = pgState.newRolePerm.assignedIds;
 
             try {
-                await api.post('/api/Admin/roles', { name: roleName, permissionIds: selectedPerms });
+                const response = await api.post('/api/Admin/roles', { name: roleName, permissionIds: selectedPerms });
                 bootstrap.Modal.getInstance(document.getElementById('createRoleModal')).hide();
-                Swal.fire('Başarılı', 'Yeni rol başarıyla eklendi!', 'success');
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
                 ui.switchView('roles');
             } catch (e) {
-                Swal.fire('Hata', e.message || "Rol eklenirken bir sorun oluştu.", 'error');
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
             }
         },
         deleteRole: async (id, name) => {
             const result = await Swal.fire({
-                title: 'Emin misiniz?',
                 text: `'${name}' rolünü silmek istediğinize emin misiniz?`,
                 icon: 'warning',
                 showCancelButton: true,
@@ -1176,19 +1130,17 @@
             if (!result.isConfirmed) return;
 
             try {
-                await api.del(`/api/Admin/roles/${id}`);
-                Swal.fire('Silindi', 'Rol başarıyla silindi.', 'success');
+                const response = await api.del(`/api/Admin/roles/${id}`);
+                Swal.fire({ title: response.title, text: response.message, icon: 'success' });
                 ui.switchView('roles');
             } catch (e) {
-                Swal.fire('Hata', e.message, 'error');
+                Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
             }
         },
-        // window.ui nesnesinin içine ekle
         renderNewRolePermList: () => {
             const container = document.getElementById('newRolePermsContainer');
             if (!container) return;
 
-            // Bu modala özel sayfa başı öğe sayısı
             const ITEMS_FOR_THIS_MODAL = 5;
 
             const state = pgState.newRolePerm;
@@ -1208,7 +1160,6 @@
     </label>
 </div>`).join('');
 
-            // Pagination fonksiyonuna da aynı sabit değeri gönderiyoruz
             renderPagination('newRolePermPg', state.page, state.data.length, ITEMS_FOR_THIS_MODAL, 'ui.changeNewRolePermPage');
         },
 
@@ -1225,7 +1176,6 @@
             }
         },
         showReportDetails: async (computerId, computerName, metricType, diskName = null) => {
-            // 1. Modal UI Başlangıç Ayarları
             document.getElementById('rdm-computer-name').innerText = computerName;
             document.getElementById('rdm-metric-type').innerText = metricType;
 
@@ -1237,29 +1187,24 @@
             modal.show();
 
             try {
-                // 2. Yeni Performanslı Endpoint'e İstek At (Sadece hesaplanmış 5 veri döner)
                 let apiUrl = `/api/Computer/${computerId}/metrics-summary?metricType=${metricType}`;
                 if (diskName) {
-                    // Disk adındaki özel karakterleri encode ediyoruz (Örn: C:\ -> C%3A%5C)
                     apiUrl += `&diskName=${encodeURIComponent(diskName)}`;
                 }
 
                 const summary = await window.api.get(apiUrl);
 
-                // Eğer hiç veri yoksa
                 if (summary.totalCount === 0) {
                     document.getElementById('rdm-loading').innerHTML = '<div class="text-warning"><i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i> Bu cihaz için hiç veri bulunamadı.</div>';
                     return;
                 }
 
-                // 3. Backend'den gelen hazır sonuçları doğrudan Ekrana Yazdır
                 document.getElementById('rdm-total-count').innerText = summary.totalCount + " Adet";
                 document.getElementById('rdm-max-val').innerText = `%${Math.round(summary.maxVal)}`;
                 document.getElementById('rdm-min-val').innerText = `%${Math.round(summary.minVal)}`;
                 document.getElementById('rdm-max-count').innerText = `${summary.maxCount} Kez`;
                 document.getElementById('rdm-min-count').innerText = `${summary.minCount} Kez`;
 
-                // Yükleniyor animasyonunu gizle, içeriği göster
                 document.getElementById('rdm-loading').style.display = 'none';
                 document.getElementById('rdm-content').style.display = 'block';
 
@@ -1267,12 +1212,12 @@
                 console.error("Metrik detayları çekilirken hata:", error);
                 document.getElementById('rdm-loading').innerHTML = `<div class="text-danger"><i class="bi bi-x-circle fs-4 d-block mb-2"></i> Veriler alınamadı: <br><small>${error.message}</small></div>`;
             }
-        },// --- YENİ EKLENEN: RAPORLAR İÇİN SAYFALAMA VE RENDER FONKSİYONLARI ---
+        },
         renderReportList: (stateKey, tbodyId, valKey, colorClass) => {
             const tbody = document.getElementById(tbodyId);
             if (!tbody) return;
 
-            const ITEMS_PER_PAGE_REPORTS = 2; // İstediğin gibi max 8 satır
+            const ITEMS_PER_PAGE_REPORTS = 2;
             const state = pgState.reports[stateKey];
             const start = (state.page - 1) * ITEMS_PER_PAGE_REPORTS;
             const paginated = state.data.slice(start, start + ITEMS_PER_PAGE_REPORTS);
@@ -1299,11 +1244,9 @@
                 </tr>`;
             }).join('');
 
-            // Pagination butonlarını oluştur
             renderPagination(stateKey + 'Pg', state.page, state.data.length, ITEMS_PER_PAGE_REPORTS, `ui.changeReportPage_${stateKey}`);
         },
 
-        // Sayfa değiştirme tetikleyicileri
         changeReportPage_bestCpu: (p) => { pgState.reports.bestCpu.page = p; ui.renderReportList('bestCpu', 'best-cpu-body', 'averageCpu', 'success'); },
         changeReportPage_worstCpu: (p) => { pgState.reports.worstCpu.page = p; ui.renderReportList('worstCpu', 'worst-cpu-body', 'averageCpu', 'danger'); },
         changeReportPage_bestRam: (p) => { pgState.reports.bestRam.page = p; ui.renderReportList('bestRam', 'best-ram-body', 'averageRam', 'success'); },
@@ -1313,7 +1256,6 @@
             try {
                 const report = await window.api.getPerformanceReport();
 
-                // Verilerin doğru gelip gelmediğini tarayıcı konsolunda (F12) görmek için log atalım
                 console.log("Gelen Performans Raporu:", report);
 
                 document.getElementById('global-cpu-avg').innerText = `%${report.globalAverageCpu}`;
@@ -1328,31 +1270,23 @@
                     return;
                 }
 
-                // 1. Verileri Filtrele ve Sırala
                 const bestCpu = report.devices.filter(d => d.averageCpu <= report.globalAverageCpu).sort((a, b) => a.averageCpu - b.averageCpu);
                 const worstCpu = report.devices.filter(d => d.averageCpu > report.globalAverageCpu).sort((a, b) => b.averageCpu - a.averageCpu);
                 const bestRam = report.devices.filter(d => d.averageRam <= report.globalAverageRam).sort((a, b) => a.averageRam - b.averageRam);
                 const worstRam = report.devices.filter(d => d.averageRam > report.globalAverageRam).sort((a, b) => b.averageRam - a.averageRam);
 
-                // 2. State'e atama
                 pgState.reports.bestCpu.data = bestCpu; pgState.reports.bestCpu.page = 1;
                 pgState.reports.worstCpu.data = worstCpu; pgState.reports.worstCpu.page = 1;
                 pgState.reports.bestRam.data = bestRam; pgState.reports.bestRam.page = 1;
                 pgState.reports.worstRam.data = worstRam; pgState.reports.worstRam.page = 1;
 
-                // 3. Tabloları Sayfalama İle Çizdir
                 ui.renderReportList('bestCpu', 'best-cpu-body', 'averageCpu', 'success');
                 ui.renderReportList('worstCpu', 'worst-cpu-body', 'averageCpu', 'danger');
                 ui.renderReportList('bestRam', 'best-ram-body', 'averageRam', 'success');
                 ui.renderReportList('worstRam', 'worst-ram-body', 'averageRam', 'danger');
 
-                // ---------------------------------------------------------
-                // --- DİSK KARTLARI VE GENEL ORTALAMALAR KISMI          ---
-                // ---------------------------------------------------------
-
                 let diskSection = document.getElementById('diskSectionWrapper');
 
-                // EĞER KUTU SAYFADA YOKSA JAVASCRIPT İLE YARATIP EN ALTA EKLİYORUZ
                 if (!diskSection) {
                     const mainContainer = document.getElementById('dynamic-content');
                     if (mainContainer) {
@@ -1363,10 +1297,7 @@
                     }
                 }
 
-                // KUTU ARTIK KESİN VAR, İÇİNİ DOLDURALIM
                 if (diskSection) {
-
-                    // 1. ÜST KISIM: Genel Disk Ortalamaları (Esnek Genişlik - Boşluk Bırakmaz)
                     let globalDisksHtml = '';
                     if (report.globalDiskAverages && report.globalDiskAverages.length > 0) {
                         globalDisksHtml = `<div class="row justify-content-center mb-4">`;
@@ -1388,14 +1319,11 @@
                         globalDisksHtml += `</div>`;
                     }
 
-                    // 2. ALT KISIM: Cihazların Disk Kartları
                     let allDiskCardsHtml = '';
 
                     report.devices.forEach(device => {
-                        // Eğer cihazın diski yoksa atla
                         if (!device.disks || device.disks.length === 0) return;
 
-                        // Cihaz için KART yapısı
                         let cardHtml = `
                         <div class="col-md-4 mb-4">
                             <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
@@ -1405,9 +1333,8 @@
                                 <div class="card-body" style="color: var(--text-main, #e2e8f0);">
                         `;
 
-                        // Cihazın içindeki her bir diski dön
                         device.disks.forEach(disk => {
-                            let colorClass = "bg-primary"; // Nötr
+                            let colorClass = "bg-primary";
                             let textClass = "text-primary fw-bold";
 
                             if (disk.diskStatus === "Kötü") {
@@ -1418,7 +1345,6 @@
                                 textClass = "text-success fw-bold";
                             }
 
-                            // ID ve Disk adındaki olası ters slash (\) karakterlerini JS hatası vermemesi için kaçırıyoruz
                             const targetId = device.computerId || device.id;
                             const safeDiskName = disk.diskName.replace(/\\/g, '\\\\');
 
@@ -1453,7 +1379,6 @@
                         allDiskCardsHtml = `<div class="col-12 text-muted fst-italic">Henüz disk verisi toplanmamış.</div>`;
                     }
 
-                    // 3. TÜM YAPIYI EKRANA BAS (Başlık + Rozetler + Kartlar)
                     diskSection.innerHTML = `
                     <h5 class="fw-bold mb-3" style="color: var(--text-main, #e2e8f0);">
                         <i class="bi bi-device-hdd me-2" style="color: #38bdf8;"></i> Cihaz Disk Durumları
@@ -1464,7 +1389,6 @@
                     </div>
                     `;
                 }
-                // --- DİSK KISMI BURADA BİTİYOR ---
 
             } catch (error) {
                 console.error("Rapor çekilirken hata:", error);
@@ -1479,7 +1403,7 @@
                 }
             }
         }
-    }; // window.ui nesnesinin bitişi
+    };
 
     // --- Tema Başlatma (Sayfa Yüklenince) ---
     (function initTheme() {

@@ -20,19 +20,16 @@ public class ComputerService : IComputerService
         _cache = cache;
     }
 
-    // --- ORTAK YETKİ KONTROLÜ (Controller'dan Servise taşındı ve HttpContext'ten arındırıldı) ---
     private async Task<bool> CheckComputerAccessAsync(int computerId, int userId, bool isAdmin)
     {
         if (isAdmin) return true;
         if (userId == 0) return false;
 
-        // Doğrudan cihaz ataması var mı?
         bool hasDirectAccess = await _db.UserComputerAccesses
             .AnyAsync(uca => uca.UserId == userId && uca.ComputerId == computerId);
 
         if (hasDirectAccess) return true;
 
-        // Etiket üzerinden ataması var mı?
         var computerTagIds = await _db.Computers
             .Where(c => c.Id == computerId)
             .SelectMany(c => c.Tags.Select(t => t.Id))
@@ -48,52 +45,50 @@ public class ComputerService : IComputerService
     public async Task<(bool isForbidden, bool isNotFound, object? data)> GetComputerAsync(int id, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(id, userId, isAdmin))
-            return (true, false, null); // Forbid
+            return (true, false, null);
 
         var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
         if (computer == null)
-            return (false, true, null); // NotFound
+            return (false, true, null);
 
         var data = new { computer.Id, computer.CpuThreshold, computer.RamThreshold, Tags = computer.Tags.Select(t => t.Name) };
-        return (false, false, data); // Ok
+        return (false, false, data);
     }
 
     // 2. Disk Listesi
     public async Task<(bool isForbidden, object? data)> GetComputerDisksAsync(int computerId, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
-            return (true, null); // Forbid
+            return (true, null);
 
         var disks = await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync();
-        return (false, disks); // Ok
+        return (false, disks);
     }
 
     // 3. Eşik Değerlerini Güncelle
-    public async Task<(bool isForbidden, bool isNotFound, string? errorMessage)> UpdateThresholdsAsync(int computerId, UpdateThresholdsRequest request, int userId, bool isAdmin)
+    public async Task<(bool isForbidden, bool isNotFound, bool isBadRequest, string message)> UpdateThresholdsAsync(int computerId, UpdateThresholdsRequest request, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
-            return (true, false, null); // Forbid
+            return (true, false, false, "Bu cihaza erişim yetkiniz bulunmamaktadır.");
 
-        // --- VALIDATION BAŞLANGICI ---
         if (request.CpuThreshold.HasValue && (request.CpuThreshold < 0 || request.CpuThreshold > 100))
-            return (false, false, "CPU eşik değeri 0 ile 100 arasında olmalıdır.");
+            return (false, false, true, "CPU eşik değeri 0 ile 100 arasında olmalıdır.");
 
         if (request.RamThreshold.HasValue && (request.RamThreshold < 0 || request.RamThreshold > 100))
-            return (false, false, "RAM eşik değeri 0 ile 100 arasında olmalıdır.");
+            return (false, false, true, "RAM eşik değeri 0 ile 100 arasında olmalıdır.");
 
         if (request.DiskThresholds != null)
         {
             foreach (var disk in request.DiskThresholds)
             {
                 if (disk.ThresholdPercent.HasValue && (disk.ThresholdPercent < 0 || disk.ThresholdPercent > 100))
-                    return (false, false, $"'{disk.DiskName}' diski için eşik değeri 0-100 arasında olmalıdır.");
+                    return (false, false, true, $"'{disk.DiskName}' diski için eşik değeri 0-100 arasında olmalıdır.");
             }
         }
-        // --- VALIDATION SONU ---
 
         var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
         if (computer == null)
-            return (false, true, null); // NotFound
+            return (false, true, false, "Bilgisayar bulunamadı.");
 
         computer.CpuThreshold = request.CpuThreshold;
         computer.RamThreshold = request.RamThreshold;
@@ -108,67 +103,79 @@ public class ComputerService : IComputerService
         }
         await _db.SaveChangesAsync();
 
-        return (false, false, null); // Ok
+        return (false, false, false, "Sınırlar başarıyla kaydedildi.");
     }
 
     // 4. Etiket Atama
-    public async Task<bool> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request)
+    public async Task<(bool isNotFound, string message)> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request)
     {
         var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
-        if (computer == null) return false;
+        if (computer == null)
+            return (true, "Bilgisayar bulunamadı.");
 
         var newTags = await _db.Tags.Where(t => request.Tags.Contains(t.Name)).ToListAsync();
         computer.Tags.Clear();
         foreach (var tag in newTags) computer.Tags.Add(tag);
 
         await _db.SaveChangesAsync();
-        return true;
+
+        return (false, "Etiketler cihaza başarıyla atandı.");
     }
 
-    // 5. İsim Değiştirme
-    public async Task<(bool isSuccess, bool isNotFound, string? errorMessage)> UpdateDisplayNameAsync(UpdateComputerNameRequest request)
+    // 5. İsim Değiştirme (TÜM VALIDASYONLAR EKLENDİ)
+    public async Task<(bool isSuccess, bool isNotFound, string message)> UpdateDisplayNameAsync(UpdateComputerNameRequest request)
     {
-        // --- VALIDATION (JSON Formatlı) ---
-        if (!string.IsNullOrEmpty(request.NewDisplayName) && request.NewDisplayName.Length > 200)
+        // JS'den taşınan kural 1: Boş bırakılamaz
+        if (string.IsNullOrWhiteSpace(request.NewDisplayName))
+            return (false, false, "İsim alanı boş bırakılamaz.");
+
+        // JS'den taşınan kural 2: 200 Karakter sınırı
+        if (request.NewDisplayName.Length > 200)
             return (false, false, "Görünen isim 200 karakterden uzun olamaz.");
 
-        if (!string.IsNullOrWhiteSpace(request.NewDisplayName))
-        {
-            // Veritabanında aynı isimde BAŞKA bir cihaz var mı diye kontrol ediyoruz
-            bool isNameTaken = await _db.Computers
-                .AnyAsync(c => c.DisplayName == request.NewDisplayName && c.Id != request.Id);
+        // Veritabanı çakışma kontrolü
+        bool isNameTaken = await _db.Computers
+            .AnyAsync(c => c.DisplayName == request.NewDisplayName && c.Id != request.Id);
 
-            if (isNameTaken)
-                return (false, false, "Bu isim zaten başka bir cihaza ait. Lütfen farklı bir isim giriniz.");
-        }
+        if (isNameTaken)
+            return (false, false, "Bu isim zaten başka bir cihaza ait. Lütfen farklı bir isim giriniz.");
 
         var computer = await _db.Computers.FindAsync(request.Id);
         if (computer == null)
-            return (false, true, "Bilgisayar bulunamadı."); // NotFound
+            return (false, true, "Bilgisayar bulunamadı.");
 
         computer.DisplayName = request.NewDisplayName;
         await _db.SaveChangesAsync();
 
-        return (true, false, null); // Başarılı
+        return (true, false, "Cihaz ismi başarıyla güncellendi.");
     }
 
-    // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
+    // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (TÜM VALIDASYONLAR EKLENDİ)
     public async Task<(bool isBadRequest, string? errorMessage, object? data)> GetMetricsHistoryAsync(int id, string start, string end)
     {
-        // Tarih formatı: "yyyy-MM-ddTHH:mm" (HTML5 datetime-local formatı)
+        // JS'den taşınan kural 1: Boş bırakılamaz
+        if (string.IsNullOrWhiteSpace(start) || string.IsNullOrWhiteSpace(end))
+            return (true, "Lütfen tarih aralığı seçiniz.", null);
+
         if (!DateTime.TryParse(start, out DateTime startTime) || !DateTime.TryParse(end, out DateTime endTime))
         {
-            return (true, "Geçersiz tarih formatı.", null); // BadRequest
+            return (true, "Geçersiz tarih formatı.", null);
         }
 
-        // 1. CPU ve RAM metriklerini çek
+        // JS'den taşınan kural 2: Başlangıç bitişten büyük olamaz
+        if (startTime > endTime)
+            return (true, "Başlangıç tarihi bitiş tarihinden sonra olamaz.", null);
+
+        // JS'den taşınan kural 3: Maksimum 7 gün kuralı
+        if ((endTime - startTime).TotalDays > 7)
+            return (true, "Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.", null);
+
         var cpuRamMetrics = await _db.ComputerMetrics
             .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
             .OrderByDescending(m => m.CreatedAt)
             .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
             .ToListAsync();
 
-        // 2. Disk metriklerini çek (Bilgisayara bağlı tüm diskler için)
         var diskMetrics = await _db.DiskMetrics
             .Include(m => m.ComputerDisk)
             .Where(m => m.ComputerDisk.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
@@ -180,25 +187,17 @@ public class ComputerService : IComputerService
             })
             .ToListAsync();
 
-        var data = new
-        {
-            CpuRam = cpuRamMetrics,
-            Disks = diskMetrics
-        };
-
+        var data = new { CpuRam = cpuRamMetrics, Disks = diskMetrics };
         return (false, null, data);
     }
 
     // 7. Tüm Cihazları Getir
     public async Task<object> GetAllComputersAsync(int userId, bool isAdmin)
     {
-        // 1. Mevcut erişimleri çek
         var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
         var query = _db.Computers.AsQueryable();
-
-        // 2. Admin olsa bile eğer bir kısıtlama listesi varsa onu uygula
         bool isRestricted = !isAdmin || (accCompIds.Count > 0 || accTagIds.Count > 0);
 
         if (isRestricted)
@@ -209,7 +208,6 @@ public class ComputerService : IComputerService
             );
         }
 
-        // 3. Veritabanından veriyi çekerken sadece "Aktif (Silinmemiş)" etiketleri listeye dahil et
         var computersData = await query.Select(c => new {
             Computer = c,
             ActiveTags = _db.ComputerTags
@@ -218,10 +216,8 @@ public class ComputerService : IComputerService
                             .ToList()
         }).ToListAsync();
 
-        //var now = DateTime.Now; // Not: Sunucu saatleri farklılık yaratmasın diye UtcNow önerilir ama mevcut kodun Now'dı, değiştirmeden devam edelim.
-        //if (now.Kind == DateTimeKind.Utc) now = DateTime.Now; // Uyumluluk için eski DateTime.Now kalsın.
         int offlineThreshold = _config.GetValue<int>("Alerting:OfflineThresholdSeconds", 150);
-        // 4. İstemciye (UI) gidecek modeli oluştur
+
         var result = computersData.Select(x => new {
             id = x.Computer.Id,
             machineName = x.Computer.MachineName,
@@ -238,11 +234,12 @@ public class ComputerService : IComputerService
     }
 
     // 8. Cihaz Silme
-    public async Task<(bool isNotFound, bool isBadRequest, string? errorMessage)> DeleteComputerAsync(int id)
+    public async Task<(bool isNotFound, bool isBadRequest, string message)> DeleteComputerAsync(int id)
     {
         var computer = await _db.Computers.FindAsync(id);
         if (computer == null)
             return (true, false, "Bilgisayar bulunamadı.");
+
         int offlineThreshold = _config.GetValue<int>("Alerting:OfflineThresholdSeconds", 150);
         bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= offlineThreshold;
         if (isActive)
@@ -253,7 +250,7 @@ public class ComputerService : IComputerService
         computer.IsDeleted = true;
         await _db.SaveChangesAsync();
 
-        return (false, false, null); // Başarılı
+        return (false, false, "Bilgisayar sistemden başarıyla silinmiştir.");
     }
 
     // 9. Kullanıcının Etiketlerini Getir
@@ -263,13 +260,11 @@ public class ComputerService : IComputerService
 
         if (!isAdmin)
         {
-            // YENİ EKLENEN KOD: Kullanıcının etiket yönetme yetkisi var mı kontrol et
             bool hasTagManagePerm = await _db.UserRoles
                 .Where(ur => ur.UserId == userId)
                 .SelectMany(ur => ur.Role.RolePermissions)
                 .AnyAsync(rp => rp.Permission.Name == "Tag_Manage" || rp.Permission.Name == "Tag.Manage");
 
-            // Eğer kullanıcının etiket yönetme yetkisi YOKSA kısıtlama uygula, VARSA kısıtlama bloğunu atla
             if (!hasTagManagePerm)
             {
                 var accessibleComputerIds = await _db.UserComputerAccesses
@@ -287,9 +282,9 @@ public class ComputerService : IComputerService
         var tags = await query.Select(t => new { t.Id, t.Name }).ToListAsync();
         return tags;
     }
+
     public async Task<PerformanceReportDto> GetPerformanceReportAsync(int userId, bool isAdmin)
     {
-        // 1. CACHE ANAHTARINI KULLANICIYA ÖZEL YAPTIK
         string cacheKey = $"PerformanceReport_User_{userId}";
 
         if (_cache.TryGetValue(cacheKey, out PerformanceReportDto? cachedReport) && cachedReport != null)
@@ -299,13 +294,11 @@ public class ComputerService : IComputerService
 
         var query = _db.Computers.AsQueryable();
 
-        // 2. YETKİ FİLTRELEMESİNİ UYGULUYORUZ
         if (!isAdmin)
         {
             var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
             var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
 
-            // Kullanıcının erişimi olan veya erişimi olan bir etikete sahip olan cihazlar
             query = query.Where(c =>
                 accCompIds.Contains(c.Id) ||
                 _db.ComputerTags.Any(ct => ct.ComputerId == c.Id && !ct.IsDeleted && accTagIds.Contains(ct.TagId))
@@ -316,7 +309,6 @@ public class ComputerService : IComputerService
 
         if (!activeComputerIds.Any()) return new PerformanceReportDto();
 
-        // Sadece bu yetkili cihazların CPU/RAM metriklerini grupla
         var metricsSummary = await _db.ComputerMetrics
             .Where(m => activeComputerIds.Contains(m.ComputerId))
             .GroupBy(m => m.ComputerId)
@@ -330,7 +322,6 @@ public class ComputerService : IComputerService
 
         if (!metricsSummary.Any()) return new PerformanceReportDto();
 
-        // Cihaz bazında disklerin ortalaması
         var diskMetricsSummary = await _db.DiskMetrics
             .Where(m => activeComputerIds.Contains(m.ComputerDisk.ComputerId))
             .GroupBy(m => new { m.ComputerDisk.ComputerId, m.ComputerDisk.DiskName })
@@ -342,23 +333,19 @@ public class ComputerService : IComputerService
             })
             .ToListAsync();
 
-        // YENİ MANTIK: Sistemdeki aynı isimli diskleri kendi içinde grupla (Örn: Bütün C'ler)
-        // Ve bu disklerin global ortalaması ile kaç tane olduklarını (Count) bul
         var globalDiskStats = diskMetricsSummary
             .GroupBy(d => d.DiskName)
             .ToDictionary(g => g.Key, g => new
             {
-                Count = g.Count(), // Kaç cihazda bu diskten var?
-                GlobalAvg = g.Average(x => x.AvgUsed) // Bu diskin tüm cihazlardaki ortalaması
+                Count = g.Count(),
+                GlobalAvg = g.Average(x => x.AvgUsed)
             });
 
-        // Bilgisayar isimlerini ayrı çekiyoruz
         var computers = await _db.Computers
             .Where(c => activeComputerIds.Contains(c.Id))
             .Select(c => new { c.Id, c.DisplayName, c.MachineName })
             .ToListAsync();
 
-        // İki veriyi birleştir
         var deviceAverages = metricsSummary.Select(m => new
         {
             ComputerId = m.ComputerId,
@@ -368,16 +355,13 @@ public class ComputerService : IComputerService
             AvgCpu = m.AvgCpu,
             AvgRam = m.AvgRam,
 
-            // Bu cihaza ait diskleri filtrele
             Disks = diskMetricsSummary
             .Where(d => d.ComputerId == m.ComputerId)
             .Select(d =>
             {
-                // İlgili diskin (Örn "C:") global verilerini çekiyoruz
                 var stats = globalDiskStats[d.DiskName];
-                string status = "Nötr"; // Sadece 1 tane varsa varsayılan: Nötr
+                string status = "Nötr";
 
-                // Eğer sistemde o diskten 1'den fazla varsa, ortalamayla kıyasla
                 if (stats.Count > 1)
                 {
                     status = d.AvgUsed > stats.GlobalAvg ? "Kötü" : "İyi";
@@ -387,7 +371,7 @@ public class ComputerService : IComputerService
                 {
                     DiskName = d.DiskName,
                     AverageUsedPercent = Math.Round(d.AvgUsed, 2),
-                    DiskStatus = status // "İyi", "Kötü" veya "Nötr" dönecek
+                    DiskStatus = status
                 };
             }).OrderBy(d => d.DiskName).ToList()
         }).ToList();
@@ -400,7 +384,6 @@ public class ComputerService : IComputerService
             GlobalAverageCpu = Math.Round(globalAvgCpu, 2),
             GlobalAverageRam = Math.Round(globalAvgRam, 2),
 
-            // YENİ EKLENEN: Global disk ortalamalarını DTO'ya aktarıyoruz
             GlobalDiskAverages = globalDiskStats.Select(g => new GlobalDiskAverageDto
             {
                 DiskName = g.Key,
@@ -421,7 +404,6 @@ public class ComputerService : IComputerService
             .ToList()
         };
 
-        // Cache'e kullanıcıya özel anahtarla kaydet
         _cache.Set(cacheKey, report, TimeSpan.FromSeconds(30));
 
         return report;
@@ -445,7 +427,7 @@ public class ComputerService : IComputerService
                     summary.MaxCount = await query.CountAsync(m => m.CpuUsage == summary.MaxVal);
                     summary.MinCount = await query.CountAsync(m => m.CpuUsage == summary.MinVal);
                 }
-                else // RAM
+                else
                 {
                     summary.MaxVal = await query.MaxAsync(m => m.RamUsage);
                     summary.MinVal = await query.MinAsync(m => m.RamUsage);
@@ -456,8 +438,6 @@ public class ComputerService : IComputerService
         }
         else if (metricType.StartsWith("Disk") && !string.IsNullOrEmpty(diskName))
         {
-            // DÜZELTİLEN KISIM: m.ComputerId yerine m.ComputerDisk.ComputerId ve 
-            // m.DiskName yerine m.ComputerDisk.DiskName kullanıyoruz.
             var query = _db.DiskMetrics
                 .Where(m => m.ComputerDisk.ComputerId == computerId && m.ComputerDisk.DiskName == diskName);
 

@@ -14,12 +14,12 @@ let allSystemComputers = [];
 // --- PAGINATION İÇİN EKLENEN DEĞİŞKENLER ---
 let currentLivePage = 1;
 let currentAllPage = 1;
-const itemsPerPage = 6; // Kart yapısına geçildiği için sayfada gösterilecek sayıyı biraz artırabilirsin (Örn: 6)
+const itemsPerPage = 6;
 
 // --- YARDIMCI FONKSİYON: Dinamik Renk Hesaplama ---
 function getProgressBarColor(val, threshold) {
     if (val >= threshold) return 'bg-danger';
-    if (val >= (threshold * 0.8)) return 'bg-warning'; // Sınıra %80 yaklaştıysa sarı olsun
+    if (val >= (threshold * 0.8)) return 'bg-warning';
     return 'bg-success';
 }
 
@@ -30,7 +30,7 @@ window.applyFilter = () => {
 
     const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
     const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
-    const isTagsTab = document.getElementById('nav-tags') && document.getElementById('nav-tags').classList.contains('active'); 
+    const isTagsTab = document.getElementById('nav-tags') && document.getElementById('nav-tags').classList.contains('active');
 
     if (isLiveTab) {
         selectedLiveTags = tags;
@@ -40,7 +40,7 @@ window.applyFilter = () => {
         selectedAllTags = tags;
         currentAllPage = 1;
         if (typeof window.renderAllComputersTable === "function") window.renderAllComputersTable();
-    } else if (isTagsTab) { // YENİ: Etiketler sayfasındaysak filtreyi tetikle
+    } else if (isTagsTab) {
         selectedTagViewTags = tags;
         if (typeof window.ui !== "undefined" && typeof window.ui.loadTagTable === "function") window.ui.loadTagTable();
     }
@@ -89,7 +89,6 @@ async function loadAgents() {
     }
 }
 
-// YENİ: PRTG KART YAPISI İLE RENDER
 function renderTable() {
     const container = document.getElementById("agentGrid");
     if (!container) return;
@@ -120,7 +119,6 @@ function renderTable() {
         const tags = (a.tags || []).map(t => `<span class="badge" style="background:var(--bg-hover); color:var(--text-main); border: 1px solid var(--border-color); margin-right:3px;">${t}</span>`).join("");
         const statusClass = 'bg-success';
 
-        // 1. ÜÇ NOKTA YERİNE AÇIK AKSİYON BUTONLARI (Yan yana dizilmiş ikonlar)
         let actionButtons = '';
         if (canEdit) {
             actionButtons = `<div class="d-flex align-items-center gap-1">`;
@@ -131,7 +129,6 @@ function renderTable() {
             actionButtons += `</div>`;
         }
 
-        // 2. CPU VE RAM İÇİN DAİRESEL (DONUT) SENSÖRLER
         const cpuLimit = a.cpuThreshold || 90;
         const ramLimit = a.ramThreshold || 90;
         const cpuUsage = Math.round(a.cpuUsage || 0);
@@ -158,14 +155,13 @@ function renderTable() {
             </div>
         `;
 
-        // 3. DİSKLER İÇİN DAİRESEL (DONUT) SENSÖRLER
         if (a.diskUsage && a.diskUsage !== "-") {
             let regex = /([A-Za-z]:[\\/]?)[^\d]*(\d+)[^\d]*/g;
             let match;
             while ((match = regex.exec(a.diskUsage)) !== null) {
                 let dName = match[1].replace(/[\\/]/g, '');
                 let dUsage = parseInt(match[2]);
-                let dColor = getDonutColor(dUsage, 90); // Disklere varsayılan limit %90 baz alındı
+                let dColor = getDonutColor(dUsage, 90);
 
                 sensorsHtml += `
                 <div class="col">
@@ -224,19 +220,22 @@ window.handleRename = (id, currentName) => {
 
 window.saveComputerName = async () => {
     const id = document.getElementById("renameComputerId").value;
+    // Trim ile kenar boşluklarını temizliyoruz, geri kalan tüm kontroller Backend'de.
     const newName = document.getElementById("newComputerName").value.trim();
 
-    if (!newName) return Swal.fire('Uyarı', 'İsim alanı boş bırakılamaz!', 'warning');
-    if (newName.length > 200) return Swal.fire('Uyarı', 'Bilgisayar ismi 200 karakterden uzun olamaz!', 'warning');
-
     try {
-        await api.put(`/api/Computer/update-display-name`, { id: parseInt(id), newDisplayName: newName });
+        const response = await api.put(`/api/Computer/update-display-name`, { id: parseInt(id), newDisplayName: newName });
         const modal = bootstrap.Modal.getInstance(document.getElementById("renameModal"));
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-        Swal.fire({ title: 'Başarılı', text: 'İsim güncellendi!', icon: 'success', timer: 1500, showConfirmButton: false });
-    } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+
+        // BACKEND'DEN GELEN DİNAMİK BAŞARI MESAJI
+        Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) {
+        // BACKEND'DEN GELEN DİNAMİK HATA/UYARI MESAJI (Boş isim, 200 karakter sınırı vs.)
+        Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
+    }
 };
 
 window.openTagModal = async (id) => {
@@ -257,13 +256,16 @@ window.saveTags = async () => {
     const selectedTags = $('#modalTagSelect').val() || [];
 
     try {
-        await api.put(`/api/Computer/${id}/tags`, { tags: selectedTags });
+        const response = await api.put(`/api/Computer/${id}/tags`, { tags: selectedTags });
         const modal = bootstrap.Modal.getInstance(document.getElementById("tagsModal"));
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-        Swal.fire({ title: 'Başarılı', text: 'Etiketler güncellendi!', icon: 'success', timer: 1500, showConfirmButton: false });
-    } catch (e) { Swal.fire('Hata', e.message, 'error'); }
+
+        Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) {
+        Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
+    }
 };
 
 window.openThresholdSettings = async (id) => {
@@ -335,13 +337,16 @@ window.saveThresholdsWithValidation = async () => {
     const payload = { cpuThreshold: cpu, ramThreshold: ram, diskThresholds: diskThresholdsList };
 
     try {
-        await api.put(`/api/Computer/update-thresholds/${id}`, payload);
+        const response = await api.put(`/api/Computer/update-thresholds/${id}`, payload);
         const modal = bootstrap.Modal.getInstance(document.getElementById("thresholdModal"));
         modal.hide();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-        Swal.fire({ title: 'Başarılı', text: 'Sınırlar kaydedildi!', icon: 'success', timer: 1500, showConfirmButton: false });
-    } catch (e) { Swal.fire('Hata', "Hata: " + e.message, 'error'); }
+
+        Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (e) {
+        Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
+    }
 };
 
 // --- 3. GEÇMİŞ METRİK FONKSİYONLARI (GRAFİKLİ SOL MENÜLÜ YAPI) ---
@@ -382,25 +387,8 @@ window.openHistoryModal = (id) => {
 
 window.fetchHistoryMetrics = async () => {
     const id = document.getElementById("historyComputerId").value;
-
     const start = document.getElementById("historyStart").value;
     const end = document.getElementById("historyEnd").value;
-
-    if (!start || !end) return Swal.fire('Uyarı', 'Lütfen tarih aralığı seçiniz.', 'warning');
-
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-
-    if (startDate > endDate) {
-        return Swal.fire('Hata', 'Başlangıç tarihi bitiş tarihinden sonra olamaz.', 'error');
-    }
-
-    const diffInMs = Math.abs(endDate - startDate);
-    const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
-
-    if (diffInDays > 7) {
-        return Swal.fire('Uyarı', 'Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.', 'warning');
-    }
 
     const results = document.getElementById("historyResults");
     const placeholder = document.getElementById("historyPlaceholder");
@@ -411,6 +399,7 @@ window.fetchHistoryMetrics = async () => {
     document.getElementById("diskFiltersContainer").style.display = "none";
 
     try {
+        // Tüm tarih kontrollerini (boş mu, 7 gün mü vs) Backend halledecek.
         const data = await api.get(`/api/Computer/${id}/metrics-history?start=${start}&end=${end}`);
 
         if (!data.cpuRam || data.cpuRam.length === 0) {
@@ -434,10 +423,9 @@ window.fetchHistoryMetrics = async () => {
         renderBaseCharts(data.cpuRam);
         generateDiskFilters(data.disks);
 
-        placeholder.innerHTML = `<div class="opacity-25 mb-3 text-muted"><i class="bi bi-graph-up display-1"></i></div><h4 class="text-muted fw-light">Lütfen tarih aralığı seçerek analize başlayın.</h4>`;
-
     } catch (e) {
-        placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger"><i class="bi bi-exclamation-triangle me-2"></i> Metrikler yüklenirken hata: ${e.message}</div>`;
+        // Backend'den fırlatılan tarih validasyon hataları tam olarak burada ekrana basılacak
+        placeholder.innerHTML = `<div class="text-center py-5 mt-5 text-danger"><i class="bi bi-exclamation-triangle me-2 d-block display-4 mb-3"></i> ${e.message}</div>`;
     }
 };
 
@@ -651,8 +639,8 @@ window.renderAllComputersTable = () => {
 };
 
 window.deleteComputer = async (id) => {
+    // Sadece "Emin misiniz" promptu UI'da kaldı (Kullanıcıdan onay almamız şart çünkü)
     const result = await Swal.fire({
-        title: 'Emin misiniz?',
         text: "Bu bilgisayarı silmek istediğinize emin misiniz?",
         icon: 'warning',
         showCancelButton: true,
@@ -665,13 +653,15 @@ window.deleteComputer = async (id) => {
     if (!result.isConfirmed) return;
 
     try {
-        await api.del(`/api/Computer/${id}`);
+        const response = await api.del(`/api/Computer/${id}`);
         loadAllComputers();
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
-        Swal.fire('Silindi!', 'Bilgisayar başarıyla silindi.', 'success');
+
+        // BACKEND'DEN GELEN DİNAMİK MESAJ
+        Swal.fire({ title: response.title, text: response.message, icon: 'success' });
     } catch (e) {
-        Swal.fire('Hata', e.message, 'error');
+        Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
     }
 };
 
@@ -684,11 +674,13 @@ window.changeAllPage = (page) => {
     currentAllPage = page;
     renderAllComputersTable();
 };
+
 function getDonutColor(val, threshold) {
     if (val >= threshold) return '#ef4444'; // Sınırı aştıysa Kırmızı
     if (val >= (threshold * 0.8)) return '#eab308'; // Sınıra yaklaştıysa Sarı
     return '#22c55e'; // Normalse Yeşil
 }
+
 function renderPaginationControls(containerId, currentPage, totalPages, changeFnName) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -740,7 +732,7 @@ $(document).ready(function () {
                 $('#tagSelect').val(selectedLiveTags).trigger('change.select2');
             } else if (id === 'nav-all-computers') {
                 $('#tagSelect').val(selectedAllTags).trigger('change.select2');
-            } else if (id === 'nav-tags') { // YENİ EKLENDİ
+            } else if (id === 'nav-tags') {
                 $('#tagSelect').val(selectedTagViewTags).trigger('change.select2');
             } else {
                 $('#tagSelect').val([]).trigger('change.select2');
@@ -758,7 +750,6 @@ $(document).ready(function () {
         const isLiveTab = document.getElementById('nav-computers') && document.getElementById('nav-computers').classList.contains('active');
         const isAllTab = document.getElementById('nav-all-computers') && document.getElementById('nav-all-computers').classList.contains('active');
 
-        // YENİ EKLENEN KOD: Etiket filtresini arka planda günceller
         window.loadFilterTags();
 
         if (isLiveTab) {
