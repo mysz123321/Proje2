@@ -317,22 +317,24 @@
                         <div id="historyResults" style="display:none; width: 100%;">
                             <div id="chartsContainer" class="d-flex flex-column gap-4 w-100 pb-4">
                                 <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
-                                    <div class="card-header border-bottom border-secondary text-info fw-bold"><i class="bi bi-cpu"></i> CPU Kullanımı</div>
-                                    <div class="card-body p-2" style="overflow: hidden;">
-                                        <div style="position: relative; height: 250px; width: 100%;">
-                                            <canvas id="cpuChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
+    <div class="card-header border-bottom border-secondary text-info fw-bold"><i class="bi bi-cpu"></i> CPU Kullanımı</div>
+    <div class="card-body p-2" style="overflow: hidden;">
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="cpuChart"></canvas>
+        </div>
+        <div id="cpuMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
+    </div>
+</div>  
 
                                 <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
-                                    <div class="card-header border-bottom border-secondary text-danger fw-bold"><i class="bi bi-memory"></i> RAM Kullanımı</div>
-                                    <div class="card-body p-2" style="overflow: hidden;">
-                                        <div style="position: relative; height: 250px; width: 100%;">
-                                            <canvas id="ramChart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
+    <div class="card-header border-bottom border-secondary text-danger fw-bold"><i class="bi bi-memory"></i> RAM Kullanımı</div>
+    <div class="card-body p-2" style="overflow: hidden;">
+        <div style="position: relative; height: 250px; width: 100%;">
+            <canvas id="ramChart"></canvas>
+        </div>
+        <div id="ramMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
+    </div>
+</div>
 
                                 <div id="dynamicDiskCharts" class="d-flex flex-column gap-4"></div>
                             </div>

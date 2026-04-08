@@ -96,7 +96,7 @@ function renderTable() {
     const canRename = window.auth.hasPermission("Computer.Rename");
     const canSetThreshold = window.auth.hasPermission("Computer.SetThreshold");
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
-    const canEdit = canRename || canSetThreshold || canAssignTag ;
+    const canEdit = canRename || canSetThreshold || canAssignTag;
 
     const now = new Date().getTime();
 
@@ -218,7 +218,6 @@ window.handleRename = (id, currentName) => {
 
 window.saveComputerName = async () => {
     const id = document.getElementById("renameComputerId").value;
-    // Trim ile kenar boşluklarını temizliyoruz, geri kalan tüm kontroller Backend'de.
     const newName = document.getElementById("newComputerName").value.trim();
 
     try {
@@ -228,10 +227,8 @@ window.saveComputerName = async () => {
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
 
-        // BACKEND'DEN GELEN DİNAMİK BAŞARI MESAJI
         Swal.fire({ title: response.title, text: response.message, icon: 'success', timer: 1500, showConfirmButton: false });
     } catch (e) {
-        // BACKEND'DEN GELEN DİNAMİK HATA/UYARI MESAJI (Boş isim, 200 karakter sınırı vs.)
         Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
     }
 };
@@ -350,21 +347,17 @@ window.saveThresholdsWithValidation = async () => {
 // --- 3. GEÇMİŞ METRİK FONKSİYONLARI (GRAFİKLİ SOL MENÜLÜ YAPI) ---
 
 window.openHistoryModal = async (id) => {
-    // 1. Sayfayı History moduna geçir (Modal yerine tam sayfa)
     ui.switchView('history');
 
-    // 2. Dropdown'un bilgisayarlarla dolmasını sağla
     if (window.ui.loadHistoryComputers) {
         await window.ui.loadHistoryComputers();
     }
 
-    // 3. Tıklanan cihazı Dropdown'da otomatik seç
     const selectEl = document.getElementById("historyPageComputerSelect");
     if (selectEl) {
         selectEl.value = id;
     }
 
-    // 4. Tarihleri son 24 saat olarak ayarla
     const now = new Date();
     const yesterday = new Date(now.getTime() - (24 * 60 * 60 * 1000));
     const formatToInput = (date) => {
@@ -375,7 +368,6 @@ window.openHistoryModal = async (id) => {
     document.getElementById("historyStart").value = formatToInput(yesterday);
     document.getElementById("historyEnd").value = formatToInput(now);
 
-    // 5. Grafikleri çizmeden önce temizle
     if (historyCharts.cpu) historyCharts.cpu.destroy();
     if (historyCharts.ram) historyCharts.ram.destroy();
     Object.values(historyCharts.disks).forEach(chart => chart.destroy());
@@ -387,14 +379,11 @@ window.openHistoryModal = async (id) => {
     const diskCheckboxes = document.getElementById("diskCheckboxes");
     if (diskCheckboxes) diskCheckboxes.innerHTML = "";
 
-    // 6. Verileri otomatik getir
     window.fetchHistoryMetrics();
 };
 
 window.fetchHistoryMetrics = async () => {
     const selectEl = document.getElementById("historyPageComputerSelect");
-
-    // Eğer ID yoksa null gitmesin, 0 gitsin ki Backend (Controller) bunu yakalayıp uygun hata mesajını dönebilsin.
     const id = selectEl && selectEl.value ? selectEl.value : 0;
 
     const start = document.getElementById("historyStart").value;
@@ -409,7 +398,6 @@ window.fetchHistoryMetrics = async () => {
     document.getElementById("diskFiltersContainer").style.display = "none";
 
     try {
-        // Herhangi bir frontend kontrolü yapmadan tüm sorumluluğu Backend'e atıyoruz.
         const data = await api.get(`/api/Computer/${id}/metrics-history?start=${start}&end=${end}`);
 
         if (!data.cpuRam || data.cpuRam.length === 0) {
@@ -433,7 +421,6 @@ window.fetchHistoryMetrics = async () => {
         generateDiskFilters(data.disks);
 
     } catch (e) {
-        // BACKEND'DEN GELEN DİNAMİK YAPIYI DİREKT KULLANIYORUZ
         Swal.fire({
             title: e.title || 'İşlem Başarısız',
             text: e.message,
@@ -458,6 +445,10 @@ function renderBaseCharts(cpuRamData) {
 
     historyCharts.cpu = createLineChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuData, '#38bdf8');
     historyCharts.ram = createLineChart('ramChart', 'RAM Kullanımı (%)', labels, ramData, '#facc15');
+
+    // MİNİ RAPOR TETİKLEYİCİLERİ
+    generateMiniReport(cpuRamData, 'cpuUsage', 'cpuMiniReport', '%');
+    generateMiniReport(cpuRamData, 'ramUsage', 'ramMiniReport', '%');
 }
 
 function formatChartDate(dateString) {
@@ -495,12 +486,14 @@ function generateDiskFilters(disksData) {
 
         const chartId = `diskChart_${diskName.replace(/[^a-zA-Z0-9]/g, '')}`;
 
+        // DİSK KARTINA RAPOR İÇİN DIV EKLENDİ
         const chartHtml = `
             <div class="card border border-secondary shadow-sm" id="container_${chartId}" style="background-color: var(--bg-card); display: none;">
                 <div class="card-body p-2" style="overflow: hidden;">
                     <div style="position: relative; height: 180px; width: 100%;">
                         <canvas id="${chartId}"></canvas>
                     </div>
+                    <div id="report_${chartId}" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
                 </div>
             </div>
         `;
@@ -514,18 +507,24 @@ function generateDiskFilters(disksData) {
 
 function toggleDiskChart(isVisible, diskName, chartId) {
     const container = document.getElementById(`container_${chartId}`);
+    const reportContainer = document.getElementById(`report_${chartId}`);
 
     if (isVisible) {
         container.style.display = 'block';
 
         const diskData = currentHistoryData.disks.filter(d => d.diskName === diskName);
-
         const labels = diskData.map(d => formatChartDate(d.createdAt));
         const diskUsageData = diskData.map(d => d.usedPercent);
 
         historyCharts.disks[diskName] = createLineChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, diskUsageData, '#10b981');
+
+        // MİNİ RAPORU TETİKLE
+        generateMiniReport(diskData, 'usedPercent', `report_${chartId}`, '%');
+
     } else {
         container.style.display = 'none';
+        if (reportContainer) reportContainer.style.display = 'none';
+
         if (historyCharts.disks[diskName]) {
             historyCharts.disks[diskName].destroy();
             delete historyCharts.disks[diskName];
@@ -578,6 +577,106 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
     });
 }
 
+// ----------------- MİNİ RAPOR OLUŞTURUCU (ALGORİTMA 2 VE 3) -----------------
+function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
+    const container = document.getElementById(containerId);
+    if (!container || !dataList || dataList.length === 0) return;
+
+    const formatDate = (dateString) => {
+        const d = new Date(dateString);
+        return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR');
+    };
+
+    let maxItem = dataList[0];
+    let minItem = dataList[0];
+    let sum = 0;
+
+    // Min, Max, Ortalama Bulma
+    dataList.forEach(item => {
+        let val = item[valueKey];
+        if (val > maxItem[valueKey]) maxItem = item;
+        if (val < minItem[valueKey]) minItem = item;
+        sum += val;
+    });
+
+    let avg = sum / dataList.length;
+
+    // Ortalama üstü olanları al, ancak zaten "Maksimum" kutusunda gösterdiğimiz saniyeyi tekrar etme
+    let aboveAvgList = dataList.filter(item => item[valueKey] > avg && item.createdAt !== maxItem.createdAt);
+    aboveAvgList.sort((a, b) => b[valueKey] - a[valueKey]); // Büyükten küçüğe
+
+    // Top 8 Zirvesi: Birbirini tekrar eden zirvelerin elenmesi (En az 5 dakika fark olsun)
+    let top8 = [];
+    const MIN_TIME_DIFF_MS = 5 * 60 * 1000; // 5 dakika
+
+    for (let item of aboveAvgList) {
+        if (top8.length >= 8) break; // LİMİT 8 YAPILDI
+
+        const itemTime = new Date(item.createdAt).getTime();
+
+        // Zaten eklenen zirvelerle zaman farkını kontrol et
+        const isTooClose = top8.some(topItem => {
+            return Math.abs(new Date(topItem.createdAt).getTime() - itemTime) < MIN_TIME_DIFF_MS;
+        });
+
+        if (!isTooClose) {
+            top8.push(item);
+        }
+    }
+
+    // Renk Tasarımı ve Koyu Tema Uyumluluğu (var(--text-muted) eklendi)
+    let html = `
+        <div class="row g-2 text-center text-md-start small">
+            <div class="col-md-4">
+                <div class="p-2 border rounded border-success h-100" style="background: rgba(25, 135, 84, 0.1);">
+                    <div class="text-success fw-bold"><i class="bi bi-arrow-down-circle-fill"></i> Minimum</div>
+                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${minItem[valueKey].toFixed(1)}${unit}</span><br>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(minItem.createdAt)}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 border rounded border-info h-100" style="background: rgba(13, 202, 240, 0.1);">
+                    <div class="text-info fw-bold"><i class="bi bi-activity"></i> Ortalama</div>
+                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${avg.toFixed(1)}${unit}</span><br>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">Seçili Aralık</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 border rounded border-danger h-100" style="background: rgba(220, 53, 69, 0.1);">
+                    <div class="text-danger fw-bold"><i class="bi bi-arrow-up-circle-fill"></i> Maksimum</div>
+                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${maxItem[valueKey].toFixed(1)}${unit}</span><br>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(maxItem.createdAt)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Zirve Noktaları HTML
+    if (top8.length > 0) {
+        html += `
+            <div class="mt-3">
+                <div class="fw-bold text-warning mb-2" style="font-size: 0.8rem;">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Zirve Noktaları (Top ${top8.length}) <small style="color: var(--text-muted); font-weight: normal;">- En az 5 dk aralıklı</small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    ${top8.map(t => `
+                        <div class="border border-warning rounded p-2 d-flex flex-column align-items-center justify-content-center shadow-sm flex-grow-1" style="background: rgba(255, 193, 7, 0.05); min-width: 120px;">
+                            <span class="fw-bold text-warning" style="font-size: 1rem;">${t[valueKey].toFixed(1)}${unit}</span>
+                            <span style="font-size: 0.75rem; margin-top: 2px; color: var(--text-muted); text-align: center;">${formatDate(t.createdAt)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    } else {
+        html += `<div class="mt-3 small fst-italic px-2 border-start border-3 border-secondary" style="color: var(--text-muted);"><i class="bi bi-info-circle"></i> Ortalama ile maksimum arasında listelenecek belirgin bir zirve bulunamadı.</div>`;
+    }
+
+    container.innerHTML = html;
+    container.style.display = 'block';
+}
+
+
 // ----------------- TÜM CİHAZLAR SEKMESİ (TABLO OLARAK KALACAK) -----------------
 window.loadAllComputers = async () => {
     try {
@@ -601,7 +700,7 @@ window.renderAllComputersTable = () => {
     const canAssignTag = window.auth.hasPermission("Computer.AssignTag");
     const canDelete = window.auth.hasPermission("Computer.Delete");
 
-    const canEdit = canRename || canSetThreshold || canAssignTag  || canDelete;
+    const canEdit = canRename || canSetThreshold || canAssignTag || canDelete;
 
     const filtered = selectedAllTags.length === 0
         ? allSystemComputers
@@ -655,7 +754,6 @@ window.renderAllComputersTable = () => {
 };
 
 window.deleteComputer = async (id) => {
-    // Sadece "Emin misiniz" promptu UI'da kaldı (Kullanıcıdan onay almamız şart çünkü)
     const result = await Swal.fire({
         text: "Bu bilgisayarı silmek istediğinize emin misiniz?",
         icon: 'warning',
@@ -674,7 +772,6 @@ window.deleteComputer = async (id) => {
         loadAgents();
         if (typeof loadAllComputers === "function") loadAllComputers();
 
-        // BACKEND'DEN GELEN DİNAMİK MESAJ
         Swal.fire({ title: response.title, text: response.message, icon: 'success' });
     } catch (e) {
         Swal.fire({ title: e.title, text: e.message, icon: 'warning' });
