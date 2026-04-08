@@ -23,7 +23,7 @@ public class AuthController : ControllerBase
         var result = await _authService.LoginAsync(request);
 
         if (!result.IsSuccess)
-            return Unauthorized(result.ErrorMessage);
+            return Unauthorized(new { message = result.Message });
 
         return Ok(result.Data);
     }
@@ -35,11 +35,15 @@ public class AuthController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.isConflict) return Conflict(result.ErrorMessage);
-            return BadRequest(result.ErrorMessage);
+            // Eski isConflict yapısı yerine, mesaj içeriğinden durumu yakalıyoruz
+            if (result.Message != null && result.Message.Contains("zaten"))
+                return Conflict(new { message = result.Message });
+
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = "Şifre oluşturuldu. Giriş yapabilirsiniz." });
+        // Servisten gelen dinamik başarı mesajını dönüyoruz
+        return Ok(new { message = result.Message });
     }
 
     [HttpGet("my-permissions")]
@@ -50,25 +54,28 @@ public class AuthController : ControllerBase
                           User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
 
         if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-            return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+            return Unauthorized(new { message = "Kullanıcı kimliği doğrulanamadı." });
 
         var result = await _authService.GetMyPermissionsAsync(userId);
 
         if (!result.IsSuccess)
-            return NotFound(result.ErrorMessage);
+            return NotFound(new { message = result.Message });
 
-        return Ok(result.Permissions);
+        // Eski result.Permissions yerine standart result.Data kullanıyoruz
+        return Ok(result.Data);
     }
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
         var result = await _authService.RefreshTokenAsync(request.RefreshToken);
-        if (!result.IsSuccess) return Unauthorized("Geçersiz Refresh Token");
 
-        return Ok(new { token = result.Token, refreshToken = result.RefreshToken });
+        if (!result.IsSuccess)
+            return Unauthorized(new { message = result.Message });
+
+        // Servisten zaten { Token, RefreshToken } paketini Data içinde dönüyoruz
+        return Ok(result.Data);
     }
 
     public class RefreshRequest { public string RefreshToken { get; set; } = null!; }
-
 }

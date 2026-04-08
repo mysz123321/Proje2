@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using STAJ2.MailServices;
 using Staj2.Services.Interfaces;
-using Staj2.Services.Models; // Yeni modeli buradan tanıyacak
+using Staj2.Services.Models;
 
 namespace STAJ2.Controllers;
 
@@ -23,20 +23,17 @@ public class RegistrationController : ControllerBase
     {
         var result = await _registrationService.CreateRegistrationAsync(request);
 
-        // 1) Hata Kontrolleri
-        if (result.IsBadRequest)
-            return BadRequest(result.ErrorMessage);
+        // 1) Hata Kontrolü (Artık tüm hataları IsSuccess üzerinden yakalayıp BadRequest dönüyoruz)
+        if (!result.IsSuccess)
+            return BadRequest(result.Message);
 
-        if (result.IsConflict)
-            return Conflict(result.ErrorMessage);
-
-        // 2) Mail Gönderimi (Veritabanı kaydı serviste başarıyla bittiği için maili fırlatıyoruz)
+        // 2) Mail Gönderimi (Veriler artık result.Data içerisinde taşınıyor)
         try
         {
             await _mail.SendAsync(
-                result.Email!,
+                result.Data.Email,
                 "Kayıt İsteğiniz Alındı",
-                $"Merhaba {result.Username},\n\nKayıt isteğiniz alındı. Yönetici onayından sonra bilgilendirileceksiniz."
+                $"Merhaba {result.Data.Username},\n\nKayıt isteğiniz alındı. Yönetici onayından sonra bilgilendirileceksiniz."
             );
         }
         catch (Exception ex)
@@ -47,6 +44,7 @@ public class RegistrationController : ControllerBase
             Console.ResetColor();
         }
 
-        return Ok(new { id = result.RequestId, message = "Kayıt isteği alındı. Admin onayı bekleniyor." });
+        // Başarılı dönüşte Data.RequestId kullanıyoruz
+        return Ok(new { id = result.Data.RequestId, message = "Kayıt isteği alındı. Admin onayı bekleniyor." });
     }
 }

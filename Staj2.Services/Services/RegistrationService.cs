@@ -17,21 +17,21 @@ public class RegistrationService : IRegistrationService
         _config = config;
     }
 
-    public async Task<(bool IsBadRequest, bool IsConflict, string? ErrorMessage, int? RequestId, string? Email, string? Username)> CreateRegistrationAsync(CreateRegistrationRequest request)
+    public async Task<ServiceResult<(int RequestId, string Email, string Username)>> CreateRegistrationAsync(CreateRegistrationRequest request)
     {
         if (request == null)
-            return (true, false, "Geçersiz istek.", null, null, null);
+            return ServiceResult<(int RequestId, string Email, string Username)>.Failure("Geçersiz istek.");
 
         var username = (request.Username ?? "").Trim();
         var email = (request.Email ?? "").Trim().ToLowerInvariant();
 
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(email))
-            return (true, false, "Kullanıcı adı ve email zorunludur.", null, null, null);
+            return ServiceResult<(int RequestId, string Email, string Username)>.Failure("Kullanıcı adı ve email zorunludur.");
 
         // 1) Kullanıcı zaten USERS tablosunda var mı?
         var userExists = await _db.Users.AnyAsync(x => x.Email == email || x.Username == username);
         if (userExists)
-            return (false, true, "Bu email veya kullanıcı adı zaten kayıtlı. Giriş yapabilirsiniz.", null, null, null);
+            return ServiceResult<(int RequestId, string Email, string Username)>.Failure("Bu email veya kullanıcı adı zaten kayıtlı. Giriş yapabilirsiniz.");
 
         // 2) Sadece BEKLEYEN (Pending) bir istek var mı?
         var pendingRequest = await _db.RegistrationRequests.FirstOrDefaultAsync(x =>
@@ -40,7 +40,7 @@ public class RegistrationService : IRegistrationService
 
         if (pendingRequest != null)
         {
-            return (false, true, "Bu hesap için zaten onay bekleyen bir talep var. Lütfen admin onayını bekleyiniz.", null, null, null);
+            return ServiceResult<(int RequestId, string Email, string Username)>.Failure("Bu hesap için zaten onay bekleyen bir talep var. Lütfen admin onayını bekleyiniz.");
         }
 
         // 3) Yeni kayıt isteğini oluştur
@@ -58,7 +58,7 @@ public class RegistrationService : IRegistrationService
         _db.RegistrationRequests.Add(rr);
         await _db.SaveChangesAsync();
 
-        // Başarılı dönüş: Hata yok, ID'yi ve Mail bilgilerini Controller'a yolla
-        return (false, false, null, rr.Id, rr.Email, rr.Username);
+        // Başarılı dönüş: Tuple tipinde Data yolluyoruz
+        return ServiceResult<(int RequestId, string Email, string Username)>.Success((rr.Id, rr.Email, rr.Username));
     }
 }

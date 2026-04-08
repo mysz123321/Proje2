@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
+using Staj2.Services.Models;
 using Staj2.Services.Models.Auth;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -22,18 +23,18 @@ public class AuthService : IAuthService
         _config = config;
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, object? Data)> LoginAsync(LoginRequest request)
+    public async Task<ServiceResult<object>> LoginAsync(LoginRequest request)
     {
         var user = await _db.Users
             .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(x => x.Email == request.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return (false, "Giriş bilgileri hatalı", null);
+            return ServiceResult<object>.Failure("Giriş bilgileri hatalı");
 
         var accessToken = CreateJwtToken(user);
 
-        // 1. DÜZENLEME: Refresh Token gün sayısını config'den çekiyoruz
+        // Refresh Token gün sayısını config'den çekiyoruz
         int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
         var refreshToken = new RefreshToken
         {
@@ -45,16 +46,18 @@ public class AuthService : IAuthService
         _db.RefreshTokens.Add(refreshToken);
         await _db.SaveChangesAsync();
 
-        return (true, null, new
+        var data = new
         {
             token = accessToken,
             refreshToken = refreshToken.Token,
             user.Username,
             permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
-        });
+        };
+
+        return ServiceResult<object>.Success(data, "Giriş başarılı.");
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, bool isConflict)> SetPasswordAsync(SetPasswordRequest req)
+    public async Task<ServiceResult> SetPasswordAsync(SetPasswordRequest req)
     {
         var tokenHash = Sha256(req.Token);
 
@@ -66,18 +69,19 @@ public class AuthService : IAuthService
                 x.ExpiresAt > DateTime.Now);
 
         if (tokenRow == null)
-            return (false, "Token geçersiz veya süresi dolmuş.", false);
+            return ServiceResult.Failure("Token geçersiz veya süresi dolmuş.");
 
         var rr = tokenRow.RegistrationRequest;
 
         if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
         {
-            return (false, "Email veya kullanıcı adı eşleşmiyor.", false);
+            return ServiceResult.Failure("Email veya kullanıcı adı eşleşmiyor.");
         }
 
         var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
-        if (exists) return (false, "Kullanıcı zaten oluşturulmuş.", true); // isConflict = true
+        if (exists)
+            return ServiceResult.Failure("Kullanıcı zaten oluşturulmuş.");
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
 
@@ -101,10 +105,11 @@ public class AuthService : IAuthService
         tokenRow.UsedAt = DateTime.Now;
 
         await _db.SaveChangesAsync();
-        return (true, null, false);
+
+        return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, List<string>? Permissions)> GetMyPermissionsAsync(int userId)
+    public async Task<ServiceResult<List<string>>> GetMyPermissionsAsync(int userId)
     {
         var user = await _db.Users
             .AsNoTracking()
@@ -114,7 +119,7 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(x => x.Id == userId);
 
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.", null);
+            return ServiceResult<List<string>>.Failure("Kullanıcı bulunamadı.");
 
         var currentPermissions = user.Roles
             .SelectMany(r => r.RolePermissions)
@@ -122,17 +127,10 @@ public class AuthService : IAuthService
             .Distinct()
             .ToList();
 
-        return (true, null, currentPermissions);
+        return ServiceResult<List<string>>.Success(currentPermissions);
     }
 
-    // --- HELPER METOTLAR ---
-    private static string Sha256(string input)
-    {
-        var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
-    }
-
-    public async Task<(bool IsSuccess, string? Token, string? RefreshToken)> RefreshTokenAsync(string token)
+    public async Task<ServiceResult<object>> RefreshTokenAsync(string token)
     {
         var storedToken = await _db.RefreshTokens
             .Include(x => x.User)
@@ -141,14 +139,15 @@ public class AuthService : IAuthService
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(x => x.Token == token && !x.IsRevoked && x.ExpiresAt > DateTime.Now);
 
-        if (storedToken == null) return (false, null, null);
+        if (storedToken == null)
+            return ServiceResult<object>.Failure("Geçersiz veya süresi dolmuş token.");
 
         storedToken.IsRevoked = true;
 
         var newAccessToken = CreateJwtToken(storedToken.User);
         var newRefreshToken = Guid.NewGuid().ToString("N");
 
-        // 2. DÜZENLEME: Burada da yeni refresh token oluşturulurken sabit 7 gün yerine config kullanıyoruz.
+        // Yeni refresh token oluşturulurken config kullanıyoruz.
         int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
 
         _db.RefreshTokens.Add(new RefreshToken
@@ -159,7 +158,21 @@ public class AuthService : IAuthService
         });
 
         await _db.SaveChangesAsync();
-        return (true, newAccessToken, newRefreshToken);
+
+        var data = new
+        {
+            Token = newAccessToken,
+            RefreshToken = newRefreshToken
+        };
+
+        return ServiceResult<object>.Success(data, "Token başarıyla yenilendi.");
+    }
+
+    // --- HELPER METOTLAR ---
+    private static string Sha256(string input)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes);
     }
 
     private string CreateJwtToken(User user)
@@ -187,7 +200,7 @@ public class AuthService : IAuthService
         foreach (var permission in userPermissions)
             claims.Add(new Claim("Permission", permission));
 
-        // 3. DÜZENLEME: Access token geçerlilik süresini 15 dakika sabiti yerine config'den çekiyoruz.
+        // Access token geçerlilik süresini config'den çekiyoruz.
         int accessTokenMinutes = _config.GetValue<int>("Jwt:AccessTokenExpirationMinutes", 15);
 
         var token = new JwtSecurityToken(

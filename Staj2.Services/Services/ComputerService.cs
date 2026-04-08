@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
-using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace Staj2.Services.Services;
 
@@ -13,6 +12,7 @@ public class ComputerService : IComputerService
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly IMemoryCache _cache;
+
     public ComputerService(AppDbContext db, IConfiguration config, IMemoryCache cache)
     {
         _db = db;
@@ -20,6 +20,7 @@ public class ComputerService : IComputerService
         _cache = cache;
     }
 
+    // --- YARDIMCI METOT (Değişmedi, sadece kendi içimizde kullanıyoruz) ---
     private async Task<bool> CheckComputerAccessAsync(int computerId, int userId, bool isAdmin)
     {
         if (isAdmin) return true;
@@ -42,53 +43,53 @@ public class ComputerService : IComputerService
     }
 
     // 1. Cihaz Detayı
-    public async Task<(bool isForbidden, bool isNotFound, object? data)> GetComputerAsync(int id, int userId, bool isAdmin)
+    public async Task<ServiceResult<object>> GetComputerAsync(int id, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(id, userId, isAdmin))
-            return (true, false, null);
+            return ServiceResult<object>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
 
         var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
         if (computer == null)
-            return (false, true, null);
+            return ServiceResult<object>.Failure("Bilgisayar bulunamadı.");
 
         var data = new { computer.Id, computer.CpuThreshold, computer.RamThreshold, Tags = computer.Tags.Select(t => t.Name) };
-        return (false, false, data);
+        return ServiceResult<object>.Success(data);
     }
 
     // 2. Disk Listesi
-    public async Task<(bool isForbidden, object? data)> GetComputerDisksAsync(int computerId, int userId, bool isAdmin)
+    public async Task<ServiceResult<object>> GetComputerDisksAsync(int computerId, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
-            return (true, null);
+            return ServiceResult<object>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
 
         var disks = await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync();
-        return (false, disks);
+        return ServiceResult<object>.Success(disks);
     }
 
     // 3. Eşik Değerlerini Güncelle
-    public async Task<(bool isForbidden, bool isNotFound, bool isBadRequest, string message)> UpdateThresholdsAsync(int computerId, UpdateThresholdsRequest request, int userId, bool isAdmin)
+    public async Task<ServiceResult> UpdateThresholdsAsync(int computerId, UpdateThresholdsRequest request, int userId, bool isAdmin)
     {
         if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
-            return (true, false, false, "Bu cihaza erişim yetkiniz bulunmamaktadır.");
+            return ServiceResult.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
 
         if (request.CpuThreshold.HasValue && (request.CpuThreshold < 0 || request.CpuThreshold > 100))
-            return (false, false, true, "CPU eşik değeri 0 ile 100 arasında olmalıdır.");
+            return ServiceResult.Failure("CPU eşik değeri 0 ile 100 arasında olmalıdır.");
 
         if (request.RamThreshold.HasValue && (request.RamThreshold < 0 || request.RamThreshold > 100))
-            return (false, false, true, "RAM eşik değeri 0 ile 100 arasında olmalıdır.");
+            return ServiceResult.Failure("RAM eşik değeri 0 ile 100 arasında olmalıdır.");
 
         if (request.DiskThresholds != null)
         {
             foreach (var disk in request.DiskThresholds)
             {
                 if (disk.ThresholdPercent.HasValue && (disk.ThresholdPercent < 0 || disk.ThresholdPercent > 100))
-                    return (false, false, true, $"'{disk.DiskName}' diski için eşik değeri 0-100 arasında olmalıdır.");
+                    return ServiceResult.Failure($"'{disk.DiskName}' diski için eşik değeri 0-100 arasında olmalıdır.");
             }
         }
 
         var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
         if (computer == null)
-            return (false, true, false, "Bilgisayar bulunamadı.");
+            return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
         computer.CpuThreshold = request.CpuThreshold;
         computer.RamThreshold = request.RamThreshold;
@@ -103,15 +104,15 @@ public class ComputerService : IComputerService
         }
         await _db.SaveChangesAsync();
 
-        return (false, false, false, "Sınırlar başarıyla kaydedildi.");
+        return ServiceResult.Success("Sınırlar başarıyla kaydedildi.");
     }
 
     // 4. Etiket Atama
-    public async Task<(bool isNotFound, string message)> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request)
+    public async Task<ServiceResult> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request)
     {
         var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
         if (computer == null)
-            return (true, "Bilgisayar bulunamadı.");
+            return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
         var newTags = await _db.Tags.Where(t => request.Tags.Contains(t.Name)).ToListAsync();
         computer.Tags.Clear();
@@ -119,59 +120,53 @@ public class ComputerService : IComputerService
 
         await _db.SaveChangesAsync();
 
-        return (false, "Etiketler cihaza başarıyla atandı.");
+        return ServiceResult.Success("Etiketler cihaza başarıyla atandı.");
     }
 
-    // 5. İsim Değiştirme (TÜM VALIDASYONLAR EKLENDİ)
-    public async Task<(bool isSuccess, bool isNotFound, string message)> UpdateDisplayNameAsync(UpdateComputerNameRequest request)
+    // 5. İsim Değiştirme
+    public async Task<ServiceResult> UpdateDisplayNameAsync(UpdateComputerNameRequest request)
     {
-        // JS'den taşınan kural 1: Boş bırakılamaz
         if (string.IsNullOrWhiteSpace(request.NewDisplayName))
-            return (false, false, "İsim alanı boş bırakılamaz.");
+            return ServiceResult.Failure("İsim alanı boş bırakılamaz.");
 
-        // JS'den taşınan kural 2: 200 Karakter sınırı
         if (request.NewDisplayName.Length > 200)
-            return (false, false, "Görünen isim 200 karakterden uzun olamaz.");
+            return ServiceResult.Failure("Görünen isim 200 karakterden uzun olamaz.");
 
-        // Veritabanı çakışma kontrolü
         bool isNameTaken = await _db.Computers
             .AnyAsync(c => c.DisplayName == request.NewDisplayName && c.Id != request.Id);
 
         if (isNameTaken)
-            return (false, false, "Bu isim zaten başka bir cihaza ait. Lütfen farklı bir isim giriniz.");
+            return ServiceResult.Failure("Bu isim zaten başka bir cihaza ait. Lütfen farklı bir isim giriniz.");
 
         var computer = await _db.Computers.FindAsync(request.Id);
         if (computer == null)
-            return (false, true, "Bilgisayar bulunamadı.");
+            return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
         computer.DisplayName = request.NewDisplayName;
         await _db.SaveChangesAsync();
 
-        return (true, false, "Cihaz ismi başarıyla güncellendi.");
+        return ServiceResult.Success("Cihaz ismi başarıyla güncellendi.");
     }
 
-    // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (TÜM VALIDASYONLAR EKLENDİ)
-    public async Task<(bool isBadRequest, string? errorMessage, object? data)> GetMetricsHistoryAsync(int id, string start, string end)
+    // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
+    public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end)
     {
         if (id <= 0)
-            return (true, "Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.", null);
+            return ServiceResult<object>.Failure("Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.");
 
-        // JS'den taşınan kural 1: Boş bırakılamaz
         if (string.IsNullOrWhiteSpace(start) || string.IsNullOrWhiteSpace(end))
-            return (true, "Lütfen tarih aralığı seçiniz.", null);
+            return ServiceResult<object>.Failure("Lütfen tarih aralığı seçiniz.");
 
         if (!DateTime.TryParse(start, out DateTime startTime) || !DateTime.TryParse(end, out DateTime endTime))
         {
-            return (true, "Geçersiz tarih formatı.", null);
+            return ServiceResult<object>.Failure("Geçersiz tarih formatı.");
         }
 
-        // JS'den taşınan kural 2: Başlangıç bitişten büyük olamaz
         if (startTime > endTime)
-            return (true, "Başlangıç tarihi bitiş tarihinden sonra olamaz.", null);
+            return ServiceResult<object>.Failure("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
 
-        // JS'den taşınan kural 3: Maksimum 7 gün kuralı
         if ((endTime - startTime).TotalDays > 7)
-            return (true, "Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.", null);
+            return ServiceResult<object>.Failure("Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.");
 
         var cpuRamMetrics = await _db.ComputerMetrics
             .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
@@ -191,11 +186,11 @@ public class ComputerService : IComputerService
             .ToListAsync();
 
         var data = new { CpuRam = cpuRamMetrics, Disks = diskMetrics };
-        return (false, null, data);
+        return ServiceResult<object>.Success(data);
     }
 
     // 7. Tüm Cihazları Getir
-    public async Task<object> GetAllComputersAsync(int userId, bool isAdmin)
+    public async Task<ServiceResult<object>> GetAllComputersAsync(int userId, bool isAdmin)
     {
         var accCompIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var accTagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
@@ -231,33 +226,34 @@ public class ComputerService : IComputerService
             isDeleted = x.Computer.IsDeleted,
             isActive = (DateTime.Now - x.Computer.LastSeen).TotalSeconds <= offlineThreshold
         })
-        .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen);
+        .OrderBy(c => c.isDeleted).ThenByDescending(c => c.isActive).ThenByDescending(c => c.lastSeen)
+        .ToList();
 
-        return result;
+        return ServiceResult<object>.Success(result);
     }
 
     // 8. Cihaz Silme
-    public async Task<(bool isNotFound, bool isBadRequest, string message)> DeleteComputerAsync(int id)
+    public async Task<ServiceResult> DeleteComputerAsync(int id)
     {
         var computer = await _db.Computers.FindAsync(id);
         if (computer == null)
-            return (true, false, "Bilgisayar bulunamadı.");
+            return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
         int offlineThreshold = _config.GetValue<int>("Alerting:OfflineThresholdSeconds", 150);
         bool isActive = (DateTime.Now - computer.LastSeen).TotalSeconds <= offlineThreshold;
         if (isActive)
         {
-            return (false, true, "Aktif olan bir bilgisayarı silemezsiniz. Lütfen önce ajanı durdurun.");
+            return ServiceResult.Failure("Aktif olan bir bilgisayarı silemezsiniz. Lütfen önce ajanı durdurun.");
         }
 
         computer.IsDeleted = true;
         await _db.SaveChangesAsync();
 
-        return (false, false, "Bilgisayar sistemden başarıyla silinmiştir.");
+        return ServiceResult.Success("Bilgisayar sistemden başarıyla silinmiştir.");
     }
 
     // 9. Kullanıcının Etiketlerini Getir
-    public async Task<object> GetMyTagsAsync(int userId, bool isAdmin)
+    public async Task<ServiceResult<object>> GetMyTagsAsync(int userId, bool isAdmin)
     {
         var query = _db.Tags.AsQueryable();
 
@@ -283,16 +279,17 @@ public class ComputerService : IComputerService
         }
 
         var tags = await query.Select(t => new { t.Id, t.Name }).ToListAsync();
-        return tags;
+        return ServiceResult<object>.Success(tags);
     }
 
-    public async Task<PerformanceReportDto> GetPerformanceReportAsync(int userId, bool isAdmin)
+    // 10. Performans Raporu
+    public async Task<ServiceResult<PerformanceReportDto>> GetPerformanceReportAsync(int userId, bool isAdmin)
     {
         string cacheKey = $"PerformanceReport_User_{userId}";
 
         if (_cache.TryGetValue(cacheKey, out PerformanceReportDto? cachedReport) && cachedReport != null)
         {
-            return cachedReport;
+            return ServiceResult<PerformanceReportDto>.Success(cachedReport);
         }
 
         var query = _db.Computers.AsQueryable();
@@ -310,7 +307,8 @@ public class ComputerService : IComputerService
 
         var activeComputerIds = await query.Select(c => c.Id).ToListAsync();
 
-        if (!activeComputerIds.Any()) return new PerformanceReportDto();
+        if (!activeComputerIds.Any())
+            return ServiceResult<PerformanceReportDto>.Success(new PerformanceReportDto());
 
         var metricsSummary = await _db.ComputerMetrics
             .Where(m => activeComputerIds.Contains(m.ComputerId))
@@ -323,7 +321,8 @@ public class ComputerService : IComputerService
             })
             .ToListAsync();
 
-        if (!metricsSummary.Any()) return new PerformanceReportDto();
+        if (!metricsSummary.Any())
+            return ServiceResult<PerformanceReportDto>.Success(new PerformanceReportDto());
 
         var diskMetricsSummary = await _db.DiskMetrics
             .Where(m => activeComputerIds.Contains(m.ComputerDisk.ComputerId))
@@ -409,10 +408,11 @@ public class ComputerService : IComputerService
 
         _cache.Set(cacheKey, report, TimeSpan.FromSeconds(30));
 
-        return report;
+        return ServiceResult<PerformanceReportDto>.Success(report);
     }
 
-    public async Task<MetricSummaryDto> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName)
+    // 11. Metrik Özeti
+    public async Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName)
     {
         var summary = new MetricSummaryDto();
 
@@ -455,6 +455,6 @@ public class ComputerService : IComputerService
             }
         }
 
-        return summary;
+        return ServiceResult<MetricSummaryDto>.Success(summary);
     }
 }

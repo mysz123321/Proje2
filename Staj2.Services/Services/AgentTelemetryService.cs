@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
+using Staj2.Services.Models;
 using Staj2.Services.Models.Agent;
 using System.Globalization;
 
@@ -22,17 +23,18 @@ public class AgentTelemetryService : IAgentTelemetryService
         _config = config;
     }
 
-    public async Task<(bool IsUnauthorized, bool IsBadRequest, string? ErrorMessage, List<(string Email, string Subject, string Body)>? Alerts)> IngestAsync(AgentTelemetryDto dto, string? agentKey, CancellationToken ct)
+    public async Task<ServiceResult<List<(string Email, string Subject, string Body)>>> IngestAsync(AgentTelemetryDto dto, string? agentKey, CancellationToken ct)
     {
         // 1. Güvenlik Kontrolü
         var expectedKey = _config["Agent:IngestKey"];
         if (!string.IsNullOrWhiteSpace(expectedKey) && agentKey != expectedKey)
         {
-            return (true, false, null, null);
+            // Controller'da yakalayıp 401 dönebilmek için spesifik mesaj atıyoruz
+            return ServiceResult<List<(string Email, string Subject, string Body)>>.Failure("Unauthorized");
         }
 
         if (string.IsNullOrWhiteSpace(dto.MacAddress))
-            return (false, true, "MacAddress is required.", null);
+            return ServiceResult<List<(string Email, string Subject, string Body)>>.Failure("MacAddress is required.");
 
         // 2. Bilgisayar Kaydı veya Güncelleme
         var computer = await _context.Computers
@@ -235,10 +237,11 @@ public class AgentTelemetryService : IAgentTelemetryService
         dto.Ts = DateTime.Now;
         lock (_latestData) { _latestData[dto.MacAddress] = dto; }
 
-        return (false, false, null, alertsToSend);
+        // Başarılı durumunda uyarı listesini Data olarak dönüyoruz
+        return ServiceResult<List<(string Email, string Subject, string Body)>>.Success(alertsToSend);
     }
 
-    public async Task<object> GetLatestAsync(int userId, bool isAdmin)
+    public async Task<ServiceResult<object>> GetLatestAsync(int userId, bool isAdmin)
     {
         List<AgentTelemetryDto> list;
         lock (_latestData) { list = _latestData.Values.OrderByDescending(x => x.Ts).ToList(); }
@@ -298,6 +301,7 @@ public class AgentTelemetryService : IAgentTelemetryService
         .ThenByDescending(dto => dto.Ts)
         .ToList();
 
-        return sortedResult;
+        // Başarılı durumunda sortedResult'ı Data olarak dönüyoruz
+        return ServiceResult<object>.Success(sortedResult);
     }
 }

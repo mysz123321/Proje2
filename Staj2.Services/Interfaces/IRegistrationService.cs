@@ -2,8 +2,8 @@
 
 namespace Staj2.Services.Interfaces;
 
-// DİKKAT: Başına public ekledik!
 public interface IRegistrationService
 {
-    Task<(bool IsBadRequest, bool IsConflict, string? ErrorMessage, int? RequestId, string? Email, string? Username)> CreateRegistrationAsync(CreateRegistrationRequest request);
+    // Eski karmaşık tuple yerine ServiceResult kullanıyoruz
+    Task<ServiceResult<(int RequestId, string Email, string Username)>> CreateRegistrationAsync(CreateRegistrationRequest request);
 }

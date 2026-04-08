@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
+using Staj2.Services.Models;
 
 namespace Staj2.Services.Services;
 
@@ -13,7 +14,7 @@ public class UiService : IUiService
         _db = db;
     }
 
-    public async Task<(bool IsSuccess, string? ErrorMessage, object? Data)> GetSidebarItemsAsync(int userId)
+    public async Task<ServiceResult<object>> GetSidebarItemsAsync(int userId)
     {
         // 1. Kullanıcıyı ve rollerine bağlı yetkileri çekiyoruz
         var user = await _db.Users
@@ -24,7 +25,7 @@ public class UiService : IUiService
             .FirstOrDefaultAsync(x => x.Id == userId);
 
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.", null);
+            return ServiceResult<object>.Failure("Kullanıcı bulunamadı.");
 
         // 2. Kullanıcının sahip olduğu yetkilerin açabildiği SidebarItem ID'lerini bir listeye alıyoruz
         var userAllowedSidebarItemIds = user.Roles
@@ -62,11 +63,10 @@ public class UiService : IUiService
             IsProtected = allProtectedSidebarItemIds.Contains(item.Id)
         }).ToList();
 
-        return (true, null, authorizedItems);
+        return ServiceResult<object>.Success(authorizedItems);
     }
 
-
-    public async Task<(bool IsSuccess, string? ErrorMessage, List<string>? Permissions)> GetMyPermissionsAsync(int userId)
+    public async Task<ServiceResult<List<string>>> GetMyPermissionsAsync(int userId)
     {
         var user = await _db.Users
             .AsNoTracking()
@@ -76,7 +76,7 @@ public class UiService : IUiService
             .FirstOrDefaultAsync(x => x.Id == userId);
 
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.", null);
+            return ServiceResult<List<string>>.Failure("Kullanıcı bulunamadı.");
 
         var livePermissions = user.Roles
             .SelectMany(r => r.RolePermissions)
@@ -84,11 +84,13 @@ public class UiService : IUiService
             .Distinct()
             .ToList();
 
-        return (true, null, livePermissions);
+        return ServiceResult<List<string>>.Success(livePermissions);
     }
 
-    //public async Task<object> GetUserActionsAsync()
-    //{
-    //    return await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
-    //}
+    // İleride açarsan bu şekilde olmalı:
+    // public async Task<ServiceResult<object>> GetUserActionsAsync()
+    // {
+    //     var data = await _db.UserTableActions.OrderBy(a => a.OrderIndex).ToListAsync();
+    //     return ServiceResult<object>.Success(data);
+    // }
 }

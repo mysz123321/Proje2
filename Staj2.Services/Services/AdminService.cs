@@ -23,39 +23,43 @@ public class AdminService : IAdminService
         _cache = cache;
     }
 
-    public async Task<object> GetRolesAsync()
+    // --- ROLLER VE YETKİLER ---
+
+    public async Task<ServiceResult<object>> GetRolesAsync()
     {
-        return await _db.Roles.Select(r => new { r.Id, r.Name }).ToListAsync();
+        var data = await _db.Roles.Select(r => new { r.Id, r.Name }).ToListAsync();
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<object> GetAllPermissionsAsync()
+    public async Task<ServiceResult<object>> GetAllPermissionsAsync()
     {
-        return await _db.Permissions
+        var data = await _db.Permissions
             .Select(p => new { p.Id, p.Name, p.Description })
             .ToListAsync();
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<List<int>> GetRolePermissionsAsync(int roleId)
+    public async Task<ServiceResult<List<int>>> GetRolePermissionsAsync(int roleId)
     {
-        return await _db.RolePermissions
+        var data = await _db.RolePermissions
             .Where(rp => rp.RoleId == roleId)
             .Select(rp => rp.PermissionId)
             .ToListAsync();
+        return ServiceResult<List<int>>.Success(data);
     }
 
     // --- ROL YÖNETİMİ ---
-    public async Task<(bool isSuccess, string message)> CreateRoleAsync(CreateRoleRequest request, int? currentUserId)
+
+    public async Task<ServiceResult> CreateRoleAsync(CreateRoleRequest request, int? currentUserId)
     {
-        // --- YENİ EKLENEN VALİDASYONLAR (JS'den buraya taşındı) ---
         if (string.IsNullOrWhiteSpace(request.Name))
-            return (false, "Rol adı boş bırakılamaz.");
+            return ServiceResult.Failure("Rol adı boş bırakılamaz.");
 
         if (request.Name.Length > 20)
-            return (false, "Rol adı 20 karakterden uzun olamaz.");
-        // ----------------------------------------------------------
+            return ServiceResult.Failure("Rol adı 20 karakterden uzun olamaz.");
 
         if (await _db.Roles.AnyAsync(r => r.Name.ToLower() == request.Name.ToLower() && !r.IsDeleted))
-            return (false, "Bu rol adı zaten kullanılıyor.");
+            return ServiceResult.Failure("Bu rol adı zaten kullanılıyor.");
 
         var newRole = new Role
         {
@@ -81,14 +85,14 @@ public class AdminService : IAdminService
             await _db.SaveChangesAsync();
         }
 
-        return (true, "Rol başarıyla oluşturuldu.");
+        return ServiceResult.Success("Rol başarıyla oluşturuldu.");
     }
 
-    public async Task<(bool isSuccess, string message)> UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsRequest request, int? currentUserId)
+    public async Task<ServiceResult> UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsRequest request, int? currentUserId)
     {
         var role = await _db.Roles.Include(r => r.RolePermissions).FirstOrDefaultAsync(r => r.Id == roleId);
         if (role == null)
-            return (false, "Rol bulunamadı.");
+            return ServiceResult.Failure("Rol bulunamadı.");
 
         role.UpdatedAt = DateTime.Now;
         role.UpdatedBy = currentUserId;
@@ -106,21 +110,21 @@ public class AdminService : IAdminService
         }
 
         await _db.SaveChangesAsync();
-        return (true, "Rol yetkileri başarıyla güncellendi.");
+        return ServiceResult.Success("Rol yetkileri başarıyla güncellendi.");
     }
 
-    public async Task<(bool isSuccess, string message)> DeleteRoleAsync(int id, int? currentUserId)
+    public async Task<ServiceResult> DeleteRoleAsync(int id, int? currentUserId)
     {
         var role = await _db.Roles.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
         if (role == null)
-            return (false, "Rol bulunamadı.");
+            return ServiceResult.Failure("Rol bulunamadı.");
 
         var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
         if (role.Name == adminRoleName)
-            return (false, $"Sistem varsayılan '{adminRoleName}' rolü silinemez.");
+            return ServiceResult.Failure($"Sistem varsayılan '{adminRoleName}' rolü silinemez.");
 
         if (role.Users.Any(u => !u.IsDeleted))
-            return (false, "Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin.");
+            return ServiceResult.Failure("Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin.");
 
         role.IsDeleted = true;
         role.DeletedAt = DateTime.Now;
@@ -141,24 +145,25 @@ public class AdminService : IAdminService
         });
 
         await _db.SaveChangesAsync();
-        return (true, "Rol başarıyla silindi.");
+        return ServiceResult.Success("Rol başarıyla silindi.");
     }
 
     // --- KULLANICI YÖNETİMİ ---
 
-    public async Task<object> GetAllUsersAsync()
+    public async Task<ServiceResult<object>> GetAllUsersAsync()
     {
-        return await _db.Users.Include(u => u.Roles)
+        var data = await _db.Users.Include(u => u.Roles)
                           .OrderBy(u => u.Username)
                           .Select(u => new { u.Id, u.Username, u.Email, Roles = u.Roles.Select(r => r.Name).ToList() })
                           .ToListAsync();
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<(bool isSuccess, string message)> DeleteUserAsync(int id, int? currentUserId)
+    public async Task<ServiceResult> DeleteUserAsync(int id, int? currentUserId)
     {
         var user = await _db.Users.FindAsync(id);
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.");
+            return ServiceResult.Failure("Kullanıcı bulunamadı.");
 
         user.IsDeleted = true;
         user.DeletedAt = DateTime.Now;
@@ -186,63 +191,59 @@ public class AdminService : IAdminService
         });
 
         await _db.SaveChangesAsync();
-        return (true, "Kullanıcı sistemden başarıyla silindi.");
+        return ServiceResult.Success("Kullanıcı sistemden başarıyla silindi.");
     }
 
-    public async Task<(bool isSuccess, string message)> ChangeUserRolesAsync(int userId, ChangeRolesRequest request)
+    public async Task<ServiceResult> ChangeUserRolesAsync(int userId, ChangeRolesRequest request)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(x => x.Id == userId);
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.");
+            return ServiceResult.Failure("Kullanıcı bulunamadı.");
 
         var newRoles = await _db.Roles.Where(r => request.NewRoleIds.Contains(r.Id)).ToListAsync();
         if (newRoles.Count == 0)
-            return (false, "En az bir geçerli rol seçilmelidir.");
+            return ServiceResult.Failure("En az bir geçerli rol seçilmelidir.");
 
-        // --- SON YÖNETİCİ KONTROLÜ (JS'den buraya taşındı) ---
         var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
         bool isCurrentlyAdmin = user.Roles.Any(r => r.Name == adminRoleName);
         bool willBeAdmin = newRoles.Any(r => r.Name == adminRoleName);
 
-        // Eğer kullanıcı şu an adminse ve yeni rollerinde adminlik YOKSA (yani yetkisi alınıyorsa)
         if (isCurrentlyAdmin && !willBeAdmin)
         {
-            // Sistemdeki toplam silinmemiş admin sayısına bak
             int adminCount = await _db.Users.CountAsync(u => !u.IsDeleted && u.Roles.Any(r => r.Name == adminRoleName));
             if (adminCount <= 1)
             {
-                return (false, "Sistemde kalan son yönetici yetkisini kaldıramazsınız!");
+                return ServiceResult.Failure("Sistemde kalan son yönetici yetkisini kaldıramazsınız!");
             }
         }
-        // -----------------------------------------------------
 
         user.Roles.Clear();
         foreach (var role in newRoles)
             user.Roles.Add(role);
 
         await _db.SaveChangesAsync();
-
-        return (true, "Kullanıcının rolleri başarıyla güncellendi.");
+        return ServiceResult.Success("Kullanıcının rolleri başarıyla güncellendi.");
     }
 
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
 
-    public async Task<object> GetPendingRequestsAsync()
+    public async Task<ServiceResult<object>> GetPendingRequestsAsync()
     {
-        return await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync();
+        var data = await _db.RegistrationRequests.Where(x => x.Status == RegistrationStatus.Pending).ToListAsync();
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<(bool IsSuccess, string message)> RejectRequestAsync(RejectRegistrationRequest request, int? adminId)
+    public async Task<ServiceResult> RejectRequestAsync(RejectRegistrationRequest request, int? adminId)
     {
         if (!string.IsNullOrEmpty(request.RejectionReason) && request.RejectionReason.Length > 200)
-            return (false, "Ret gerekçesi 200 karakterden uzun olamaz.");
+            return ServiceResult.Failure("Ret gerekçesi 200 karakterden uzun olamaz.");
 
         var registration = await _db.RegistrationRequests.FindAsync(request.RequestId);
         if (registration == null)
-            return (false, "Talep bulunamadı.");
+            return ServiceResult.Failure("Talep bulunamadı.");
 
         if (registration.Status != RegistrationStatus.Pending)
-            return (false, "Bu talep zaten işleme alınmış.");
+            return ServiceResult.Failure("Bu talep zaten işleme alınmış.");
 
         if (adminId.HasValue)
             registration.RejectedBy = adminId.Value;
@@ -268,21 +269,21 @@ public class AdminService : IAdminService
             Console.ResetColor();
         }
 
-        return (true, "Kayıt talebi reddedildi ve kullanıcıya e-posta gönderildi.");
+        return ServiceResult.Success("Kayıt talebi reddedildi ve kullanıcıya e-posta gönderildi.");
     }
 
-    public async Task<(bool IsSuccess, string message)> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId)
+    public async Task<ServiceResult> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId)
     {
         var request = await _db.RegistrationRequests.FindAsync(id);
         if (request == null)
-            return (false, "Talep bulunamadı.");
+            return ServiceResult.Failure("Talep bulunamadı.");
 
         if (request.Status != RegistrationStatus.Pending)
-            return (false, "Bu talep zaten işlenmiş.");
+            return ServiceResult.Failure("Bu talep zaten işlenmiş.");
 
         var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email);
         if (existingUser != null)
-            return (false, $"Bu kullanıcı zaten sistemde kayıtlı! (Kullanıcı: {existingUser.Username})");
+            return ServiceResult.Failure($"Bu kullanıcı zaten sistemde kayıtlı! (Kullanıcı: {existingUser.Username})");
 
         int finalAdminId = adminId ?? 0;
         if (finalAdminId == 0)
@@ -335,15 +336,16 @@ public class AdminService : IAdminService
             Console.ResetColor();
         }
 
-        return (true, "Kayıt talebi onaylandı ve kurulum e-postası gönderildi.");
+        return ServiceResult.Success("Kayıt talebi onaylandı ve kurulum e-postası gönderildi.");
     }
 
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
 
-    public async Task<object?> GetUserAccessAsync(int userId)
+    public async Task<ServiceResult<object>> GetUserAccessAsync(int userId)
     {
         var user = await _db.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == userId);
-        if (user == null) return null;
+        if (user == null)
+            return ServiceResult<object>.Failure("Kullanıcı bulunamadı.");
 
         var computerIds = await _db.UserComputerAccesses.Where(x => x.UserId == userId).Select(x => x.ComputerId).ToListAsync();
         var tagIds = await _db.UserTagAccesses.Where(x => x.UserId == userId).Select(x => x.TagId).ToListAsync();
@@ -356,14 +358,14 @@ public class AdminService : IAdminService
             tagIds = await _db.Tags.Select(x => x.Id).ToListAsync();
         }
 
-        return new { computerIds, tagIds };
+        return ServiceResult<object>.Success(new { computerIds, tagIds });
     }
 
-    public async Task<(bool isSuccess, string message)> AssignComputersAsync(int userId, AssignComputersRequest req)
+    public async Task<ServiceResult> AssignComputersAsync(int userId, AssignComputersRequest req)
     {
         var user = await _db.Users.FindAsync(userId);
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.");
+            return ServiceResult.Failure("Kullanıcı bulunamadı.");
 
         var existing = await _db.UserComputerAccesses.Where(x => x.UserId == userId).ToListAsync();
         _db.UserComputerAccesses.RemoveRange(existing);
@@ -374,14 +376,14 @@ public class AdminService : IAdminService
         await _db.SaveChangesAsync();
         _cache.Remove($"PerformanceReport_User_{userId}");
 
-        return (true, "Kullanıcının cihaz erişimleri başarıyla güncellendi.");
+        return ServiceResult.Success("Kullanıcının cihaz erişimleri başarıyla güncellendi.");
     }
 
-    public async Task<(bool isSuccess, string message)> AssignTagsAsync(int userId, AssignTagsRequest req)
+    public async Task<ServiceResult> AssignTagsAsync(int userId, AssignTagsRequest req)
     {
         var user = await _db.Users.FindAsync(userId);
         if (user == null)
-            return (false, "Kullanıcı bulunamadı.");
+            return ServiceResult.Failure("Kullanıcı bulunamadı.");
 
         var existing = await _db.UserTagAccesses.Where(x => x.UserId == userId).ToListAsync();
         _db.UserTagAccesses.RemoveRange(existing);
@@ -390,12 +392,12 @@ public class AdminService : IAdminService
             _db.UserTagAccesses.Add(new UserTagAccess { UserId = userId, TagId = tid });
 
         await _db.SaveChangesAsync();
-        return (true, "Kullanıcının etiket erişimleri başarıyla güncellendi.");
+        return ServiceResult.Success("Kullanıcının etiket erişimleri başarıyla güncellendi.");
     }
 
-    public async Task<object> GetAllComputersForAssignmentAsync()
+    public async Task<ServiceResult<object>> GetAllComputersForAssignmentAsync()
     {
-        return await _db.Computers
+        var data = await _db.Computers
             .Select(c => new
             {
                 id = c.Id,
@@ -406,25 +408,28 @@ public class AdminService : IAdminService
                 lastSeen = c.LastSeen
             })
             .ToListAsync();
+
+        return ServiceResult<object>.Success(data);
     }
 
     // --- ETİKET YÖNETİMİ ---
 
-    public async Task<object> GetTagsAsync()
+    public async Task<ServiceResult<object>> GetTagsAsync()
     {
-        return await _db.Tags.ToListAsync();
+        var data = await _db.Tags.ToListAsync();
+        return ServiceResult<object>.Success(data);
     }
 
-    public async Task<(bool IsSuccess, string message, object? CreatedTag)> CreateTagAsync(TagCreateRequest request, int? userId)
+    public async Task<ServiceResult<object>> CreateTagAsync(TagCreateRequest request, int? userId)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return (false, "Etiket ismi boş bırakılamaz.", null);
+            return ServiceResult<object>.Failure("Etiket ismi boş bırakılamaz.");
 
         if (request.Name.Length > 200)
-            return (false, "Etiket ismi 200 karakterden uzun olamaz.", null);
+            return ServiceResult<object>.Failure("Etiket ismi 200 karakterden uzun olamaz.");
 
         if (await _db.Tags.AnyAsync(t => t.Name == request.Name))
-            return (false, "Bu etiket zaten sistemde mevcut.", null);
+            return ServiceResult<object>.Failure("Bu etiket zaten sistemde mevcut.");
 
         var tag = new Tag { Name = request.Name.Trim() };
         _db.Tags.Add(tag);
@@ -440,14 +445,14 @@ public class AdminService : IAdminService
             await _db.SaveChangesAsync();
         }
 
-        return (true, "Yeni etiket başarıyla oluşturuldu.", new { id = tag.Id, name = tag.Name });
+        return ServiceResult<object>.Success(new { id = tag.Id, name = tag.Name }, "Yeni etiket başarıyla oluşturuldu.");
     }
 
-    public async Task<(bool isSuccess, string message)> DeleteTagAsync(int id, int? currentUserId)
+    public async Task<ServiceResult> DeleteTagAsync(int id, int? currentUserId)
     {
         var tag = await _db.Tags.FindAsync(id);
         if (tag == null)
-            return (false, "Etiket bulunamadı.");
+            return ServiceResult.Failure("Etiket bulunamadı.");
 
         tag.IsDeleted = true;
         tag.DeletedAt = DateTime.Now;
@@ -468,14 +473,14 @@ public class AdminService : IAdminService
         });
 
         await _db.SaveChangesAsync();
-        return (true, "Etiket sistemden başarıyla silindi.");
+        return ServiceResult.Success("Etiket sistemden başarıyla silindi.");
     }
 
-    public async Task<(bool isSuccess, string message)> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req)
+    public async Task<ServiceResult> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req)
     {
         var tag = await _db.Tags.Include(t => t.Computers).FirstOrDefaultAsync(t => t.Id == tagId);
         if (tag == null)
-            return (false, "Etiket bulunamadı.");
+            return ServiceResult.Failure("Etiket bulunamadı.");
 
         tag.Computers.Clear();
 
@@ -483,14 +488,16 @@ public class AdminService : IAdminService
         foreach (var c in computers) tag.Computers.Add(c);
 
         await _db.SaveChangesAsync();
-        return (true, "Seçilen cihazlar etikete başarıyla atandı.");
+        return ServiceResult.Success("Seçilen cihazlar etikete başarıyla atandı.");
     }
 
-    public async Task<List<int>> GetTagAssignedComputerIdsAsync(int tagId)
+    public async Task<ServiceResult<List<int>>> GetTagAssignedComputerIdsAsync(int tagId)
     {
-        return await _db.Tags
+        var data = await _db.Tags
             .Where(t => t.Id == tagId)
             .SelectMany(t => t.Computers.Select(c => c.Id))
             .ToListAsync();
+
+        return ServiceResult<List<int>>.Success(data);
     }
 }

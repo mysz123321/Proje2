@@ -13,6 +13,7 @@ public class AgentTelemetryController : ControllerBase
     private readonly IAgentTelemetryService _telemetryService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
+
     // ScopeFactory kalıyor çünkü Task.Run (arka plan işlemi) Controller'ın yaşam döngüsünden bağımsız çalışmak zorundadır.
     public AgentTelemetryController(IAgentTelemetryService telemetryService, IServiceScopeFactory scopeFactory, IConfiguration config)
     {
@@ -29,18 +30,25 @@ public class AgentTelemetryController : ControllerBase
 
         var result = await _telemetryService.IngestAsync(dto, agentKey, ct);
 
-        if (result.IsUnauthorized) return Unauthorized();
-        if (result.IsBadRequest) return BadRequest(result.ErrorMessage);
-
-        // Servisten dönen mailler varsa arka planda fırlat!
-        if (result.Alerts != null && result.Alerts.Any())
+        // Hata Kontrolü (Yetki ve Kötü İstek durumları)
+        if (!result.IsSuccess)
         {
+            if (result.Message == "Unauthorized")
+                return Unauthorized();
+
+            return BadRequest(result.Message);
+        }
+
+        // Servisten dönen mailler result.Data içerisinde taşınıyor, varsa arka planda fırlat!
+        if (result.Data != null && result.Data.Any())
+        {
+            var alerts = result.Data; // Arka plan işlemi için referansı kopyalıyoruz
             _ = Task.Run(async () =>
             {
                 using var scope = _scopeFactory.CreateScope();
                 var mailSender = scope.ServiceProvider.GetRequiredService<IMailSender>();
 
-                foreach (var alert in result.Alerts)
+                foreach (var alert in alerts)
                 {
                     try { await mailSender.SendAsync(alert.Email, alert.Subject, alert.Body); }
                     catch (Exception ex) { Console.WriteLine($"[Alert Mail Error]: {ex.Message}"); }
@@ -63,8 +71,11 @@ public class AgentTelemetryController : ControllerBase
 
         var result = await _telemetryService.GetLatestAsync(userId, isAdmin);
 
-        return Ok(result);
+        // Hata kontrolü
+        if (!result.IsSuccess)
+            return BadRequest(result.Message);
+
+        // Başarılıysa veriyi dön
+        return Ok(result.Data);
     }
-
-
 }

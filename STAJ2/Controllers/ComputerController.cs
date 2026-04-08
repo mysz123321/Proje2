@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
-using Staj2.Services.Models; // Request modellerini (DTO) görmek için
+using Staj2.Services.Models;
 using STAJ2.Authorization;
 using System.Globalization;
 using System.Security.Claims;
@@ -40,10 +40,14 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.GetComputerAsync(id, GetUserId(), IsAdmin());
 
-        if (result.isForbidden) return Forbid();
-        if (result.isNotFound) return NotFound();
+        if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
+            if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
+        }
 
-        return Ok(result.data);
+        return Ok(result.Data);
     }
 
     // 2. Disk Listesi
@@ -53,9 +57,13 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.GetComputerDisksAsync(computerId, GetUserId(), IsAdmin());
 
-        if (result.isForbidden) return Forbid();
+        if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
+            return BadRequest(new { message = result.Message });
+        }
 
-        return Ok(result.data);
+        return Ok(result.Data);
     }
 
     // 3. Eşik Değerlerini Güncelle
@@ -65,12 +73,14 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.UpdateThresholdsAsync(computerId, request, GetUserId(), IsAdmin());
 
-        if (result.isForbidden) return Forbid();
-        if (result.isNotFound) return NotFound(new { message = result.message });
-        if (result.isBadRequest) return BadRequest(new { message = result.message });
+        if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
+            if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
+        }
 
-        // Sabit yazı yerine Servis'ten gelen mesajı dönüyoruz
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // 4. Etiket Atama
@@ -80,10 +90,13 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.UpdateComputerTagsAsync(id, request);
 
-        if (result.isNotFound) return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
+        }
 
-        // Sabit yazı yerine Servis'ten gelen mesajı dönüyoruz
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // 5. İsim Değiştirme
@@ -93,14 +106,13 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.UpdateDisplayNameAsync(request);
 
-        if (!result.isSuccess)
+        if (!result.IsSuccess)
         {
-            if (result.isNotFound) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        // Sabit yazı yerine Servis'ten gelen mesajı dönüyoruz
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
@@ -110,10 +122,10 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end);
 
-        if (result.isBadRequest)
-            return BadRequest(new { message = result.errorMessage, title = "Uyarı" });
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Message, title = "Uyarı" });
 
-        return Ok(result.data);
+        return Ok(result.Data);
     }
 
     // 7. Tüm Cihazları Getir
@@ -122,7 +134,7 @@ public class ComputerController : ControllerBase
     public async Task<IActionResult> GetAllComputers()
     {
         var result = await _computerService.GetAllComputersAsync(GetUserId(), IsAdmin());
-        return Ok(result);
+        return Ok(result.Data);
     }
 
     // 8. Cihaz Silme (Sadece Pasif Olanlar İçin Soft Delete)
@@ -132,14 +144,13 @@ public class ComputerController : ControllerBase
     {
         var result = await _computerService.DeleteComputerAsync(id);
 
-        if (result.isNotFound)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
+        }
 
-        if (result.isBadRequest)
-            return BadRequest(new { message = result.message });
-
-        // Sabit yazı yerine Servis'ten gelen mesajı dönüyoruz
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // 9. Etiketleri Getir
@@ -147,21 +158,23 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetMyTags()
     {
-        var tags = await _computerService.GetMyTagsAsync(GetUserId(), IsAdmin());
-        return Ok(tags);
+        var result = await _computerService.GetMyTagsAsync(GetUserId(), IsAdmin());
+        return Ok(result.Data);
     }
 
+    // 10. Performans Raporu
     [HttpGet("performance-report")]
     public async Task<IActionResult> GetPerformanceReport()
     {
-        var report = await _computerService.GetPerformanceReportAsync(GetUserId(), IsAdmin());
-        return Ok(report);
+        var result = await _computerService.GetPerformanceReportAsync(GetUserId(), IsAdmin());
+        return Ok(result.Data);
     }
 
+    // 11. Metrik Özeti
     [HttpGet("{id:int}/metrics-summary")]
     public async Task<IActionResult> GetMetricsSummary(int id, [FromQuery] string metricType, [FromQuery] string? diskName = null)
     {
         var result = await _computerService.GetMetricsSummaryAsync(id, metricType, diskName);
-        return Ok(result);
+        return Ok(result.Data);
     }
 }

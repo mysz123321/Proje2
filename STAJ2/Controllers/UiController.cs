@@ -30,11 +30,12 @@ public class UiController : ControllerBase
     public async Task<IActionResult> GetSidebarItems()
     {
         int userId = GetUserId();
-        if (userId == 0) return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+        if (userId == 0) return Unauthorized(new { message = "Kullanıcı kimliği doğrulanamadı." });
 
         var result = await _uiService.GetSidebarItemsAsync(userId);
 
-        if (!result.IsSuccess) return NotFound(result.ErrorMessage);
+        // result.ErrorMessage yerine yeni standart olan result.Message'ı kullanıyoruz
+        if (!result.IsSuccess) return NotFound(new { message = result.Message });
 
         return Ok(result.Data);
     }
@@ -43,20 +44,21 @@ public class UiController : ControllerBase
     public async Task<IActionResult> GetMyPermissions()
     {
         int userId = GetUserId();
-        if (userId == 0) return Unauthorized("Kullanıcı kimliği doğrulanamadı.");
+        if (userId == 0) return Unauthorized(new { message = "Kullanıcı kimliği doğrulanamadı." });
 
         var result = await _uiService.GetMyPermissionsAsync(userId);
 
-        if (!result.IsSuccess) return NotFound(result.ErrorMessage);
+        if (!result.IsSuccess) return NotFound(new { message = result.Message });
 
-        return Ok(result.Permissions);
+        // Eski result.Permissions yerine standart result.Data kullanıyoruz
+        return Ok(result.Data);
     }
 
+    // İleride açmak istersen bu şekilde standart formata uygun açabilirsin:
     //[HttpGet("user-actions")]
-    //[Authorize]
     //public async Task<IActionResult> GetUserActions()
     //{
-    //    var actions = await _uiService.GetUserActionsAsync();
-    //    return Ok(actions);
+    //    var result = await _uiService.GetUserActionsAsync();
+    //    return Ok(result.Data);
     //}
 }

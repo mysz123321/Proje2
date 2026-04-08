@@ -42,8 +42,8 @@ public class AdminController : ControllerBase
     [HasPermission(AppPermissions.User_Read, AppPermissions.User_ManageRoles, AppPermissions.User_ManageComputers, AppPermissions.User_ManageTags)]
     public async Task<IActionResult> GetAllUsers()
     {
-        var users = await _adminService.GetAllUsersAsync();
-        return Ok(users);
+        var result = await _adminService.GetAllUsersAsync();
+        return Ok(result.Data);
     }
 
     [HttpDelete("users/{id:int}")]
@@ -52,10 +52,10 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.DeleteUserAsync(id, GetCurrentUserId());
 
-        if (!result.isSuccess)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpPut("users/{userId}/change-roles")]
@@ -64,13 +64,14 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.ChangeUserRolesAsync(userId, request);
 
-        if (!result.isSuccess)
+        if (!result.IsSuccess)
         {
-            if (result.message.Contains("bulunamadı")) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı"))
+                return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
@@ -79,8 +80,8 @@ public class AdminController : ControllerBase
     [HasPermission(AppPermissions.User_Manage)]
     public async Task<IActionResult> PendingRequests()
     {
-        var requests = await _adminService.GetPendingRequestsAsync();
-        return Ok(requests);
+        var result = await _adminService.GetPendingRequestsAsync();
+        return Ok(result.Data);
     }
 
     [HttpPost("requests/reject")]
@@ -91,11 +92,12 @@ public class AdminController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.message.Contains("bulunamadı")) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı"))
+                return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpPost("requests/approve/{id}")]
@@ -106,11 +108,12 @@ public class AdminController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.message.Contains("bulunamadı")) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı"))
+                return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // --- ETİKET YÖNETİMİ ---
@@ -119,8 +122,8 @@ public class AdminController : ControllerBase
     [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetTags()
     {
-        var tags = await _adminService.GetTagsAsync();
-        return Ok(tags);
+        var result = await _adminService.GetTagsAsync();
+        return Ok(result.Data);
     }
 
     [HttpPost("tags")]
@@ -130,10 +133,10 @@ public class AdminController : ControllerBase
         var result = await _adminService.CreateTagAsync(request, GetCurrentUserId());
 
         if (!result.IsSuccess)
-            return BadRequest(new { message = result.message });
+            return BadRequest(new { message = result.Message });
 
-        // BURASI DÜZELTİLDİ: Artık UI'ın beklediği "message" parametresini de dönüyoruz
-        return Ok(new { message = result.message, data = result.CreatedTag });
+        // result.Data içinde { id = tag.Id, name = tag.Name } objesi var
+        return Ok(new { message = result.Message, data = result.Data });
     }
 
     [HttpDelete("tags/{id:int}")]
@@ -142,10 +145,10 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.DeleteTagAsync(id, GetCurrentUserId());
 
-        if (!result.isSuccess)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpPost("tags/{tagId:int}/assign-computers")]
@@ -154,18 +157,18 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.AssignComputersToTagAsync(tagId, req);
 
-        if (!result.isSuccess)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpGet("tags/{tagId:int}/assigned-computer-ids")]
     [HasPermission(AppPermissions.Tag_Manage)]
     public async Task<IActionResult> GetTagAssignedComputerIds(int tagId)
     {
-        var assignedIds = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
-        return Ok(assignedIds);
+        var result = await _adminService.GetTagAssignedComputerIdsAsync(tagId);
+        return Ok(result.Data);
     }
 
     // --- ROL VE YETKİ YÖNETİMİ ---
@@ -174,24 +177,24 @@ public class AdminController : ControllerBase
     [HasPermission(AppPermissions.None)]
     public async Task<IActionResult> GetRoles()
     {
-        var roles = await _adminService.GetRolesAsync();
-        return Ok(roles);
+        var result = await _adminService.GetRolesAsync();
+        return Ok(result.Data);
     }
 
     [HttpGet("permissions")]
     [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> GetAllPermissions()
     {
-        var permissions = await _adminService.GetAllPermissionsAsync();
-        return Ok(permissions);
+        var result = await _adminService.GetAllPermissionsAsync();
+        return Ok(result.Data);
     }
 
     [HttpGet("roles/{roleId:int}/permissions")]
     [HasPermission(AppPermissions.Role_Manage)]
     public async Task<IActionResult> GetRolePermissions(int roleId)
     {
-        var permissionIds = await _adminService.GetRolePermissionsAsync(roleId);
-        return Ok(permissionIds);
+        var result = await _adminService.GetRolePermissionsAsync(roleId);
+        return Ok(result.Data);
     }
 
     [HttpPost("roles/{roleId:int}/permissions")]
@@ -200,13 +203,14 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.UpdateRolePermissionsAsync(roleId, request, GetCurrentUserId());
 
-        if (!result.isSuccess)
+        if (!result.IsSuccess)
         {
-            if (result.message.Contains("bulunamadı")) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı"))
+                return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpPost("roles")]
@@ -215,10 +219,10 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.CreateRoleAsync(request, GetCurrentUserId());
 
-        if (!result.isSuccess)
-            return BadRequest(new { message = result.message });
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpDelete("roles/{id:int}")]
@@ -227,13 +231,14 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.DeleteRoleAsync(id, GetCurrentUserId());
 
-        if (!result.isSuccess)
+        if (!result.IsSuccess)
         {
-            if (result.message.Contains("bulunamadı")) return NotFound(new { message = result.message });
-            return BadRequest(new { message = result.message });
+            if (result.Message != null && result.Message.Contains("bulunamadı"))
+                return NotFound(new { message = result.Message });
+            return BadRequest(new { message = result.Message });
         }
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
@@ -244,9 +249,10 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.GetUserAccessAsync(userId);
 
-        if (result == null) return NotFound(new { message = "Kullanıcı bulunamadı." });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(result);
+        return Ok(result.Data);
     }
 
     [HttpPost("users/{userId:int}/assign-computers")]
@@ -255,10 +261,10 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.AssignComputersAsync(userId, req);
 
-        if (!result.isSuccess)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpPost("users/{userId:int}/assign-tags")]
@@ -267,17 +273,17 @@ public class AdminController : ControllerBase
     {
         var result = await _adminService.AssignTagsAsync(userId, req);
 
-        if (!result.isSuccess)
-            return NotFound(new { message = result.message });
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Message });
 
-        return Ok(new { message = result.message });
+        return Ok(new { message = result.Message });
     }
 
     [HttpGet("computers/all")]
     [HasPermission(AppPermissions.User_ManageComputers, AppPermissions.Tag_Manage)]
     public async Task<IActionResult> GetAllComputersForAssignment()
     {
-        var computers = await _adminService.GetAllComputersForAssignmentAsync();
-        return Ok(computers);
+        var result = await _adminService.GetAllComputersForAssignmentAsync();
+        return Ok(result.Data);
     }
 }
