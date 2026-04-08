@@ -40,7 +40,16 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
         var user = context.HttpContext.User;
         if (user.Identity?.IsAuthenticated != true)
         {
-            context.Result = new UnauthorizedResult(); // 401
+            // ESKİ KOD: context.Result = new UnauthorizedResult(); // 401
+            // YENİ KOD: JSON formatında başlık ve mesaj dönüyoruz
+            context.Result = new JsonResult(new
+            {
+                title = "Oturum Süresi Doldu",
+                message = "Lütfen tekrar giriş yapınız."
+            })
+            {
+                StatusCode = StatusCodes.Status401Unauthorized
+            };
             return;
         }
 
@@ -49,7 +58,15 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
 
         if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
         {
-            context.Result = new UnauthorizedResult();
+            // ESKİ KOD: context.Result = new UnauthorizedResult();
+            context.Result = new JsonResult(new
+            {
+                title = "Oturum Hatası",
+                message = "Kullanıcı kimliği doğrulanamadı. Lütfen tekrar giriş yapınız."
+            })
+            {
+                StatusCode = StatusCodes.Status401Unauthorized
+            };
             return;
         }
 
@@ -63,7 +80,16 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
 
         if (!hasPermission)
         {
-            context.Result = new ForbidResult(); // 403
+            // ESKİ KOD: context.Result = new ForbidResult(); // 403
+            // YENİ KOD: JSON formatında başlık ve mesaj dönüyoruz
+            context.Result = new JsonResult(new
+            {
+                title = "Yetkisiz Erişim",
+                message = "Bu menüyü görüntülemek veya bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır."
+            })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
         }
     }
 }
