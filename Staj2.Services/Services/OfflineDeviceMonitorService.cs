@@ -2,20 +2,26 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 
 namespace Staj2.Services.Services;
 
+// NOT: BackgroundService bir abstract class olduğu için BaseService'den miras alamayız.
+// Ayrıca bu bir daemon (arka plan işçisi) olduğu için ServiceResult dönmez.
 public class OfflineDeviceMonitorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _config;
+    private readonly ILogger<OfflineDeviceMonitorService> _logger;
 
-    public OfflineDeviceMonitorService(IServiceProvider serviceProvider, IConfiguration config)
+    // YENİ: Hataları konsola/loglara basabilmek için ILogger ekledik
+    public OfflineDeviceMonitorService(IServiceProvider serviceProvider, IConfiguration config, ILogger<OfflineDeviceMonitorService> logger)
     {
         _serviceProvider = serviceProvider;
         _config = config;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -24,13 +30,26 @@ public class OfflineDeviceMonitorService : BackgroundService
         // Yani bu döngü SADECE proje çalışırken döner. Proje kapanırsa döngü biter.
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Bekleme süresini config'den al, yoksa varsayılan olarak 60 saniye kullan
-            int checkIntervalSeconds = _config.GetValue<int>("Alerting:CheckIntervalSeconds", 60);
+            try
+            {
+                // Bekleme süresini config'den al, yoksa varsayılan olarak 60 saniye kullan
+                int checkIntervalSeconds = _config.GetValue<int>("Alerting:CheckIntervalSeconds", 60);
 
-            await Task.Delay(TimeSpan.FromSeconds(checkIntervalSeconds), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(checkIntervalSeconds), stoppingToken);
 
-            // Kontrol metodunu çağır
-            await CheckOfflineDevicesAsync(stoppingToken);
+                // Kontrol metodunu çağır
+                await CheckOfflineDevicesAsync(stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Uygulama kapatılırken Task.Delay iptal edildiğinde buraya düşer, güvenli çıkış.
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Arka plan servisinin tamamen çökmesini engellemek için ana bir try-catch
+                _logger.LogError(ex, "Offline cihaz kontrol servisinde beklenmeyen bir hata oluştu.");
+            }
         }
     }
 
@@ -88,7 +107,15 @@ public class OfflineDeviceMonitorService : BackgroundService
 
             foreach (var email in finalRecipients)
             {
-                await mailSender.SendAsync(email, subject, body);
+                // YENİ: Mail gönderimini try-catch içine aldık ki SMTP patlarsa DB güncellemesi iptal olmasın!
+                try
+                {
+                    await mailSender.SendAsync(email, subject, body);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Mail gönderilemedi: {email}");
+                }
             }
 
             computer.IsOfflineAlertSent = true;

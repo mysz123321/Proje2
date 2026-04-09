@@ -12,103 +12,112 @@ using System.Text;
 
 namespace Staj2.Services.Services;
 
-public class AuthService : IAuthService
+// YENİ: BaseService'den miras alıyoruz
+public class AuthService : BaseService, IAuthService
 {
-    private readonly AppDbContext _db;
     private readonly IConfiguration _config;
 
-    public AuthService(AppDbContext db, IConfiguration config)
+    // YENİ: AppDbContext'i base (BaseService) sınıfa gönderiyoruz
+    public AuthService(AppDbContext db, IConfiguration config) : base(db)
     {
-        _db = db;
         _config = config;
     }
 
-    public async Task<ServiceResult<object>> LoginAsync(LoginRequest request)
+    // YAZMA İŞLEMİ (Refresh Token ekleniyor) - Sarmalandı
+    public Task<ServiceResult<object>> LoginAsync(LoginRequest request)
     {
-        var user = await _db.Users
-            .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
-            .FirstOrDefaultAsync(x => x.Email == request.Email);
-
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return ServiceResult<object>.Failure("Giriş bilgileri hatalı");
-
-        var accessToken = CreateJwtToken(user);
-
-        // Refresh Token gün sayısını config'den çekiyoruz
-        int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
-        var refreshToken = new RefreshToken
+        return ExecuteWithDbHandlingAsync<object>(async () =>
         {
-            Token = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
-            UserId = user.Id
-        };
+            var user = await _db.Users
+                .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
+                .FirstOrDefaultAsync(x => x.Email == request.Email);
 
-        _db.RefreshTokens.Add(refreshToken);
-        await _db.SaveChangesAsync();
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+                return ServiceResult<object>.Failure("Giriş bilgileri hatalı");
 
-        var data = new
-        {
-            token = accessToken,
-            refreshToken = refreshToken.Token,
-            user.Username,
-            permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
-        };
+            var accessToken = CreateJwtToken(user);
 
-        return ServiceResult<object>.Success(data, "Giriş başarılı.");
+            // Refresh Token gün sayısını config'den çekiyoruz
+            int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
+            var refreshToken = new RefreshToken
+            {
+                Token = Guid.NewGuid().ToString("N"),
+                ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
+                UserId = user.Id
+            };
+
+            _db.RefreshTokens.Add(refreshToken);
+            await _db.SaveChangesAsync();
+
+            var data = new
+            {
+                token = accessToken,
+                refreshToken = refreshToken.Token,
+                user.Username,
+                permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
+            };
+
+            return ServiceResult<object>.Success(data, "Giriş başarılı.");
+        }, "Oturum (Refresh Token)");
     }
 
-    public async Task<ServiceResult> SetPasswordAsync(SetPasswordRequest req)
+    // YAZMA İŞLEMİ (Yeni Kullanıcı Ekleniyor) - Sarmalandı
+    public Task<ServiceResult> SetPasswordAsync(SetPasswordRequest req)
     {
-        var tokenHash = Sha256(req.Token);
-
-        var tokenRow = await _db.PasswordSetupTokens
-            .Include(x => x.RegistrationRequest)
-            .FirstOrDefaultAsync(x =>
-                x.TokenHash == tokenHash &&
-                !x.IsUsed &&
-                x.ExpiresAt > DateTime.Now);
-
-        if (tokenRow == null)
-            return ServiceResult.Failure("Token geçersiz veya süresi dolmuş.");
-
-        var rr = tokenRow.RegistrationRequest;
-
-        if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
+        return ExecuteWithDbHandlingAsync(async () =>
         {
-            return ServiceResult.Failure("Email veya kullanıcı adı eşleşmiyor.");
-        }
+            var tokenHash = Sha256(req.Token);
 
-        var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
-        if (exists)
-            return ServiceResult.Failure("Kullanıcı zaten oluşturulmuş.");
+            var tokenRow = await _db.PasswordSetupTokens
+                .Include(x => x.RegistrationRequest)
+                .FirstOrDefaultAsync(x =>
+                    x.TokenHash == tokenHash &&
+                    !x.IsUsed &&
+                    x.ExpiresAt > DateTime.Now);
 
-        var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+            if (tokenRow == null)
+                return ServiceResult.Failure("Token geçersiz veya süresi dolmuş.");
 
-        var newUser = new User
-        {
-            Username = rr.Username,
-            Email = rr.Email,
-            PasswordHash = hash,
-            IsApproved = true
-        };
+            var rr = tokenRow.RegistrationRequest;
 
-        var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
-        if (requestedRole != null)
-        {
-            newUser.Roles.Add(requestedRole);
-        }
+            if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
+            {
+                return ServiceResult.Failure("Email veya kullanıcı adı eşleşmiyor.");
+            }
 
-        _db.Users.Add(newUser);
+            var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
+            if (exists)
+                return ServiceResult.Failure("Kullanıcı zaten oluşturulmuş.");
 
-        tokenRow.IsUsed = true;
-        tokenRow.UsedAt = DateTime.Now;
+            var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
 
-        await _db.SaveChangesAsync();
+            var newUser = new User
+            {
+                Username = rr.Username,
+                Email = rr.Email,
+                PasswordHash = hash,
+                IsApproved = true
+            };
 
-        return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
+            var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
+            if (requestedRole != null)
+            {
+                newUser.Roles.Add(requestedRole);
+            }
+
+            _db.Users.Add(newUser);
+
+            tokenRow.IsUsed = true;
+            tokenRow.UsedAt = DateTime.Now;
+
+            await _db.SaveChangesAsync();
+
+            return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
+        }, "Kullanıcı Hesabı Kurulumu");
     }
 
+    // SADECE OKUMA İŞLEMİ - Sarmalanmadı
     public async Task<ServiceResult<List<string>>> GetMyPermissionsAsync(int userId)
     {
         var user = await _db.Users
@@ -130,45 +139,49 @@ public class AuthService : IAuthService
         return ServiceResult<List<string>>.Success(currentPermissions);
     }
 
-    public async Task<ServiceResult<object>> RefreshTokenAsync(string token)
+    // YAZMA/GÜNCELLEME İŞLEMİ (Token İptal/Yeni Token Ekleniyor) - Sarmalandı
+    public Task<ServiceResult<object>> RefreshTokenAsync(string token)
     {
-        var storedToken = await _db.RefreshTokens
-            .Include(x => x.User)
-                .ThenInclude(u => u.Roles)
-                    .ThenInclude(r => r.RolePermissions)
-                        .ThenInclude(rp => rp.Permission)
-            .FirstOrDefaultAsync(x => x.Token == token && !x.IsRevoked && x.ExpiresAt > DateTime.Now);
-
-        if (storedToken == null)
-            return ServiceResult<object>.Failure("Geçersiz veya süresi dolmuş token.");
-
-        storedToken.IsRevoked = true;
-
-        var newAccessToken = CreateJwtToken(storedToken.User);
-        var newRefreshToken = Guid.NewGuid().ToString("N");
-
-        // Yeni refresh token oluşturulurken config kullanıyoruz.
-        int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
-
-        _db.RefreshTokens.Add(new RefreshToken
+        return ExecuteWithDbHandlingAsync<object>(async () =>
         {
-            Token = newRefreshToken,
-            ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
-            UserId = storedToken.UserId
-        });
+            var storedToken = await _db.RefreshTokens
+                .Include(x => x.User)
+                    .ThenInclude(u => u.Roles)
+                        .ThenInclude(r => r.RolePermissions)
+                            .ThenInclude(rp => rp.Permission)
+                .FirstOrDefaultAsync(x => x.Token == token && !x.IsRevoked && x.ExpiresAt > DateTime.Now);
 
-        await _db.SaveChangesAsync();
+            if (storedToken == null)
+                return ServiceResult<object>.Failure("Geçersiz veya süresi dolmuş token.");
 
-        var data = new
-        {
-            Token = newAccessToken,
-            RefreshToken = newRefreshToken
-        };
+            storedToken.IsRevoked = true;
 
-        return ServiceResult<object>.Success(data, "Token başarıyla yenilendi.");
+            var newAccessToken = CreateJwtToken(storedToken.User);
+            var newRefreshToken = Guid.NewGuid().ToString("N");
+
+            // Yeni refresh token oluşturulurken config kullanıyoruz.
+            int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
+
+            _db.RefreshTokens.Add(new RefreshToken
+            {
+                Token = newRefreshToken,
+                ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
+                UserId = storedToken.UserId
+            });
+
+            await _db.SaveChangesAsync();
+
+            var data = new
+            {
+                Token = newAccessToken,
+                RefreshToken = newRefreshToken
+            };
+
+            return ServiceResult<object>.Success(data, "Token başarıyla yenilendi.");
+        }, "Oturum Yenileme");
     }
 
-    // --- HELPER METOTLAR ---
+    // --- HELPER METOTLAR (Sarmalanmadı, DB işlemi yok) ---
     private static string Sha256(string input)
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
