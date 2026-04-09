@@ -193,7 +193,10 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Username);
+
+                entity.HasIndex(e => e.Username).IsUnique().HasFilter("[IsDeleted] = 0");
+                entity.HasIndex(e => e.Email).IsUnique().HasFilter("[IsDeleted] = 0");
+
                 entity.Property(e => e.Email).HasMaxLength(200);
                 entity.Property(e => e.PasswordHash).HasMaxLength(200);
             });
@@ -201,17 +204,24 @@ namespace Staj2.Infrastructure.Data
             modelBuilder.Entity<Role>(entity =>
             {
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                // EKLENDİ: Rol adı silinmemişler arasında benzersiz olmalı
+                entity.HasIndex(e => e.Name).IsUnique().HasFilter("[IsDeleted] = 0");
             });
 
             modelBuilder.Entity<Tag>(entity =>
             {
                 entity.Property(e => e.Name).HasMaxLength(200);
+                // EKLENDİ: Etiket adı silinmemişler arasında benzersiz olmalı
+                entity.HasIndex(e => e.Name).IsUnique().HasFilter("[IsDeleted] = 0");
             });
 
             modelBuilder.Entity<Computer>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.MacAddress);
+
+                // EKLENDİ: MAC adresi silinmemiş bilgisayarlar arasında benzersiz olmalı
+                entity.HasIndex(e => e.MacAddress).IsUnique().HasFilter("[IsDeleted] = 0");
+
                 entity.Property(e => e.MacAddress).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.MachineName).HasMaxLength(200);
                 entity.Property(e => e.DisplayName).HasMaxLength(200);
