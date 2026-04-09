@@ -68,6 +68,6 @@ public class RegistrationService : BaseService, IRegistrationService
             // Başarılı dönüş: Tuple tipinde Data yolluyoruz
             return ServiceResult<(int RequestId, string Email, string Username)>.Success((rr.Id, rr.Email, rr.Username));
 
-        }, "Kayıt Talebi");
+        }, "Kayıt Talebi",DbOperation.Create);
     }
 }

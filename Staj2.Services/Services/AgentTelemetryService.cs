@@ -245,7 +245,7 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             // Başarılı durumunda uyarı listesini Data olarak dönüyoruz
             return ServiceResult<List<(string Email, string Subject, string Body)>>.Success(alertsToSend);
 
-        }, "Cihaz Telemetri Verisi");
+        }, "Cihaz Telemetri Verisi", DbOperation.Create);
     }
 
     // SADECE OKUMA İŞLEMİ - Sarmalanmadı

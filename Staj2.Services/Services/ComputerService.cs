@@ -107,7 +107,7 @@ public class ComputerService : BaseService, IComputerService
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Sınırlar başarıyla kaydedildi.");
-        }, "Cihaz Eşik Değerleri");
+        }, "Cihaz Eşik Değerleri",DbOperation.Update);
     }
 
     // 4. Etiket Atama (YAZMA İŞLEMİ - SARMALANDI)
@@ -126,7 +126,7 @@ public class ComputerService : BaseService, IComputerService
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Etiketler cihaza başarıyla atandı.");
-        }, "Cihaz Etiketleri");
+        }, "Cihaz Etiketleri", DbOperation.Update);
     }
 
     // 5. İsim Değiştirme (YAZMA İŞLEMİ - SARMALANDI)
@@ -154,7 +154,7 @@ public class ComputerService : BaseService, IComputerService
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Cihaz ismi başarıyla güncellendi.");
-        }, "Cihaz Görünen İsmi");
+        }, "Cihaz Görünen İsmi", DbOperation.Update);
     }
 
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (Okuma İşlemi)
@@ -261,7 +261,7 @@ public class ComputerService : BaseService, IComputerService
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Bilgisayar sistemden başarıyla silinmiştir.");
-        }, "Cihaz");
+        }, "Cihaz",DbOperation.Delete);
     }
 
     // 9. Kullanıcının Etiketlerini Getir (Okuma İşlemi)

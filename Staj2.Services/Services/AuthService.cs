@@ -58,7 +58,7 @@ public class AuthService : BaseService, IAuthService
             };
 
             return ServiceResult<object>.Success(data, "Giriş başarılı.");
-        }, "Oturum (Refresh Token)");
+        }, "Oturum (Refresh Token)", DbOperation.Create);
     }
 
     // YAZMA İŞLEMİ (Yeni Kullanıcı Ekleniyor) - Sarmalandı
@@ -114,7 +114,7 @@ public class AuthService : BaseService, IAuthService
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
-        }, "Kullanıcı Hesabı Kurulumu");
+        }, "Kullanıcı", DbOperation.Create);
     }
 
     // SADECE OKUMA İŞLEMİ - Sarmalanmadı
@@ -178,7 +178,7 @@ public class AuthService : BaseService, IAuthService
             };
 
             return ServiceResult<object>.Success(data, "Token başarıyla yenilendi.");
-        }, "Oturum Yenileme");
+        }, "Oturum Yenileme", DbOperation.Create);
     }
 
     // --- HELPER METOTLAR (Sarmalanmadı, DB işlemi yok) ---

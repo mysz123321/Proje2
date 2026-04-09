@@ -88,7 +88,7 @@ public class AdminService : BaseService, IAdminService
             }
 
             return ServiceResult.Success("Rol başarıyla oluşturuldu.");
-        }, "Rol");
+        }, "Rol", DbOperation.Create);
     }
 
     public Task<ServiceResult> UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsRequest request, int? currentUserId)
@@ -116,7 +116,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Rol yetkileri başarıyla güncellendi.");
-        }, "Rol Yetkileri");
+        }, "Rol Yetkileri", DbOperation.Update);
     }
 
     public Task<ServiceResult> DeleteRoleAsync(int id, int? currentUserId)
@@ -154,7 +154,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Rol başarıyla silindi.");
-        }, "Rol");
+        }, "Rol", DbOperation.Delete);
     }
 
     // --- KULLANICI YÖNETİMİ ---
@@ -203,7 +203,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Kullanıcı sistemden başarıyla silindi.");
-        }, "Kullanıcı");
+        }, "Kullanıcı", DbOperation.Delete);
     }
 
     public Task<ServiceResult> ChangeUserRolesAsync(int userId, ChangeRolesRequest request)
@@ -237,7 +237,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Kullanıcının rolleri başarıyla güncellendi.");
-        }, "Kullanıcı Rolleri");
+        }, "Kullanıcı Rolleri", DbOperation.Update);
     }
 
     // --- KAYIT İSTEKLERİ YÖNETİMİ ---
@@ -288,7 +288,7 @@ public class AdminService : BaseService, IAdminService
             }
 
             return ServiceResult.Success("Kayıt talebi reddedildi ve kullanıcıya e-posta gönderildi.");
-        }, "Kayıt Talebi");
+        }, "Kayıt Talebi", DbOperation.Update);
     }
 
     public Task<ServiceResult> ApproveRequestAsync(int id, ChangeRoleRequest? req, int? adminId)
@@ -358,7 +358,7 @@ public class AdminService : BaseService, IAdminService
             }
 
             return ServiceResult.Success("Kayıt talebi onaylandı ve kurulum e-postası gönderildi.");
-        }, "Kayıt Talebi");
+        }, "Kayıt Talebi", DbOperation.Update);
     }
 
     // --- KULLANICI CİHAZ VE ETİKET ATAMA YÖNETİMİ ---
@@ -401,7 +401,7 @@ public class AdminService : BaseService, IAdminService
             _cache.Remove($"PerformanceReport_User_{userId}");
 
             return ServiceResult.Success("Kullanıcının cihaz erişimleri başarıyla güncellendi.");
-        }, "Kullanıcı Cihaz Ataması");
+        }, "Kullanıcı Cihaz Ataması", DbOperation.Update);
     }
 
     public Task<ServiceResult> AssignTagsAsync(int userId, AssignTagsRequest req)
@@ -420,7 +420,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Kullanıcının etiket erişimleri başarıyla güncellendi.");
-        }, "Kullanıcı Etiket Ataması");
+        }, "Kullanıcı Etiket Ataması", DbOperation.Update);
     }
 
     public async Task<ServiceResult<object>> GetAllComputersForAssignmentAsync()
@@ -479,7 +479,7 @@ public class AdminService : BaseService, IAdminService
             }
 
             return ServiceResult<object>.Success(new { id = tag.Id, name = tag.Name }, "Yeni etiket başarıyla oluşturuldu.");
-        }, "Etiket");
+        }, "Etiket", DbOperation.Create);
     }
 
     public Task<ServiceResult> DeleteTagAsync(int id, int? currentUserId)
@@ -510,7 +510,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Etiket sistemden başarıyla silindi.");
-        }, "Etiket");
+        }, "Etiket", DbOperation.Delete);
     }
 
     public Task<ServiceResult> AssignComputersToTagAsync(int tagId, AssignComputersToTagRequest req)
@@ -528,7 +528,7 @@ public class AdminService : BaseService, IAdminService
 
             await _db.SaveChangesAsync();
             return ServiceResult.Success("Seçilen cihazlar etikete başarıyla atandı.");
-        }, "Cihazları Etikete Atama");
+        }, "Cihazları Etikete Atama", DbOperation.Update);
     }
 
     public async Task<ServiceResult<List<int>>> GetTagAssignedComputerIdsAsync(int tagId)
