@@ -111,7 +111,9 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             dto.Tags = computer.Tags?.Select(t => t.Name).ToList() ?? new List<string>();
             dto.CpuThreshold = computer.CpuThreshold;
             dto.RamThreshold = computer.RamThreshold;
-
+            dto.DiskThresholds = computer.Disks
+    .Where(d => d.ThresholdPercent.HasValue)
+    .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
             // 4. Metrik Kaydı
             var metric = new ComputerMetric
             {
@@ -286,6 +288,9 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 dto.Tags = comp.Tags.Select(t => t.Name).ToList();
                 dto.CpuThreshold = comp.CpuThreshold;
                 dto.RamThreshold = comp.RamThreshold;
+                dto.DiskThresholds = comp.Disks
+    .Where(d => d.ThresholdPercent.HasValue)
+    .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
                 filteredList.Add(dto);
             }
         }

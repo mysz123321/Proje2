@@ -154,12 +154,23 @@ function renderTable() {
         `;
 
         if (a.diskUsage && a.diskUsage !== "-") {
-            let regex = /([A-Za-z]:[\\/]?)[^\d]*(\d+)[^\d]*/g;
+            // HATA 1 ÇÖZÜMÜ: Sondaki [^\d]* ifadesi silindi, böylece regex sıradaki diskin harfini yutmayacak.
+            let regex = /([A-Za-z]:[\\/]?)[^\d]*(\d+)/g;
             let match;
+
             while ((match = regex.exec(a.diskUsage)) !== null) {
-                let dName = match[1].replace(/[\\/]/g, '');
+                let dName = match[1].replace(/[\\/]/g, ''); // Ekranda şık durması için "C:" formatında bırakıyoruz.
                 let dUsage = parseInt(match[2]);
-                let dColor = getDonutColor(dUsage, 90);
+
+                // HATA 2 ÇÖZÜMÜ: Eşik değerini backend'den okurken eşleşmesi için ":" işaretini temizliyoruz (Örn: "C:" -> "C" oluyor).
+                let diskKey = dName.replace(':', '');
+
+                let diskLimit = 90; // Varsayılan
+                if (a.diskThresholds && a.diskThresholds[diskKey] !== undefined) {
+                    diskLimit = a.diskThresholds[diskKey]; // Artık eşleşme başarılı olacak ve backend'den gelen limit kullanılacak!
+                }
+
+                let dColor = getDonutColor(dUsage, diskLimit);
 
                 sensorsHtml += `
                 <div class="col">
@@ -578,6 +589,7 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
 }
 
 // ----------------- MİNİ RAPOR OLUŞTURUCU (ALGORİTMA 2 VE 3) -----------------
+// ----------------- MİNİ RAPOR OLUŞTURUCU VE TAHMİNLEME (ALGORİTMA) -----------------
 function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
     const container = document.getElementById(containerId);
     if (!container || !dataList || dataList.length === 0) return;
@@ -591,7 +603,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
     let minItem = dataList[0];
     let sum = 0;
 
-    // Min, Max, Ortalama Bulma
+    // 1. Min, Max, Ortalama Bulma
     dataList.forEach(item => {
         let val = item[valueKey];
         if (val > maxItem[valueKey]) maxItem = item;
@@ -601,20 +613,17 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
 
     let avg = sum / dataList.length;
 
-    // Ortalama üstü olanları al, ancak zaten "Maksimum" kutusunda gösterdiğimiz saniyeyi tekrar etme
     let aboveAvgList = dataList.filter(item => item[valueKey] > avg && item.createdAt !== maxItem.createdAt);
-    aboveAvgList.sort((a, b) => b[valueKey] - a[valueKey]); // Büyükten küçüğe
+    aboveAvgList.sort((a, b) => b[valueKey] - a[valueKey]);
 
-    // Top 8 Zirvesi: Birbirini tekrar eden zirvelerin elenmesi (En az 5 dakika fark olsun)
+    // Zirve Noktaları Filtreleme (En az 5 dk aralıklı top 8)
     let top8 = [];
-    const MIN_TIME_DIFF_MS = 5 * 60 * 1000; // 5 dakika
+    const MIN_TIME_DIFF_MS = 5 * 60 * 1000;
 
     for (let item of aboveAvgList) {
-        if (top8.length >= 8) break; // LİMİT 8 YAPILDI
+        if (top8.length >= 8) break;
 
         const itemTime = new Date(item.createdAt).getTime();
-
-        // Zaten eklenen zirvelerle zaman farkını kontrol et
         const isTooClose = top8.some(topItem => {
             return Math.abs(new Date(topItem.createdAt).getTime() - itemTime) < MIN_TIME_DIFF_MS;
         });
@@ -624,7 +633,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
         }
     }
 
-    // Renk Tasarımı ve Koyu Tema Uyumluluğu (var(--text-muted) eklendi)
+    // --- TEMEL GÖSTERGELER HTML ---
     let html = `
         <div class="row g-2 text-center text-md-start small">
             <div class="col-md-4">
@@ -651,7 +660,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
         </div>
     `;
 
-    // Zirve Noktaları HTML
+    // --- ZİRVE NOKTALARI HTML ---
     if (top8.length > 0) {
         html += `
             <div class="mt-3">
@@ -672,7 +681,132 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
         html += `<div class="mt-3 small fst-italic px-2 border-start border-3 border-secondary" style="color: var(--text-muted);"><i class="bi bi-info-circle"></i> Ortalama ile maksimum arasında listelenecek belirgin bir zirve bulunamadı.</div>`;
     }
 
-    container.innerHTML = html;
+    // --- 2. TAHMİNİ DOLUM RAPORU (DOĞRUSAL REGRESYON İLE 5 PARÇA ANALİZİ) ---
+    let predictionHtml = '';
+
+    // CPU bir depolama alanı olmadığı için dolum analizi yapmayı atlıyoruz
+    if (valueKey === 'cpuUsage') {
+        predictionHtml = `
+            <div class="mt-3 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
+                <i class="bi bi-cpu text-secondary fs-3 me-3"></i>
+                <div>
+                    <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">CPU Trend Analizi</h6>
+                    <small style="color: var(--text-muted);">CPU kapasite bazlı bir depolama birimi değil, anlık işlem birimidir. Bu nedenle doğrusal regresyon ile "dolum" tahmini yapmak teknik olarak uygun değildir.</small>
+                </div>
+            </div>
+        `;
+    }
+    else if (dataList.length >= 5) {
+        // Disk ve RAM için mevcut 5 parçalı Doğrusal Regresyon (Trend) kodları çalışmaya devam edecek...
+        let chunks = [[], [], [], [], []];
+        let chunkSize = Math.max(1, dataList.length / 5);
+
+        dataList.forEach((item, index) => {
+            let chunkIndex = Math.min(4, Math.floor(index / chunkSize));
+            chunks[chunkIndex].push(item);
+        });
+
+        let chunkAverages = chunks.map(chunk => {
+            let sumTime = 0, sumVal = 0;
+            chunk.forEach(item => {
+                sumTime += new Date(item.createdAt).getTime();
+                sumVal += item[valueKey];
+            });
+            return { time: sumTime / chunk.length, val: sumVal / chunk.length };
+        });
+
+        let n = chunkAverages.length;
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+        let startTime = chunkAverages[0].time;
+
+        chunkAverages.forEach(p => {
+            let x = (p.time - startTime) / 1000;
+            let y = p.val;
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            sumXX += x * x;
+        });
+
+        let denominator = (n * sumXX) - (sumX * sumX);
+        let slope = denominator !== 0 ? ((n * sumXY) - (sumX * sumY)) / denominator : 0;
+
+        let predictionText = '';
+        let iconClass = 'bi-info-circle text-info';
+        let bgClass = 'rgba(13, 202, 240, 0.1)';
+        let borderClass = 'border-info';
+
+        let currentVal = dataList[dataList.length - 1][valueKey];
+        let remainingVal = 100 - currentVal;
+
+        if (slope > 0.00001) {
+            if (remainingVal <= 0) {
+                predictionText = "Bu metrik halihazırda %100 seviyesine (tam kapasiteye) ulaşmış durumda.";
+                iconClass = 'bi-exclamation-octagon text-danger';
+                bgClass = 'rgba(220, 53, 69, 0.1)';
+                borderClass = 'border-danger';
+            } else {
+                let timeToFullSeconds = remainingVal / slope;
+                let days = Math.floor(timeToFullSeconds / (60 * 60 * 24));
+                let hours = Math.floor((timeToFullSeconds % (60 * 60 * 24)) / (60 * 60));
+
+                if (days > 365) {
+                    predictionText = "Artış ivmesi çok düşük, mevcut kullanımla dolması 1 yıldan uzun sürecek.";
+                    iconClass = 'bi-shield-check text-success';
+                    bgClass = 'rgba(25, 135, 84, 0.1)';
+                    borderClass = 'border-success';
+                } else {
+                    predictionText = `Tüm verilerdeki artış trendine göre yaklaşık <b>${days} gün ${hours} saat</b> sonra kapasite dolacak.`;
+                    iconClass = 'bi-clock-history text-warning';
+                    bgClass = 'rgba(255, 193, 7, 0.1)';
+                    borderClass = 'border-warning';
+                }
+            }
+        } else {
+            predictionText = "Kullanım düşüş eğiliminde veya stabil. Dolum riski tespit edilmedi.";
+            iconClass = 'bi-graph-down-arrow text-success';
+            bgClass = 'rgba(25, 135, 84, 0.1)';
+            borderClass = 'border-success';
+        }
+
+        let debugInfoHtml = `
+            <div class="mt-3 pt-2 border-top border-secondary" style="font-size: 0.75rem; font-family: monospace; opacity: 0.8;">
+                <div class="fw-bold text-info mb-1"><i class="bi bi-bug"></i> Algoritma Çıktıları (Geliştirici Modu)</div>
+                <div class="row g-1">
+                    ${chunkAverages.map((c, i) => `
+                        <div class="col-6 col-md-4">
+                            <span style="color: var(--text-muted);">P${i + 1}:</span> 
+                            <span class="text-light">${((c.time - startTime) / 1000).toFixed(0)}sn | %${c.val.toFixed(2)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="mt-1 text-warning fw-bold">Hesaplanan Eğim (Sn. Başına Artış): ${slope.toFixed(7)}</div>
+            </div>
+        `;
+
+        predictionHtml = `
+            <div class="mt-3 p-3 border rounded shadow-sm d-flex align-items-start ${borderClass}" style="background: ${bgClass};">
+                <i class="bi ${iconClass} fs-3 me-3 mt-1"></i>
+                <div class="w-100">
+                    <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">Tahmini Dolum Analizi (Trend)</h6>
+                    <small style="color: var(--text-muted); display: block;">${predictionText}</small>
+                    ${debugInfoHtml}
+                </div>
+            </div>
+        `;
+    } else {
+        predictionHtml = `
+            <div class="mt-3 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
+                <i class="bi bi-hourglass text-secondary fs-3 me-3"></i>
+                <div>
+                    <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">Tahmini Dolum Analizi (Trend)</h6>
+                    <small style="color: var(--text-muted);">Sağlıklı bir trend tahmini yapabilmek için seçilen aralıkta en az 5 veri noktasına ihtiyaç var.</small>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html + predictionHtml;
     container.style.display = 'block';
 }
 
