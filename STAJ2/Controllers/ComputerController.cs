@@ -184,4 +184,16 @@ public class ComputerController : ControllerBase
         var result = await _computerService.GetMetricsTrendDataAsync(id, metricType, diskName);
         return Ok(result.Data);
     }
+
+    [HttpPost("{id}/threshold-analysis")]
+    public async Task<IActionResult> GetThresholdAnalysis(int id, [FromBody] ThresholdReportRequestDto request)
+    {
+        // Servis çağrısında 4. parametre olarak request.DiskThresholds (Dictionary) gönderiliyor.
+        var result = await _computerService.GetThresholdAnalysisAsync(id, request.CpuThreshold, request.RamThreshold, request.DiskThresholds);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Message });
+
+        return Ok(result.Data);
+    }
 }

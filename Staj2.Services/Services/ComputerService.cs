@@ -62,7 +62,10 @@ public class ComputerService : BaseService, IComputerService
         if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
             return ServiceResult<object>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
 
-        var disks = await _db.ComputerDisks.Where(d => d.ComputerId == computerId).ToListAsync();
+        var disks = await _db.ComputerDisks
+        .Where(d => d.ComputerId == computerId)
+        .Select(d => new { d.Id, d.DiskName })
+        .ToListAsync();
         return ServiceResult<object>.Success(disks);
     }
 
@@ -522,5 +525,106 @@ public class ComputerService : BaseService, IComputerService
         }
 
         return ServiceResult<object>.Success(new List<object>());
+    }
+    public async Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, double cpuThreshold, double ramThreshold, Dictionary<string, double> diskThresholds)
+    {
+        var computer = await _db.Computers
+            .Include(c => c.Disks)
+            .FirstOrDefaultAsync(c => c.Id == computerId);
+
+        if (computer == null)
+            return ServiceResult<ThresholdAnalysisReportDto>.Failure("Cihaz bulunamadı.");
+
+        var startDate = DateTime.UtcNow.AddMonths(-1);
+        double maxGapSeconds = 120; // 2 Dakika kopukluk toleransı
+
+        // 🚀 CPU ve RAM Verilerini Çekme (Performans Optimize Edildi)
+        var metrics = await _db.ComputerMetrics
+            .AsNoTracking()
+            .Where(m => m.ComputerId == computerId && m.CreatedAt >= startDate)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
+            .ToListAsync();
+
+        double totalActiveSeconds = 0;
+        double cpuBelowSeconds = 0;
+        double ramBelowSeconds = 0;
+
+        for (int i = 1; i < metrics.Count; i++)
+        {
+            var prev = metrics[i - 1];
+            var curr = metrics[i];
+
+            double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
+
+            if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
+            {
+                totalActiveSeconds += gapSeconds;
+
+                if (curr.CpuUsage < cpuThreshold) cpuBelowSeconds += gapSeconds;
+                if (curr.RamUsage < ramThreshold) ramBelowSeconds += gapSeconds;
+            }
+        }
+
+        var report = new ThresholdAnalysisReportDto
+        {
+            ComputerId = computer.Id,
+            ComputerName = computer.DisplayName ?? computer.MachineName,
+            TotalActiveSeconds = totalActiveSeconds,
+            CpuResult = new MetricThresholdResult
+            {
+                ThresholdValue = cpuThreshold,
+                BelowThresholdSeconds = cpuBelowSeconds,
+                TotalActiveSeconds = totalActiveSeconds
+            },
+            RamResult = new MetricThresholdResult
+            {
+                ThresholdValue = ramThreshold,
+                BelowThresholdSeconds = ramBelowSeconds,
+                TotalActiveSeconds = totalActiveSeconds
+            }
+        };
+
+        // 🚀 Aynı mantığı Diskler için uygulayalım (Performans Optimize Edildi)
+        foreach (var disk in computer.Disks)
+        {
+            // İlgili diske ait eşik değerini sözlükten çek (yoksa varsayılan 80)
+            double currentDiskThreshold = diskThresholds != null && diskThresholds.ContainsKey(disk.DiskName)
+                                          ? diskThresholds[disk.DiskName] : 80;
+
+            var diskMetrics = await _db.DiskMetrics
+                .AsNoTracking()
+                .Where(m => m.ComputerDiskId == disk.Id && m.CreatedAt >= startDate)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new { m.CreatedAt, m.UsedPercent })
+                .ToListAsync();
+
+            double diskTotalSeconds = 0;
+            double diskBelowSeconds = 0;
+
+            for (int i = 1; i < diskMetrics.Count; i++)
+            {
+                var prev = diskMetrics[i - 1];
+                var curr = diskMetrics[i];
+
+                double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
+
+                if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
+                {
+                    diskTotalSeconds += gapSeconds;
+                    if (curr.UsedPercent < currentDiskThreshold) diskBelowSeconds += gapSeconds;
+                }
+            }
+
+            report.DiskResults.Add(new DiskThresholdResult
+            {
+                DiskName = disk.DiskName,
+                ThresholdValue = currentDiskThreshold,
+                BelowThresholdSeconds = diskBelowSeconds,
+                TotalActiveSeconds = diskTotalSeconds
+            });
+        }
+
+        return ServiceResult<ThresholdAnalysisReportDto>.Success(report);
     }
 }

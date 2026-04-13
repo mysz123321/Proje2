@@ -451,6 +451,69 @@
 
                 if (window.ui.loadReportsView) window.ui.loadReportsView();
                 break;
+            case 'threshold-analysis':
+                title.innerText = "Eşik Analiz Raporu";
+                subtitle.innerText = "Cihazın son 1 aylık verilerinde belirlenen eşik değerlerinin altında kalma süresi.";
+
+                const threshFilterEl = document.getElementById('globalFilters');
+                if (threshFilterEl) { threshFilterEl.classList.remove('d-flex'); threshFilterEl.classList.add('d-none'); }
+
+                content.innerHTML = `
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders"></i> Parametreler</h5>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
+                        <select id="ta-computer-select" class="form-select" onchange="ui.loadComputerDisksForAnalysis(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                            <option value="">Yükleniyor...</option>
+                        </select>
+                    </div>
+
+                    <div id="ta-params-container" style="display:none; padding-top:10px; border-top:1px solid var(--border-color);">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">CPU EŞİK DEĞERİ (%)</label>
+                            <input type="number" id="ta-cpu" class="form-control" value="50" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">RAM EŞİK DEĞERİ (%)</label>
+                            <input type="number" id="ta-ram" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+
+                        <div id="ta-dynamic-disks" class="mb-4">
+                            </div>
+
+                        <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="ui.generateThresholdReport()">
+                            <i class="bi bi-bar-chart-line me-2"></i> Raporu Oluştur
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div id="ta-results-container" style="display:none;">
+                <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                    <div class="card-header border-bottom border-secondary pt-3 pb-2" style="background:transparent;">
+                        <h5 class="fw-bold mb-0" style="color:var(--text-title);" id="ta-result-title">Sonuçlar</h5>
+                        <small style="color: var(--text-muted) !important; opacity: 0.85; font-weight: 500;">Son 1 Aylık Veri Analizi (Kopukluklar hariç tutulmuştur)</small>
+                    </div>
+                    <div class="card-body" id="ta-metrics-body">
+                        </div>
+                </div>
+            </div>
+            <div id="ta-placeholder" class="text-center py-5 mt-5">
+                <i class="bi bi-pc-display display-1 text-muted opacity-50 mb-3 d-block"></i>
+                <h4 class="fw-light" style="color: var(--text-title);">Önce bir cihaz seçerek işleme başlayın.</h4>
+            </div>
+        </div>
+    </div>`;
+
+                ui.loadThresholdComputers();
+                break;
         }
 
     }
@@ -1648,6 +1711,154 @@
                     document.getElementById('best-ram-body').innerHTML = errorMsg;
                     document.getElementById('worst-ram-body').innerHTML = errorMsg;
                 }
+            }
+        },
+        loadThresholdComputers: async () => {
+            const selectEl = document.getElementById('ta-computer-select');
+            if (!selectEl) return;
+            try {
+                const computers = await api.get('/api/Computer');
+                const activeComputers = computers.filter(c => !c.isDeleted);
+                let optionsHtml = '<option value="">-- Cihaz Seçiniz --</option>';
+                activeComputers.forEach(c => {
+                    optionsHtml += `<option value="${c.id}">${c.displayName || c.machineName}</option>`;
+                });
+                selectEl.innerHTML = optionsHtml;
+            } catch (e) {
+                selectEl.innerHTML = '<option value="">Cihazlar yüklenemedi</option>';
+            }
+        },
+        loadComputerDisksForAnalysis: async (compId) => {
+            const paramsContainer = document.getElementById('ta-params-container');
+            const diskContainer = document.getElementById('ta-dynamic-disks');
+
+            if (!compId) {
+                paramsContainer.style.display = 'none';
+                return;
+            }
+
+            diskContainer.innerHTML = '<div class="spinner-border spinner-border-sm text-info"></div> <small class="text-muted">Diskler yükleniyor...</small>';
+            paramsContainer.style.display = 'block';
+
+            try {
+                const disks = await api.get(`/api/Computer/${compId}/disks`);
+
+                if (disks.length === 0) {
+                    diskContainer.innerHTML = '<small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Bu cihaza ait disk bulunamadı.</small>';
+                    return;
+                }
+
+                let diskHtml = `<hr style="border-color:var(--border-color);"><label class="form-label fw-bold small text-muted">DİSK EŞİK DEĞERLERİ (%)</label>`;
+
+                disks.forEach(d => {
+                    // Güvenli class id oluşturmak için regex ile özel karakterleri temizliyoruz
+                    let safeClassId = "disk-thresh-" + btoa(d.diskName).replace(/=/g, '');
+                    diskHtml += `
+                    <div class="input-group mb-2 input-group-sm">
+                        <span class="input-group-text fw-bold" style="background:var(--bg-card-muted); color:var(--text-main); border-color:var(--border-input); min-width: 60px;">${d.diskName}</span>
+                        <input type="number" class="form-control dynamic-disk-input" data-diskname="${d.diskName}" value="80" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                    </div>`;
+                });
+
+                diskContainer.innerHTML = diskHtml;
+            } catch (error) {
+                diskContainer.innerHTML = '<small class="text-danger">Diskler yüklenirken hata oluştu.</small>';
+            }
+        },
+        generateThresholdReport: async () => {
+            const compId = document.getElementById('ta-computer-select').value;
+            const cpuThresh = document.getElementById('ta-cpu').value;
+            const ramThresh = document.getElementById('ta-ram').value;
+
+            if (!compId) {
+                Swal.fire({ icon: 'warning', text: 'Lütfen bir cihaz seçin.' });
+                return;
+            }
+
+            // Disk inputlarını toparla ve DTO sözlüğüne (Dictionary) çevir
+            let diskThresholdsObj = {};
+            document.querySelectorAll('.dynamic-disk-input').forEach(input => {
+                let dName = input.getAttribute('data-diskname');
+                let dValue = parseFloat(input.value);
+                diskThresholdsObj[dName] = dValue;
+            });
+
+            document.getElementById('ta-placeholder').style.display = 'none';
+            const container = document.getElementById('ta-results-container');
+            const metricsBody = document.getElementById('ta-metrics-body');
+
+            container.style.display = 'block';
+            metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-muted">Veriler analiz ediliyor...</div></div>';
+
+            try {
+                const requestPayload = {
+                    CpuThreshold: parseFloat(cpuThresh),
+                    RamThreshold: parseFloat(ramThresh),
+                    DiskThresholds: diskThresholdsObj
+                };
+
+                const data = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
+
+                document.getElementById('ta-result-title').innerText = `${data.computerName} - Eşik Analizi`;
+
+                // 🚀 YENİ: Saniyeyi Saat ve Dakikaya çeviren fonksiyon
+                const formatTime = (totalSeconds) => {
+                    if (!totalSeconds || totalSeconds <= 0) return "0 Dakika";
+
+                    const h = Math.floor(totalSeconds / 3600);
+                    const m = Math.floor((totalSeconds % 3600) / 60);
+
+                    let timeStr = "";
+                    if (h > 0) timeStr += `${h} Saat `;
+                    if (m > 0) timeStr += `${m} Dakika`;
+
+                    if (h === 0 && m === 0) return "< 1 Dakika"; // 1 dakikadan kısaysa
+
+                    return timeStr.trim();
+                };
+
+                let html = `
+                    <div class="alert mb-4" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: var(--text-main);">
+                        <i class="bi bi-clock-history me-2 text-info fs-5 align-middle"></i>
+                        <span class="align-middle"><strong>Toplam Analiz Edilen Cihaz Açık Kalma Süresi:</strong> ${formatTime(data.totalActiveSeconds)}</span>
+                    </div>
+                `;
+
+                const renderBar = (title, icon, colorClass, resultObj) => {
+                    if (resultObj.totalActiveSeconds === 0) return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Yeterli veri yok.</div></div>`;
+
+                    const pct = resultObj.belowThresholdPercentage.toFixed(1);
+                    return `
+                    <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title} (Eşik: %${resultObj.thresholdValue})</h6>
+                            <span class="badge bg-${colorClass} fs-6">%${pct} Eşiğin Altında</span>
+                        </div>
+                        <p class="small mb-3" style="color:var(--text-main);">Bu metrik, ölçülen sürenin <b style="color:var(--text-title); font-size:1.05em;">${formatTime(resultObj.belowThresholdSeconds)}</b> boyunca belirlediğiniz eşiğin altında seyretmiş.</p>
+                        <div class="progress" style="height: 14px; background-color: var(--bg-input); border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
+                            <div class="progress-bar bg-${colorClass}" role="progressbar" style="width: ${pct}%"></div>
+                        </div>
+                    </div>`;
+                };
+
+                html += renderBar("CPU Kullanımı", "bi bi-cpu", "info", data.cpuResult);
+                html += renderBar("RAM Kullanımı", "bi bi-memory", "danger", data.ramResult);
+
+                if (data.diskResults && data.diskResults.length > 0) {
+                    html += `<h6 class="fw-bold mb-3 mt-4 pb-2 border-bottom" style="color:var(--text-title); border-color:var(--border-color) !important;">
+                                <i class="bi bi-hdd-network text-success me-2"></i>Disk Kullanımları
+                             </h6>`;
+                    data.diskResults.forEach(d => {
+                        html += renderBar(`Disk ${d.diskName}`, "bi bi-hdd", "success", d);
+                    });
+                } else {
+                    html += `<div class="text-muted small mt-4"><i class="bi bi-hdd-network me-2"></i>Disk verisi bulunamadı.</div>`;
+                }
+
+                metricsBody.innerHTML = html;
+
+            } catch (e) {
+                metricsBody.innerHTML = `<div class="alert alert-danger" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">${e.message}</div>`;
             }
         }
     };
