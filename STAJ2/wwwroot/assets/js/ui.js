@@ -1361,7 +1361,7 @@
             }
 
             // 2. YETERLİ VERİ KONTROLÜ (En az 15 Ham Veri)
-            if (!dataList || dataList.length < 15) {
+            if (!dataList || dataList.length < 15000) {
                 return `
             <div class="mt-4 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
                 <i class="bi bi-hourglass text-secondary fs-3 me-3"></i>
