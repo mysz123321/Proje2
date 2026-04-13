@@ -1297,10 +1297,9 @@
             modal.show();
 
             try {
+                // 1. Genel özet istatistiklerini çek
                 let apiUrl = `/api/Computer/${computerId}/metrics-summary?metricType=${metricType}`;
-                if (diskName) {
-                    apiUrl += `&diskName=${encodeURIComponent(diskName)}`;
-                }
+                if (diskName) apiUrl += `&diskName=${encodeURIComponent(diskName)}`;
 
                 const summary = await window.api.get(apiUrl);
 
@@ -1318,10 +1317,163 @@
                 document.getElementById('rdm-loading').style.display = 'none';
                 document.getElementById('rdm-content').style.display = 'block';
 
+                // 2. YENİ: Trend Analizi için Son 5 veri gününün verilerini çek ve modal içine yerleştir
+                let trendContainer = document.getElementById('rdm-trend-analysis');
+                if (!trendContainer) {
+                    trendContainer = document.createElement('div');
+                    trendContainer.id = 'rdm-trend-analysis';
+                    document.getElementById('rdm-content').appendChild(trendContainer);
+                }
+
+                // HATA BURADAYDI: ÇÖZÜM İÇİN IF KONTROLÜ EKLENDİ
+                if (metricType === 'CPU') {
+                    // Eğer CPU ise hiç Backend'e istek atma, doğrudan sonucu yazdır
+                    trendContainer.innerHTML = window.ui.calculateReportTrend([], 'CPU');
+                } else {
+                    // RAM veya Disk ise yükleniyor animasyonu göster ve veritabanından çek
+                    trendContainer.innerHTML = '<div class="text-center mt-4"><div class="spinner-border spinner-border-sm text-secondary"></div><small class="ms-2 text-muted">Son 5 veri günü baz alınarak trend analizi yapılıyor...</small></div>';
+
+                    let trendApiUrl = `/api/Computer/${computerId}/metrics-trend?metricType=${metricType}`;
+                    if (diskName) trendApiUrl += `&diskName=${encodeURIComponent(diskName)}`;
+
+                    const trendData = await window.api.get(trendApiUrl);
+                    trendContainer.innerHTML = window.ui.calculateReportTrend(trendData, metricType);
+                }
+
             } catch (error) {
                 console.error("Metrik detayları çekilirken hata:", error);
                 document.getElementById('rdm-loading').innerHTML = `<div class="text-danger"><i class="bi bi-x-circle fs-4 d-block mb-2"></i> Veriler alınamadı: <br><small>${error.message}</small></div>`;
             }
+        },
+
+        // Modal içine eklenecek, veriyi 5'e bölüp hesaplayan trend algoritması
+        calculateReportTrend: (dataList, metricType) => {
+            if (metricType === 'CPU') {
+                return `
+                    <div class="mt-4 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
+                        <i class="bi bi-cpu text-secondary fs-3 me-3"></i>
+                        <div>
+                            <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">CPU Trend Analizi</h6>
+                            <small style="color: var(--text-muted);">CPU kapasite bazlı bir depolama birimi değil, anlık işlem birimidir. Bu nedenle "dolum" tahmini yapmak teknik olarak uygun değildir.</small>
+                        </div>
+                    </div>`;
+            }
+
+            if (!dataList || dataList.length < 5) {
+                return `
+                    <div class="mt-4 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
+                        <i class="bi bi-hourglass text-secondary fs-3 me-3"></i>
+                        <div>
+                            <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">Tahmini Dolum Analizi (Trend)</h6>
+                            <small style="color: var(--text-muted);">Sağlıklı bir trend tahmini yapabilmek için seçilen aralıkta en az 5 veri noktasına ihtiyaç var. Mevcut veri sayısı: ${dataList ? dataList.length : 0}</small>
+                        </div>
+                    </div>`;
+            }
+
+            // Gelen son 5 günlük veriyi 5 eşit parçaya bölüyoruz
+            let chunks = [[], [], [], [], []];
+            let chunkSize = Math.max(1, dataList.length / 5);
+
+            dataList.forEach((item, index) => {
+                let chunkIndex = Math.min(4, Math.floor(index / chunkSize));
+                chunks[chunkIndex].push(item);
+            });
+
+            // Doğrusal Regresyon Hesaplamaları
+            let chunkAverages = chunks.map(chunk => {
+                let sumTime = 0, sumVal = 0;
+                chunk.forEach(item => {
+                    sumTime += new Date(item.createdAt).getTime();
+                    sumVal += item.value;
+                });
+                return { time: sumTime / chunk.length, val: sumVal / chunk.length };
+            });
+
+            let n = chunkAverages.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            let startTime = chunkAverages[0].time;
+
+            chunkAverages.forEach(p => {
+                let x = (p.time - startTime) / 1000;
+                let y = p.val;
+                sumX += x;
+                sumY += y;
+                sumXY += x * y;
+                sumXX += x * x;
+            });
+
+            let denominator = (n * sumXX) - (sumX * sumX);
+            let slope = denominator !== 0 ? ((n * sumXY) - (sumX * sumY)) / denominator : 0;
+
+            let predictionText = '';
+            let iconClass = 'bi-info-circle text-info';
+            let bgClass = 'rgba(13, 202, 240, 0.1)';
+            let borderClass = 'border-info';
+
+            let currentVal = dataList[dataList.length - 1].value;
+            let remainingVal = 100 - currentVal;
+
+            if (slope > 0.00001) {
+                if (remainingVal <= 0) {
+                    predictionText = "Bu metrik halihazırda %100 seviyesine (tam kapasiteye) ulaşmış durumda.";
+                    iconClass = 'bi-exclamation-octagon text-danger';
+                    bgClass = 'rgba(220, 53, 69, 0.1)';
+                    borderClass = 'border-danger';
+                } else {
+                    let timeToFullSeconds = remainingVal / slope;
+                    let days = Math.floor(timeToFullSeconds / (60 * 60 * 24));
+                    let hours = Math.floor((timeToFullSeconds % (60 * 60 * 24)) / (60 * 60));
+
+                    if (days > 365) {
+                        predictionText = "Artış ivmesi çok düşük, mevcut kullanımla dolması 1 yıldan uzun sürecek.";
+                        iconClass = 'bi-shield-check text-success';
+                        bgClass = 'rgba(25, 135, 84, 0.1)';
+                        borderClass = 'border-success';
+                    } else {
+                        predictionText = `En son veri gönderilen 5 güne ait artış trendine göre yaklaşık <b>${days} gün ${hours} saat</b> sonra kapasite dolacak.`;
+                        iconClass = 'bi-clock-history text-warning';
+                        bgClass = 'rgba(255, 193, 7, 0.1)';
+                        borderClass = 'border-warning';
+                    }
+                }
+            } else {
+                predictionText = "Kullanım düşüş eğiliminde veya stabil. Dolum riski tespit edilmedi.";
+                iconClass = 'bi-graph-down-arrow text-success';
+                bgClass = 'rgba(25, 135, 84, 0.1)';
+                borderClass = 'border-success';
+            }
+
+            // YENİ EKLENEN KISIM: Algoritma Çıktıları (Geliştirici / Debug Görünümü)
+            let debugInfoHtml = `
+                <div class="mt-3 pt-3 border-top border-secondary" style="font-size: 0.75rem; font-family: monospace; opacity: 0.9;">
+                    <div class="fw-bold text-info mb-2"><i class="bi bi-calculator"></i> Algoritma Çıktıları (5 Parçalı Veri)</div>
+                    <div class="row g-2 mb-2">
+                        ${chunkAverages.map((c, i) => `
+                            <div class="col-6 col-sm-4">
+                                <div class="p-1 rounded border border-secondary" style="background: rgba(0,0,0,0.15);">
+                                    <span style="color: var(--text-muted);">P${i + 1}:</span>
+                                    <span class="fw-bold" style="color: var(--text-main);">%${c.val.toFixed(2)}</span>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">${((c.time - startTime) / 1000).toFixed(0)}sn fark</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="text-warning fw-bold mt-2" style="font-size: 0.8rem;">
+                        <i class="bi bi-graph-up-arrow"></i> Hesaplanan Eğim (Sn. Başına Artış): ${slope.toFixed(8)}
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="mt-4 p-3 border rounded shadow-sm d-flex align-items-start ${borderClass}" style="background: ${bgClass};">
+                    <i class="bi ${iconClass} fs-3 me-3 mt-1"></i>
+                    <div class="w-100">
+                        <h6 class="mb-1 fw-bold" style="color: var(--text-title); font-size: 0.85rem;">Tahmini Dolum Analizi (Son 5 Veri Günü)</h6>
+                        <small style="color: var(--text-muted); display: block;">${predictionText}</small>
+                        ${debugInfoHtml}
+                    </div>
+                </div>
+            `;
         },
         renderReportList: (stateKey, tbodyId, valKey, colorClass) => {
             const tbody = document.getElementById(tbodyId);

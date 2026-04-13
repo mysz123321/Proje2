@@ -177,4 +177,11 @@ public class ComputerController : ControllerBase
         var result = await _computerService.GetMetricsSummaryAsync(id, metricType, diskName);
         return Ok(result.Data);
     }
+    // 12. Rapor Detayları İçin Trend Verisi
+    [HttpGet("{id:int}/metrics-trend")]
+    public async Task<IActionResult> GetMetricsTrendData(int id, [FromQuery] string metricType, [FromQuery] string? diskName = null)
+    {
+        var result = await _computerService.GetMetricsTrendDataAsync(id, metricType, diskName);
+        return Ok(result.Data);
+    }
 }

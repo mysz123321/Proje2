@@ -469,4 +469,58 @@ public class ComputerService : BaseService, IComputerService
 
         return ServiceResult<MetricSummaryDto>.Success(summary);
     }
+    // 12. Rapor Detayları İçin Son 5 Veri Gününün Trendi (Yeni Eklendi)
+    public async Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName)
+    {
+        if (metricType == "CPU" || metricType == "RAM")
+        {
+            // Sadece veri gönderilen günleri (Tarih bazında) bul ve son 5 tanesini al
+            var dates = await _db.ComputerMetrics
+                .Where(m => m.ComputerId == computerId)
+                .Select(m => m.CreatedAt.Date)
+                .Distinct()
+                .OrderByDescending(d => d)
+                .Take(5)
+                .ToListAsync();
+
+            if (!dates.Any()) return ServiceResult<object>.Success(new List<object>());
+
+            var minDate = dates.Min();
+            var maxDate = dates.Max().AddDays(1); // Son günün sonuna kadar kapsaması için 1 gün ekliyoruz
+
+            // Sadece tespit edilen 5 veri gününün aralığındaki metrikleri getir
+            var data = await _db.ComputerMetrics
+                .Where(m => m.ComputerId == computerId && m.CreatedAt >= minDate && m.CreatedAt < maxDate)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new { createdAt = m.CreatedAt, value = metricType == "CPU" ? m.CpuUsage : m.RamUsage })
+                .ToListAsync();
+
+            return ServiceResult<object>.Success(data);
+        }
+        else if (metricType.StartsWith("Disk") && !string.IsNullOrEmpty(diskName))
+        {
+            var dates = await _db.DiskMetrics
+                .Where(m => m.ComputerDisk.ComputerId == computerId && m.ComputerDisk.DiskName == diskName)
+                .Select(m => m.CreatedAt.Date)
+                .Distinct()
+                .OrderByDescending(d => d)
+                .Take(5)
+                .ToListAsync();
+
+            if (!dates.Any()) return ServiceResult<object>.Success(new List<object>());
+
+            var minDate = dates.Min();
+            var maxDate = dates.Max().AddDays(1);
+
+            var data = await _db.DiskMetrics
+                .Where(m => m.ComputerDisk.ComputerId == computerId && m.ComputerDisk.DiskName == diskName && m.CreatedAt >= minDate && m.CreatedAt < maxDate)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new { createdAt = m.CreatedAt, value = m.UsedPercent })
+                .ToListAsync();
+
+            return ServiceResult<object>.Success(data);
+        }
+
+        return ServiceResult<object>.Success(new List<object>());
+    }
 }

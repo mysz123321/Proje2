@@ -47,4 +47,5 @@ public interface IComputerService
     // 11. Metrik Özeti
     // Eskiden: Task<MetricSummaryDto>
     Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName);
+    Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName);
 }
