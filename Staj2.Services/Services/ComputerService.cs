@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
 using Staj2.Services.Interfaces;
 using Staj2.Services.Models;
@@ -64,11 +65,12 @@ public class ComputerService : BaseService, IComputerService
 
         var disks = await _db.ComputerDisks
         .Where(d => d.ComputerId == computerId)
-        .Select(d => new { d.Id, d.DiskName })
+        .Select(d => new { d.Id, d.DiskName, thresholdPercent = d.ThresholdPercent })
         .ToListAsync();
         return ServiceResult<object>.Success(disks);
     }
 
+    // 3. Eşik Değerlerini Güncelle (YAZMA İŞLEMİ - SARMALANDI)
     // 3. Eşik Değerlerini Güncelle (YAZMA İŞLEMİ - SARMALANDI)
     public Task<ServiceResult> UpdateThresholdsAsync(int computerId, UpdateThresholdsRequest request, int userId, bool isAdmin)
     {
@@ -96,6 +98,20 @@ public class ComputerService : BaseService, IComputerService
             if (computer == null)
                 return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
+            // YENİ: Eğer CPU veya RAM eşik değeri değişmişse History tablosuna log at
+            bool isComputerThresholdChanged = computer.CpuThreshold != request.CpuThreshold || computer.RamThreshold != request.RamThreshold;
+            if (isComputerThresholdChanged)
+            {
+                _db.ComputerThresholdHistories.Add(new ComputerThresholdHistory
+                {
+                    ComputerId = computer.Id,
+                    CpuThreshold = request.CpuThreshold,
+                    RamThreshold = request.RamThreshold,
+                    ActiveFrom = DateTime.Now // Değerin geçerli olmaya başladığı an
+                });
+            }
+
+            // Ana tabloyu güncelle (Yaklaşım 2: Güncel değeri ana tabloda tutuyoruz)
             computer.CpuThreshold = request.CpuThreshold;
             computer.RamThreshold = request.RamThreshold;
 
@@ -104,13 +120,24 @@ public class ComputerService : BaseService, IComputerService
                 foreach (var dReq in request.DiskThresholds)
                 {
                     var disk = computer.Disks.FirstOrDefault(d => d.DiskName == dReq.DiskName);
-                    if (disk != null) disk.ThresholdPercent = dReq.ThresholdPercent;
+                    if (disk != null && disk.ThresholdPercent != dReq.ThresholdPercent)
+                    {
+                        // YENİ: Disk eşik değeri değişmişse History tablosuna log at
+                        _db.DiskThresholdHistories.Add(new DiskThresholdHistory
+                        {
+                            ComputerDiskId = disk.Id,
+                            ThresholdPercent = dReq.ThresholdPercent,
+                            ActiveFrom = DateTime.Now
+                        });
+
+                        disk.ThresholdPercent = dReq.ThresholdPercent;
+                    }
                 }
             }
             await _db.SaveChangesAsync();
 
             return ServiceResult.Success("Sınırlar başarıyla kaydedildi.");
-        }, "Cihaz Eşik Değerleri",DbOperation.Update);
+        }, "Cihaz Eşik Değerleri", DbOperation.Update);
     }
 
     // 4. Etiket Atama (YAZMA İŞLEMİ - SARMALANDI)
@@ -528,14 +555,9 @@ public class ComputerService : BaseService, IComputerService
     }
     public async Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request)
     {
-        var computer = await _db.Computers
-            .Include(c => c.Disks)
-            .FirstOrDefaultAsync(c => c.Id == computerId);
+        var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
+        if (computer == null) return ServiceResult<ThresholdAnalysisReportDto>.Failure("Cihaz bulunamadı.");
 
-        if (computer == null)
-            return ServiceResult<ThresholdAnalysisReportDto>.Failure("Cihaz bulunamadı.");
-
-        // Tarihleri DTO'dan alıyoruz
         var startDate = request.StartDate;
         var endDate = request.EndDate;
         double maxGapSeconds = 120;
@@ -547,9 +569,19 @@ public class ComputerService : BaseService, IComputerService
             .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
             .ToListAsync();
 
+        // Geçmiş eşik değerlerini tarihe göre eskiden yeniye sıralı alıyoruz
+        var cpuRamHistories = await _db.ComputerThresholdHistories
+            .AsNoTracking()
+            .Where(h => h.ComputerId == computerId && h.ActiveFrom <= endDate)
+            .OrderBy(h => h.ActiveFrom)
+            .ToListAsync();
+
         double totalActiveSeconds = 0;
         double cpuBelowSeconds = 0;
         double ramBelowSeconds = 0;
+
+        // HISTORY POINTER: Sürekli baştan aramak yerine tarih ilerledikçe bu işaretçiyi ilerleteceğiz.
+        int historyIdx = 0;
 
         for (int i = 1; i < metrics.Count; i++)
         {
@@ -561,8 +593,25 @@ public class ComputerService : BaseService, IComputerService
             {
                 totalActiveSeconds += gapSeconds;
 
-                if (curr.CpuUsage < request.CpuThreshold) cpuBelowSeconds += gapSeconds;
-                if (curr.RamUsage < request.RamThreshold) ramBelowSeconds += gapSeconds;
+                // Metriğin tarihi, bir sonraki eşik değişimi tarihini geçtiyse (Örn: 15 Mart'ı geçtiysek) pointer'ı ilerlet.
+                // Bu sayede 1-15 Mart arası 1. elemana, 15-25 Mart arası 2. elemana bakar (Tam senin istediğin algoritma).
+                while (historyIdx + 1 < cpuRamHistories.Count && cpuRamHistories[historyIdx + 1].ActiveFrom <= curr.CreatedAt)
+                {
+                    historyIdx++;
+                }
+
+                // O anki (o segmentteki) eşik değerlerini al
+                double currentCpuThreshold = cpuRamHistories.Count > 0 && cpuRamHistories[historyIdx].CpuThreshold.HasValue
+                    ? cpuRamHistories[historyIdx].CpuThreshold.Value
+                    : (computer.CpuThreshold ?? 0);
+
+                double currentRamThreshold = cpuRamHistories.Count > 0 && cpuRamHistories[historyIdx].RamThreshold.HasValue
+                    ? cpuRamHistories[historyIdx].RamThreshold.Value
+                    : (computer.RamThreshold ?? 0);
+
+                // Değerlendirmeyi o dönemin eşiğine göre yap
+                if (curr.CpuUsage < currentCpuThreshold) cpuBelowSeconds += gapSeconds;
+                if (curr.RamUsage < currentRamThreshold) ramBelowSeconds += gapSeconds;
             }
         }
 
@@ -571,25 +620,18 @@ public class ComputerService : BaseService, IComputerService
             ComputerId = computer.Id,
             ComputerName = computer.DisplayName ?? computer.MachineName,
             TotalActiveSeconds = totalActiveSeconds,
-            CpuResult = new MetricThresholdResult
-            {
-                ThresholdValue = request.CpuThreshold, // Güncellendi
-                BelowThresholdSeconds = cpuBelowSeconds,
-                TotalActiveSeconds = totalActiveSeconds
-            },
-            RamResult = new MetricThresholdResult
-            {
-                ThresholdValue = request.RamThreshold, // Güncellendi
-                BelowThresholdSeconds = ramBelowSeconds,
-                TotalActiveSeconds = totalActiveSeconds
-            }
+            CpuResult = new MetricThresholdResult { BelowThresholdSeconds = cpuBelowSeconds, TotalActiveSeconds = totalActiveSeconds },
+            RamResult = new MetricThresholdResult { BelowThresholdSeconds = ramBelowSeconds, TotalActiveSeconds = totalActiveSeconds }
         };
 
+        // --- DİSKLER İÇİN AYNI SEGMENT ALGORİTMASI ---
         foreach (var disk in computer.Disks)
         {
-            // Disk eşik değeri kontrolü
-            double currentDiskThreshold = request.DiskThresholds != null && request.DiskThresholds.ContainsKey(disk.DiskName)
-                                          ? request.DiskThresholds[disk.DiskName] : 80;
+            var diskHistories = await _db.DiskThresholdHistories
+                .AsNoTracking()
+                .Where(h => h.ComputerDiskId == disk.Id && h.ActiveFrom <= endDate)
+                .OrderBy(h => h.ActiveFrom)
+                .ToListAsync();
 
             var diskMetrics = await _db.DiskMetrics
                 .AsNoTracking()
@@ -599,31 +641,40 @@ public class ComputerService : BaseService, IComputerService
                 .ToListAsync();
 
             double diskTotalSeconds = 0;
-                double diskBelowSeconds = 0;
+            double diskBelowSeconds = 0;
+            int diskHistoryIdx = 0; // Disk için kendi pointer'ımız
 
-                for (int i = 1; i < diskMetrics.Count; i++)
+            for (int i = 1; i < diskMetrics.Count; i++)
+            {
+                var prev = diskMetrics[i - 1];
+                var curr = diskMetrics[i];
+                double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
+
+                if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
                 {
-                    var prev = diskMetrics[i - 1];
-                    var curr = diskMetrics[i];
+                    diskTotalSeconds += gapSeconds;
 
-                    double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
-
-                    if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
+                    while (diskHistoryIdx + 1 < diskHistories.Count && diskHistories[diskHistoryIdx + 1].ActiveFrom <= curr.CreatedAt)
                     {
-                        diskTotalSeconds += gapSeconds;
-                        if (curr.UsedPercent < currentDiskThreshold) diskBelowSeconds += gapSeconds;
+                        diskHistoryIdx++;
                     }
-                }
 
-                report.DiskResults.Add(new DiskThresholdResult
-                {
-                    DiskName = disk.DiskName,
-                    ThresholdValue = currentDiskThreshold,
-                    BelowThresholdSeconds = diskBelowSeconds,
-                    TotalActiveSeconds = diskTotalSeconds
-                });
+                    double currentDiskThreshold = diskHistories.Count > 0 && diskHistories[diskHistoryIdx].ThresholdPercent.HasValue
+                        ? diskHistories[diskHistoryIdx].ThresholdPercent.Value
+                        : (disk.ThresholdPercent ?? 0);
+
+                    if (curr.UsedPercent < currentDiskThreshold) diskBelowSeconds += gapSeconds;
+                }
             }
 
-            return ServiceResult<ThresholdAnalysisReportDto>.Success(report);
+            report.DiskResults.Add(new DiskThresholdResult
+            {
+                DiskName = disk.DiskName,
+                BelowThresholdSeconds = diskBelowSeconds,
+                TotalActiveSeconds = diskTotalSeconds
+            });
         }
+
+        return ServiceResult<ThresholdAnalysisReportDto>.Success(report);
     }
+}

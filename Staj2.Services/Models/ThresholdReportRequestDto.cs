@@ -1,11 +1,13 @@
-﻿namespace Staj2.Services.Models;
+﻿using System;
 
-public class ThresholdReportRequestDto
+namespace Staj2.Services.Models
 {
-    public double CpuThreshold { get; set; }
-    public double RamThreshold { get; set; }
-    public Dictionary<string, double> DiskThresholds { get; set; } = new();
-    // Yeni eklenen alanlar
-    public DateTime StartDate { get; set; }
-    public DateTime EndDate { get; set; }
+    public class ThresholdReportRequestDto
+    {
+        public int ComputerId { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+
+        // Eskiden burada olan CpuThreshold, RamThreshold gibi alanları TAMAMEN SİLİYORUZ.
+    }
 }

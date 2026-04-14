@@ -38,6 +38,8 @@ namespace Staj2.Infrastructure.Data
         public DbSet<ComputerTag> ComputerTags { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<ComputerThresholdHistory> ComputerThresholdHistories { get; set; }
+        public DbSet<DiskThresholdHistory> DiskThresholdHistories { get; set; }
         // ====================================================================
         // YENİ: ARAYÜZ (INTERFACE) TABANLI OTOMATİK AUDIT LOGGING
         // ====================================================================
@@ -264,6 +266,26 @@ namespace Staj2.Infrastructure.Data
             // DİKKAT: DiskMetric için de sadece CreatedAt değil, Disk ID'si ile birlikte çoklu indeks yapmalıyız!
             modelBuilder.Entity<DiskMetric>()
                 .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt });
+
+            // --- THRESHOLD HISTORY İLİŞKİLERİ ---
+            modelBuilder.Entity<ComputerThresholdHistory>()
+                .HasOne(h => h.Computer)
+                .WithMany() // İstenirse Computer modeline public List<ComputerThresholdHistory> eklenebilir, ancak şart değil.
+                .HasForeignKey(h => h.ComputerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DiskThresholdHistory>()
+                .HasOne(h => h.ComputerDisk)
+                .WithMany()
+                .HasForeignKey(h => h.ComputerDiskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Tarih bazlı sorgulamalar çok yapılacağı için indeks eklemek performans sağlar
+            modelBuilder.Entity<ComputerThresholdHistory>()
+                .HasIndex(h => new { h.ComputerId, h.ActiveFrom });
+
+            modelBuilder.Entity<DiskThresholdHistory>()
+                .HasIndex(h => new { h.ComputerDiskId, h.ActiveFrom });
         }
     }
 }

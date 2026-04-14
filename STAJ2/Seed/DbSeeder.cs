@@ -74,8 +74,8 @@ public static class DbSeeder
 
         // --- 4. YÖNETİCİ ROLÜNE TÜM YETKİLERİ OTOMATİK ATA ---
         var adminRoleForPerms = await context.Roles
-     .Include(r => r.RolePermissions)
-     .FirstAsync(r => r.Name == adminRoleName);
+             .Include(r => r.RolePermissions)
+             .FirstAsync(r => r.Name == adminRoleName);
 
         var allPermissions = await context.Permissions.ToListAsync();
 
@@ -124,18 +124,16 @@ public static class DbSeeder
 
         // Yetki Adı -> Açacağı Menünün TargetView'i
         var permissionToSidebarMappings = new Dictionary<string, string>
-{
-    { "User.Manage", "requests" },
-    
-    // --- KULLANICILAR MENÜSÜNÜ AÇACAK YETKİLER ---
-    { "User.Read", "users" },
-    { "User.ManageRoles", "users" },      // YENİ EKLENDİ
-    { "User.ManageComputers", "users" },  // YENİ EKLENDİ
-    { "User.ManageTags", "users" },       // YENİ EKLENDİ
-
-    { "Role.Manage", "roles" },
-    { "Tag.Manage", "tags" }
-};
+        {
+            { "User.Manage", "requests" },
+            // --- KULLANICILAR MENÜSÜNÜ AÇACAK YETKİLER ---
+            { "User.Read", "users" },
+            { "User.ManageRoles", "users" },
+            { "User.ManageComputers", "users" },
+            { "User.ManageTags", "users" },
+            { "Role.Manage", "roles" },
+            { "Tag.Manage", "tags" }
+        };
 
         foreach (var mapping in permissionToSidebarMappings)
         {
@@ -159,17 +157,114 @@ public static class DbSeeder
         }
 
         // --- 7. DİNAMİK KULLANICI TABLOSU BUTONLARI ---
-        //if (!await context.UserTableActions.AnyAsync())
+        // (Yorum satırında bırakılmış)
+
+
+        // ======================================================================
+        // --- 8. YENİ: EŞİK DEĞERİ TARİHÇESİ (THRESHOLD HISTORY) BAŞLATMA ---
+        // ======================================================================
+
+        var allComputers = await context.Computers.ToListAsync();
+        foreach (var comp in allComputers)
+        {
+            // Eğer cihazın tarihçe tablosunda hiç kaydı yoksa, güncel değerleri ile bir başlangıç kaydı at.
+            if (!await context.ComputerThresholdHistories.AnyAsync(h => h.ComputerId == comp.Id))
+            {
+                context.ComputerThresholdHistories.Add(new ComputerThresholdHistory
+                {
+                    ComputerId = comp.Id,
+                    CpuThreshold = comp.CpuThreshold,
+                    RamThreshold = comp.RamThreshold,
+                    ActiveFrom = comp.CreatedAt, // Sisteme girdiği andan itibaren geçerli
+                    CreatedAt = DateTime.Now
+                });
+            }
+        }
+
+        var allDisks = await context.ComputerDisks.ToListAsync();
+        foreach (var disk in allDisks)
+        {
+            if (!await context.DiskThresholdHistories.AnyAsync(h => h.ComputerDiskId == disk.Id))
+            {
+                context.DiskThresholdHistories.Add(new DiskThresholdHistory
+                {
+                    ComputerDiskId = disk.Id,
+                    ThresholdPercent = disk.ThresholdPercent,
+                    ActiveFrom = DateTime.Now.AddMonths(-3),
+                    CreatedAt = DateTime.Now
+                });
+            }
+        }
+        await context.SaveChangesAsync(); // Başlangıç verilerini kaydet
+
+
+        //// ======================================================================
+        //// --- 9. YENİ: ID=8 BİLGİSAYARI İÇİN MART AYI RAPORLAMA TEST VERİSİ ---
+        //// ======================================================================
+
+        //int targetId = 8;
+        //var testComp = await context.Computers.FindAsync(targetId);
+
+        //if (testComp != null)
         //{
-        //    context.UserTableActions.AddRange(new List<UserTableAction>
-        //    {
-        //        new UserTableAction { Title = "Roller", Icon = "bi bi-shield-check", ButtonClass = "btn-outline-primary", OnClickFunction = "ui.openUserRolesModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageRoles", OrderIndex = 1 },
-        //        new UserTableAction { Title = "Cihazlar", Icon = "bi bi-pc-display", ButtonClass = "btn-outline-success", OnClickFunction = "ui.openUserComputerAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageComputers", OrderIndex = 2 },
-        //        new UserTableAction { Title = "Etiketler", Icon = "bi bi-tags", ButtonClass = "btn-outline-warning", OnClickFunction = "ui.openUserTagAccessModal(USER_ID, 'USER_NAME')", RequiredPermission = "User.ManageTags", OrderIndex = 3 },
-        //        new UserTableAction { Title = "Sil", Icon = "bi bi-trash", ButtonClass = "btn-outline-danger", OnClickFunction = "ui.deleteUser(USER_ID)", RequiredPermission = "User.ManageRoles", OrderIndex = 4 }
-        //    });
+        //    // Tekrar tekrar çalıştırıldığında verilerin üst üste binmemesi için eski test verilerini temizliyoruz
+        //    var oldHistories = context.ComputerThresholdHistories.Where(h => h.ComputerId == targetId);
+        //    context.ComputerThresholdHistories.RemoveRange(oldHistories);
+
+        //    var oldMetrics = context.ComputerMetrics.Where(m => m.ComputerId == targetId && m.CreatedAt >= new DateTime(2026, 3, 1) && m.CreatedAt <= new DateTime(2026, 3, 31, 23, 59, 59));
+        //    context.ComputerMetrics.RemoveRange(oldMetrics);
+
         //    await context.SaveChangesAsync();
-        //    Console.WriteLine(">>> Dinamik Kullanıcı Tablosu Butonları oluşturuldu.");
+
+        //    // 1. Eşik Değeri Geçiş Senaryosunu Giriyoruz
+        //    var marchHistories = new List<ComputerThresholdHistory>
+        //    {
+        //        new ComputerThresholdHistory { ComputerId = targetId, CpuThreshold = 70, RamThreshold = 80, ActiveFrom = new DateTime(2026, 3, 1, 0, 0, 0), CreatedAt = DateTime.Now },
+        //        new ComputerThresholdHistory { ComputerId = targetId, CpuThreshold = 80, RamThreshold = 80, ActiveFrom = new DateTime(2026, 3, 15, 0, 0, 0), CreatedAt = DateTime.Now },
+        //        new ComputerThresholdHistory { ComputerId = targetId, CpuThreshold = 45, RamThreshold = 80, ActiveFrom = new DateTime(2026, 3, 25, 0, 0, 0), CreatedAt = DateTime.Now },
+        //        // Güncel (Şu Anki) Değerler - 14 Nisan
+        //        new ComputerThresholdHistory { ComputerId = targetId, CpuThreshold = 50, RamThreshold = 75, ActiveFrom = new DateTime(2026, 4, 14, 12, 0, 0), CreatedAt = DateTime.Now }
+        //    };
+        //    context.ComputerThresholdHistories.AddRange(marchHistories);
+
+        //    // Cihazın kendi güncel değerlerini de 14 Nisan değerleriyle güncelliyoruz
+        //    testComp.CpuThreshold = 50;
+        //    testComp.RamThreshold = 75;
+
+        //    // 2. Metrik Verilerini Giriyoruz (Mart ayı boyunca saat başı veri üretecek)
+        //    DateTime current = new DateTime(2026, 3, 1, 0, 0, 0);
+        //    DateTime end = new DateTime(2026, 3, 31, 23, 59, 59);
+        //    var testMetrics = new List<ComputerMetric>();
+
+        //    while (current <= end)
+        //    {
+        //        double cpuValue = 0;
+
+        //        // Senin Senaryon:
+        //        // 1-15 Mart (Eşik 70) -> CPU'yu 65 yap (Eşik altı, başarılı)
+        //        if (current < new DateTime(2026, 3, 15)) cpuValue = 65;
+
+        //        // 15-25 Mart (Eşik 80) -> CPU'yu 85 yap (Eşik ÜSTÜ, sorunlu)
+        //        else if (current < new DateTime(2026, 3, 25)) cpuValue = 85;
+
+        //        // 25-31 Mart (Eşik 45) -> CPU'yu 40 yap (Eşik altı, başarılı)
+        //        else cpuValue = 40;
+
+        //        testMetrics.Add(new ComputerMetric
+        //        {
+        //            ComputerId = targetId,
+        //            CpuUsage = cpuValue,
+        //            RamUsage = 60, // RAM'i sabit bıraktık, test için CPU odaklı gidiyoruz
+        //            CreatedAt = current
+        //        });
+
+        //        current = current.AddMinutes(1); // YENİ HALİ (Dakikada bir veri üretsin)
+        //    }
+
+        //    context.ComputerMetrics.AddRange(testMetrics);
+        //    await context.SaveChangesAsync();
+
+        //    Console.WriteLine(">>> ID=8 için Tarihsel Eşik Değeri Analizi test verileri oluşturuldu.");
         //}
     }
 }

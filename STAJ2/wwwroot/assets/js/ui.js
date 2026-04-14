@@ -455,8 +455,6 @@
                 title.innerText = "Eşik Analiz Raporu";
                 subtitle.innerText = "Cihazın seçilen tarih aralığındaki performans analizi.";
 
-                // DÜZELTME: globalFilters'ın içini silmiyoruz! Sadece bu sayfada gizliyoruz.
-                // Böylece diğer sayfalardaki etiket filtresi (Select2) bozulmuyor.
                 const threshFilterEl = document.getElementById('globalFilters');
                 if (threshFilterEl) {
                     threshFilterEl.classList.remove('d-flex');
@@ -472,14 +470,14 @@
                 
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
-                    <select id="ta-computer-select" class="form-select" onchange="ui.loadComputerDisksForAnalysis(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                    <select id="ta-computer-select" class="form-select" onchange="ui.toggleTaParams(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
                         <option value="">Yükleniyor...</option>
                     </select>
                 </div>
 
                 <div id="ta-params-container" style="display:none; padding-top:10px; border-top:1px solid var(--border-color);">
                     
-                    <div class="row g-2 mb-3">
+                    <div class="row g-2 mb-4">
                         <div class="col-12 col-xl-6">
                             <label class="form-label fw-bold small text-muted">BAŞLANGIÇ TARİHİ</label>
                             <input type="datetime-local" id="ta-start-date" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
@@ -489,18 +487,6 @@
                             <input type="datetime-local" id="ta-end-date" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
                         </div>
                     </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">CPU EŞİK DEĞERİ (%)</label>
-                        <input type="number" id="ta-cpu" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">RAM EŞİK DEĞERİ (%)</label>
-                        <input type="number" id="ta-ram" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                    </div>
-
-                    <div id="ta-dynamic-disks" class="mb-4"></div>
 
                     <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="ui.generateThresholdReport()">
                         <i class="bi bi-bar-chart-line me-2"></i> Raporu Oluştur
@@ -528,12 +514,10 @@
     </div>
 </div>`;
 
-                // HTML DOM'a eklendikten HEMEN SONRA tarih değerlerini atıyoruz.
                 const now = new Date();
                 const oneMonthAgo = new Date();
                 oneMonthAgo.setMonth(now.getMonth() - 1);
 
-                // Timezone (Saat dilimi) kaymasını önleyen yerel saat formatlayıcı
                 const toLocalISOString = (dt) => {
                     const pad = (n) => (n < 10 ? '0' + n : n);
                     return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate()) + 'T' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
@@ -1758,41 +1742,12 @@
                 selectEl.innerHTML = '<option value="">Cihazlar yüklenemedi</option>';
             }
         },
-        loadComputerDisksForAnalysis: async (compId) => {
+        toggleTaParams: (compId) => {
             const paramsContainer = document.getElementById('ta-params-container');
-            const diskContainer = document.getElementById('ta-dynamic-disks');
-
             if (!compId) {
                 paramsContainer.style.display = 'none';
-                return;
-            }
-
-            diskContainer.innerHTML = '<div class="spinner-border spinner-border-sm text-info"></div> <small class="text-muted">Diskler yükleniyor...</small>';
-            paramsContainer.style.display = 'block';
-
-            try {
-                const disks = await api.get(`/api/Computer/${compId}/disks`);
-
-                if (disks.length === 0) {
-                    diskContainer.innerHTML = '<small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Bu cihaza ait disk bulunamadı.</small>';
-                    return;
-                }
-
-                let diskHtml = `<hr style="border-color:var(--border-color);"><label class="form-label fw-bold small text-muted">DİSK EŞİK DEĞERLERİ (%)</label>`;
-
-                disks.forEach(d => {
-                    // Güvenli class id oluşturmak için regex ile özel karakterleri temizliyoruz
-                    let safeClassId = "disk-thresh-" + btoa(d.diskName).replace(/=/g, '');
-                    diskHtml += `
-                    <div class="input-group mb-2 input-group-sm">
-                        <span class="input-group-text fw-bold" style="background:var(--bg-card-muted); color:var(--text-main); border-color:var(--border-input); min-width: 60px;">${d.diskName}</span>
-                        <input type="number" class="form-control dynamic-disk-input" data-diskname="${d.diskName}" value="80" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                    </div>`;
-                });
-
-                diskContainer.innerHTML = diskHtml;
-            } catch (error) {
-                diskContainer.innerHTML = '<small class="text-danger">Diskler yüklenirken hata oluştu.</small>';
+            } else {
+                paramsContainer.style.display = 'block';
             }
         },
         generateThresholdReport: async () => {
@@ -1814,14 +1769,6 @@
                 return;
             }
 
-            // Disk inputlarını toparla ve DTO sözlüğüne (Dictionary) çevir
-            let diskThresholdsObj = {};
-            document.querySelectorAll('.dynamic-disk-input').forEach(input => {
-                let dName = input.getAttribute('data-diskname');
-                let dValue = parseFloat(input.value);
-                diskThresholdsObj[dName] = dValue;
-            });
-
             document.getElementById('ta-placeholder').style.display = 'none';
             const container = document.getElementById('ta-results-container');
             const metricsBody = document.getElementById('ta-metrics-body');
@@ -1830,31 +1777,24 @@
             metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-muted">Veriler analiz ediliyor...</div></div>';
 
             try {
+                // Backend'e artık sadece tarih aralığı gidiyor
                 const requestPayload = {
-                    CpuThreshold: parseFloat(document.getElementById('ta-cpu').value),
-                    RamThreshold: parseFloat(document.getElementById('ta-ram').value),
-                    DiskThresholds: diskThresholdsObj,
-                    StartDate: startDate, // Backend DTO'suna eklenmeli
-                    EndDate: endDate      // Backend DTO'suna eklenmeli
+                    StartDate: startDate,
+                    EndDate: endDate
                 };
 
                 const data = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
 
                 document.getElementById('ta-result-title').innerText = `${data.computerName} - Eşik Analizi`;
 
-                // 🚀 YENİ: Saniyeyi Saat ve Dakikaya çeviren fonksiyon
                 const formatTime = (totalSeconds) => {
                     if (!totalSeconds || totalSeconds <= 0) return "0 Dakika";
-
                     const h = Math.floor(totalSeconds / 3600);
                     const m = Math.floor((totalSeconds % 3600) / 60);
-
                     let timeStr = "";
                     if (h > 0) timeStr += `${h} Saat `;
                     if (m > 0) timeStr += `${m} Dakika`;
-
-                    if (h === 0 && m === 0) return "< 1 Dakika"; // 1 dakikadan kısaysa
-
+                    if (h === 0 && m === 0) return "< 1 Dakika";
                     return timeStr.trim();
                 };
 
@@ -1869,13 +1809,14 @@
                     if (resultObj.totalActiveSeconds === 0) return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Yeterli veri yok.</div></div>`;
 
                     const pct = resultObj.belowThresholdPercentage.toFixed(1);
+                    // (Eşik: %xx) yazısı başlık kısmından tamamen çıkartıldı
                     return `
                     <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title} (Eşik: %${resultObj.thresholdValue})</h6>
+                            <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title}</h6>
                             <span class="badge bg-${colorClass} fs-6">%${pct} Eşiğin Altında</span>
                         </div>
-                        <p class="small mb-3" style="color:var(--text-main);">Bu metrik, ölçülen sürenin <b style="color:var(--text-title); font-size:1.05em;">${formatTime(resultObj.belowThresholdSeconds)}</b> boyunca belirlediğiniz eşiğin altında seyretmiş.</p>
+                        <p class="small mb-3" style="color:var(--text-main);">Bu metrik, ölçülen sürenin <b style="color:var(--text-title); font-size:1.05em;">${formatTime(resultObj.belowThresholdSeconds)}</b> boyunca o dönemki eşik sınırlarının altında seyretmiş.</p>
                         <div class="progress" style="height: 14px; background-color: var(--bg-input); border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
                             <div class="progress-bar bg-${colorClass}" role="progressbar" style="width: ${pct}%"></div>
                         </div>

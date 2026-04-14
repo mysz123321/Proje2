@@ -4,8 +4,6 @@
     {
         public int ComputerId { get; set; }
         public string ComputerName { get; set; }
-
-        // Saniye cinsinden toplam takip edilebilen aktif süre
         public double TotalActiveSeconds { get; set; }
 
         public MetricThresholdResult CpuResult { get; set; } = new();
@@ -15,10 +13,11 @@
 
     public class MetricThresholdResult
     {
-        public double ThresholdValue { get; set; }
+        // ThresholdValue KALDIRILDI! Artık tarihe göre dinamik hesaplanıyor.
         public double BelowThresholdSeconds { get; set; }
+        public double TotalActiveSeconds { get; set; }
+        // Yüzde hesabı tam senin istediğin gibi toplam saniyeye oranlanıyor
         public double BelowThresholdPercentage => TotalActiveSeconds > 0 ? (BelowThresholdSeconds / TotalActiveSeconds) * 100 : 0;
-        public double TotalActiveSeconds { get; set; } // Referans için
     }
 
     public class DiskThresholdResult : MetricThresholdResult
