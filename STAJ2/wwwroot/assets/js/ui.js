@@ -1759,10 +1759,11 @@
                 Swal.fire({ icon: 'warning', text: 'Lütfen cihaz ve tarih aralığı seçin.' });
                 return;
             }
+
+            // Tarih Limiti Kontrolü
             const start = new Date(startDate);
             const end = new Date(endDate);
-            const diffTime = Math.abs(end - start);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24));
 
             if (diffDays > 31) {
                 Swal.fire({ icon: 'warning', text: 'Maksimum 31 günlük bir aralık seçebilirsiniz.' });
@@ -1774,18 +1775,27 @@
             const metricsBody = document.getElementById('ta-metrics-body');
 
             container.style.display = 'block';
-            metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-muted">Veriler analiz ediliyor...</div></div>';
+            metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-muted">Performanslı veritabanı analizi yapılıyor, lütfen bekleyin...</div></div>';
 
             try {
-                // Backend'e artık sadece tarih aralığı gidiyor
-                const requestPayload = {
-                    StartDate: startDate,
-                    EndDate: endDate
-                };
+                const requestPayload = { StartDate: startDate, EndDate: endDate };
 
-                const data = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
+                // 1. Backend'e istek atıyoruz
+                const response = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
 
-                document.getElementById('ta-result-title').innerText = `${data.computerName} - Eşik Analizi`;
+                // 2. DÜZELTME: ServiceResult sarmalayıcısından veriyi (Data) güvenle çıkar
+                const data = response.data ? response.data : response;
+
+                // Backend "Sistem performansı için maksimum 30 gün seçin" gibi bir hata döndüyse fırlat
+                if (response.isSuccess === false) {
+                    throw new Error(response.message || "Rapor oluşturulamadı.");
+                }
+
+                if (!data || !data.cpuResult) {
+                    throw new Error("Sunucudan eksik veya hatalı veri döndü.");
+                }
+
+                document.getElementById('ta-result-title').innerText = `${data.computerName || 'Cihaz'} - Eşik Analizi`;
 
                 const formatTime = (totalSeconds) => {
                     if (!totalSeconds || totalSeconds <= 0) return "0 Dakika";
@@ -1801,15 +1811,25 @@
                 let html = `
                     <div class="alert mb-4" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: var(--text-main);">
                         <i class="bi bi-clock-history me-2 text-info fs-5 align-middle"></i>
-                        <span class="align-middle"><strong>Toplam Analiz Edilen Cihaz Açık Kalma Süresi:</strong> ${formatTime(data.totalActiveSeconds)}</span>
+                        <span class="align-middle"><strong>Toplam Analiz Edilen Aktif Süre:</strong> ${formatTime(data.totalActiveSeconds)}</span>
                     </div>
                 `;
 
                 const renderBar = (title, icon, colorClass, resultObj) => {
-                    if (resultObj.totalActiveSeconds === 0) return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Yeterli veri yok.</div></div>`;
+                    if (!resultObj || resultObj.totalActiveSeconds === 0) {
+                        return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Bu metrik için geçerli ölçüm bulunamadı.</div></div>`;
+                    }
 
-                    const pct = resultObj.belowThresholdPercentage.toFixed(1);
-                    // (Eşik: %xx) yazısı başlık kısmından tamamen çıkartıldı
+                    // 3. DÜZELTME: Yüzdeyi C#'tan beklemek yerine JavaScript tarafında hatasız biz hesaplıyoruz
+                    let pctValue = 0;
+                    if (resultObj.belowThresholdPercentage !== undefined) {
+                        pctValue = resultObj.belowThresholdPercentage;
+                    } else if (resultObj.totalActiveSeconds > 0) {
+                        pctValue = ((resultObj.belowThresholdSeconds || 0) / resultObj.totalActiveSeconds) * 100;
+                    }
+
+                    const pct = pctValue.toFixed(1);
+
                     return `
                     <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1837,10 +1857,20 @@
                     html += `<div class="text-muted small mt-4"><i class="bi bi-hdd-network me-2"></i>Disk verisi bulunamadı.</div>`;
                 }
 
+                // Hatasız üretilen HTML'i ekrana yazdırıyoruz (Yükleniyor animasyonu kaybolacak)
                 metricsBody.innerHTML = html;
 
             } catch (e) {
-                metricsBody.innerHTML = `<div class="alert alert-danger" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">${e.message}</div>`;
+                console.error("Analiz Raporu Hatası:", e);
+                // Çökse dahi artık "Takılı kalma" yerine anlaşılır bir hata kutusu basacak
+                metricsBody.innerHTML = `
+                    <div class="alert alert-danger d-flex align-items-center" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">
+                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-danger"></i>
+                        <div>
+                            <strong class="d-block mb-1">Rapor Alınamadı</strong>
+                            <small>${e.message || 'Analiz sırasında beklenmeyen bir hata oluştu.'}</small>
+                        </div>
+                    </div>`;
             }
         }
     };

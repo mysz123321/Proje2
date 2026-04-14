@@ -259,13 +259,14 @@ namespace Staj2.Infrastructure.Data
                 // BURADAKİ TEKLİ İNDEKSİ SİLDİK: entity.HasIndex(e => e.CreatedAt); 
             });
 
-            // ComputerMetric için çoklu indeks (Doğru olan bu)
             modelBuilder.Entity<ComputerMetric>()
-                .HasIndex(m => new { m.ComputerId, m.CreatedAt });
+    .HasIndex(m => new { m.ComputerId, m.CreatedAt })
+    .IncludeProperties(m => new { m.CpuUsage, m.RamUsage });
 
             // DİKKAT: DiskMetric için de sadece CreatedAt değil, Disk ID'si ile birlikte çoklu indeks yapmalıyız!
             modelBuilder.Entity<DiskMetric>()
-                .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt });
+    .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt })
+    .IncludeProperties(m => new { m.UsedPercent });
 
             // --- THRESHOLD HISTORY İLİŞKİLERİ ---
             modelBuilder.Entity<ComputerThresholdHistory>()
