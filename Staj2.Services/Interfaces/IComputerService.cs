@@ -48,5 +48,5 @@ public interface IComputerService
     // Eskiden: Task<MetricSummaryDto>
     Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName);
     Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName);
-    Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, double cpuThreshold, double ramThreshold, Dictionary<string, double> diskThresholds);
+    Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request);
 }

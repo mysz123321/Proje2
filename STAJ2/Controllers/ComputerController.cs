@@ -185,11 +185,12 @@ public class ComputerController : ControllerBase
         return Ok(result.Data);
     }
 
+    // ComputerController.cs
     [HttpPost("{id}/threshold-analysis")]
     public async Task<IActionResult> GetThresholdAnalysis(int id, [FromBody] ThresholdReportRequestDto request)
     {
-        // Servis çağrısında 4. parametre olarak request.DiskThresholds (Dictionary) gönderiliyor.
-        var result = await _computerService.GetThresholdAnalysisAsync(id, request.CpuThreshold, request.RamThreshold, request.DiskThresholds);
+        // Artık tüm nesneyi tek seferde gönderiyoruz
+        var result = await _computerService.GetThresholdAnalysisAsync(id, request);
 
         if (!result.IsSuccess)
             return BadRequest(new { message = result.Message });

@@ -453,64 +453,94 @@
                 break;
             case 'threshold-analysis':
                 title.innerText = "Eşik Analiz Raporu";
-                subtitle.innerText = "Cihazın son 1 aylık verilerinde belirlenen eşik değerlerinin altında kalma süresi.";
+                subtitle.innerText = "Cihazın seçilen tarih aralığındaki performans analizi.";
 
+                // DÜZELTME: globalFilters'ın içini silmiyoruz! Sadece bu sayfada gizliyoruz.
+                // Böylece diğer sayfalardaki etiket filtresi (Select2) bozulmuyor.
                 const threshFilterEl = document.getElementById('globalFilters');
-                if (threshFilterEl) { threshFilterEl.classList.remove('d-flex'); threshFilterEl.classList.add('d-none'); }
+                if (threshFilterEl) {
+                    threshFilterEl.classList.remove('d-flex');
+                    threshFilterEl.classList.add('d-none');
+                }
 
                 content.innerHTML = `
-    <div class="row">
-        <div class="col-lg-4 mb-4">
-            <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders"></i> Parametreler</h5>
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+            <div class="card-body">
+                <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders"></i> Parametreler</h5>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
+                    <select id="ta-computer-select" class="form-select" onchange="ui.loadComputerDisksForAnalysis(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+
+                <div id="ta-params-container" style="display:none; padding-top:10px; border-top:1px solid var(--border-color);">
                     
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-xl-6">
+                            <label class="form-label fw-bold small text-muted">BAŞLANGIÇ TARİHİ</label>
+                            <input type="datetime-local" id="ta-start-date" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+                        <div class="col-12 col-xl-6">
+                            <label class="form-label fw-bold small text-muted">BİTİŞ TARİHİ</label>
+                            <input type="datetime-local" id="ta-end-date" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
-                        <select id="ta-computer-select" class="form-select" onchange="ui.loadComputerDisksForAnalysis(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                            <option value="">Yükleniyor...</option>
-                        </select>
+                        <label class="form-label fw-bold small text-muted">CPU EŞİK DEĞERİ (%)</label>
+                        <input type="number" id="ta-cpu" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
                     </div>
 
-                    <div id="ta-params-container" style="display:none; padding-top:10px; border-top:1px solid var(--border-color);">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">CPU EŞİK DEĞERİ (%)</label>
-                            <input type="number" id="ta-cpu" class="form-control" value="50" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">RAM EŞİK DEĞERİ (%)</label>
-                            <input type="number" id="ta-ram" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                        </div>
-
-                        <div id="ta-dynamic-disks" class="mb-4">
-                            </div>
-
-                        <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="ui.generateThresholdReport()">
-                            <i class="bi bi-bar-chart-line me-2"></i> Raporu Oluştur
-                        </button>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">RAM EŞİK DEĞERİ (%)</label>
+                        <input type="number" id="ta-ram" class="form-control" value="70" min="1" max="100" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
                     </div>
+
+                    <div id="ta-dynamic-disks" class="mb-4"></div>
+
+                    <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="ui.generateThresholdReport()">
+                        <i class="bi bi-bar-chart-line me-2"></i> Raporu Oluştur
+                    </button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-lg-8">
-            <div id="ta-results-container" style="display:none;">
-                <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
-                    <div class="card-header border-bottom border-secondary pt-3 pb-2" style="background:transparent;">
-                        <h5 class="fw-bold mb-0" style="color:var(--text-title);" id="ta-result-title">Sonuçlar</h5>
-                        <small style="color: var(--text-muted) !important; opacity: 0.85; font-weight: 500;">Son 1 Aylık Veri Analizi (Kopukluklar hariç tutulmuştur)</small>
-                    </div>
-                    <div class="card-body" id="ta-metrics-body">
-                        </div>
+    <div class="col-lg-8">
+        <div id="ta-results-container" style="display:none;">
+            <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                <div class="card-header border-bottom border-secondary pt-3 pb-2" style="background:transparent;">
+                    <h5 class="fw-bold mb-0" style="color:var(--text-title);" id="ta-result-title">Sonuçlar</h5>
+                    <small style="color: var(--text-muted) !important; opacity: 0.85; font-weight: 500;">Seçilen Tarih Aralığı Veri Analizi</small>
+                </div>
+                <div class="card-body" id="ta-metrics-body">
                 </div>
             </div>
-            <div id="ta-placeholder" class="text-center py-5 mt-5">
-                <i class="bi bi-pc-display display-1 text-muted opacity-50 mb-3 d-block"></i>
-                <h4 class="fw-light" style="color: var(--text-title);">Önce bir cihaz seçerek işleme başlayın.</h4>
-            </div>
         </div>
-    </div>`;
+        <div id="ta-placeholder" class="text-center py-5 mt-5">
+            <i class="bi bi-pc-display display-1 text-muted opacity-50 mb-3 d-block"></i>
+            <h4 class="fw-light" style="color: var(--text-title);">Önce bir cihaz seçerek işleme başlayın.</h4>
+        </div>
+    </div>
+</div>`;
+
+                // HTML DOM'a eklendikten HEMEN SONRA tarih değerlerini atıyoruz.
+                const now = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(now.getMonth() - 1);
+
+                // Timezone (Saat dilimi) kaymasını önleyen yerel saat formatlayıcı
+                const toLocalISOString = (dt) => {
+                    const pad = (n) => (n < 10 ? '0' + n : n);
+                    return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate()) + 'T' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+                };
+
+                document.getElementById('ta-end-date').value = toLocalISOString(now);
+                document.getElementById('ta-start-date').value = toLocalISOString(oneMonthAgo);
 
                 ui.loadThresholdComputers();
                 break;
@@ -1767,11 +1797,20 @@
         },
         generateThresholdReport: async () => {
             const compId = document.getElementById('ta-computer-select').value;
-            const cpuThresh = document.getElementById('ta-cpu').value;
-            const ramThresh = document.getElementById('ta-ram').value;
+            const startDate = document.getElementById('ta-start-date').value;
+            const endDate = document.getElementById('ta-end-date').value;
 
-            if (!compId) {
-                Swal.fire({ icon: 'warning', text: 'Lütfen bir cihaz seçin.' });
+            if (!compId || !startDate || !endDate) {
+                Swal.fire({ icon: 'warning', text: 'Lütfen cihaz ve tarih aralığı seçin.' });
+                return;
+            }
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 31) {
+                Swal.fire({ icon: 'warning', text: 'Maksimum 31 günlük bir aralık seçebilirsiniz.' });
                 return;
             }
 
@@ -1792,9 +1831,11 @@
 
             try {
                 const requestPayload = {
-                    CpuThreshold: parseFloat(cpuThresh),
-                    RamThreshold: parseFloat(ramThresh),
-                    DiskThresholds: diskThresholdsObj
+                    CpuThreshold: parseFloat(document.getElementById('ta-cpu').value),
+                    RamThreshold: parseFloat(document.getElementById('ta-ram').value),
+                    DiskThresholds: diskThresholdsObj,
+                    StartDate: startDate, // Backend DTO'suna eklenmeli
+                    EndDate: endDate      // Backend DTO'suna eklenmeli
                 };
 
                 const data = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
