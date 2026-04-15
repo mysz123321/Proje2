@@ -38,10 +38,9 @@ namespace Staj2.Infrastructure.Data
         public DbSet<ComputerTag> ComputerTags { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
-        public DbSet<ComputerThresholdHistory> ComputerThresholdHistories { get; set; }
-        public DbSet<DiskThresholdHistory> DiskThresholdHistories { get; set; }
         // TABLOLAR (Mevcutların altına ekle)
         public DbSet<MetricWarningLog> MetricWarningLogs { get; set; }
+        public DbSet<MetricType> MetricTypes { get; set; }
         // ====================================================================
         // YENİ: ARAYÜZ (INTERFACE) TABANLI OTOMATİK AUDIT LOGGING
         // ====================================================================
@@ -270,37 +269,36 @@ namespace Staj2.Infrastructure.Data
                 .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt })
                 .IncludeProperties(m => new { m.UsedPercent });
 
+            modelBuilder.Entity<MetricType>().HasData(
+                new MetricType { Id = 1, Name = "CPU" },
+                new MetricType { Id = 2, Name = "RAM" },
+                new MetricType { Id = 3, Name = "Disk" }
+            );
+
+            // 2. Uyarı Logu Konfigürasyonu
             modelBuilder.Entity<MetricWarningLog>(entity =>
             {
                 entity.HasKey(e => e.Id);
 
-                // Rapor alırken cihazları gruplayacağımız ve tarihe göre filtreleyebileceğimiz için Composite Index ekliyoruz.
-                entity.HasIndex(w => new { w.ComputerId, w.MetricType, w.CreatedAt });
+                entity.HasIndex(w => new { w.ComputerId, w.MetricTypeId, w.CreatedAt });
 
                 entity.HasOne(w => w.Computer)
                       .WithMany()
                       .HasForeignKey(w => w.ComputerId)
-                      .OnDelete(DeleteBehavior.Cascade); // Bilgisayar silinirse uyarı logları da silinsin
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(w => w.MetricType)
+                      .WithMany()
+                      .HasForeignKey(w => w.MetricTypeId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // YENİ EKLENEN İLİŞKİ: Disk
+                entity.HasOne(w => w.ComputerDisk)
+                      .WithMany()
+                      .HasForeignKey(w => w.ComputerDiskId)
+                      .OnDelete(DeleteBehavior.NoAction); // Disk silinirse log kalsın, DiskId null olsun
             });
-            // --- THRESHOLD HISTORY İLİŞKİLERİ ---
-            modelBuilder.Entity<ComputerThresholdHistory>()
-                .HasOne(h => h.Computer)
-                .WithMany() // İstenirse Computer modeline public List<ComputerThresholdHistory> eklenebilir, ancak şart değil.
-                .HasForeignKey(h => h.ComputerId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<DiskThresholdHistory>()
-                .HasOne(h => h.ComputerDisk)
-                .WithMany()
-                .HasForeignKey(h => h.ComputerDiskId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Tarih bazlı sorgulamalar çok yapılacağı için indeks eklemek performans sağlar
-            modelBuilder.Entity<ComputerThresholdHistory>()
-                .HasIndex(h => new { h.ComputerId, h.ActiveFrom });
-
-            modelBuilder.Entity<DiskThresholdHistory>()
-                .HasIndex(h => new { h.ComputerDiskId, h.ActiveFrom });
+            
         }
     }
 }

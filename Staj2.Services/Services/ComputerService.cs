@@ -98,18 +98,6 @@ public class ComputerService : BaseService, IComputerService
             if (computer == null)
                 return ServiceResult.Failure("Bilgisayar bulunamadı.");
 
-            // YENİ: Eğer CPU veya RAM eşik değeri değişmişse History tablosuna log at
-            bool isComputerThresholdChanged = computer.CpuThreshold != request.CpuThreshold || computer.RamThreshold != request.RamThreshold;
-            if (isComputerThresholdChanged)
-            {
-                _db.ComputerThresholdHistories.Add(new ComputerThresholdHistory
-                {
-                    ComputerId = computer.Id,
-                    CpuThreshold = request.CpuThreshold,
-                    RamThreshold = request.RamThreshold,
-                    ActiveFrom = DateTime.Now // Değerin geçerli olmaya başladığı an
-                });
-            }
 
             // Ana tabloyu güncelle (Yaklaşım 2: Güncel değeri ana tabloda tutuyoruz)
             computer.CpuThreshold = request.CpuThreshold;
@@ -122,14 +110,6 @@ public class ComputerService : BaseService, IComputerService
                     var disk = computer.Disks.FirstOrDefault(d => d.DiskName == dReq.DiskName);
                     if (disk != null && disk.ThresholdPercent != dReq.ThresholdPercent)
                     {
-                        // YENİ: Disk eşik değeri değişmişse History tablosuna log at
-                        _db.DiskThresholdHistories.Add(new DiskThresholdHistory
-                        {
-                            ComputerDiskId = disk.Id,
-                            ThresholdPercent = dReq.ThresholdPercent,
-                            ActiveFrom = DateTime.Now
-                        });
-
                         disk.ThresholdPercent = dReq.ThresholdPercent;
                     }
                 }
@@ -553,6 +533,7 @@ public class ComputerService : BaseService, IComputerService
 
         return ServiceResult<object>.Success(new List<object>());
     }
+
     public async Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request)
     {
         var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
@@ -561,132 +542,75 @@ public class ComputerService : BaseService, IComputerService
         var startDate = request.StartDate;
         var endDate = request.EndDate;
 
-        // 1. OPTİMİZASYON: Sunucu belleğini korumak için tarih aralığı limiti (Maks 30 Gün)
         if ((endDate - startDate).TotalDays > 31)
         {
             return ServiceResult<ThresholdAnalysisReportDto>.Failure("Sistem performansı için lütfen maksimum 31 günlük bir analiz aralığı seçiniz.");
         }
 
-        double maxGapSeconds = 120;
-
-        // CPU ve RAM Metrikleri
-        var metrics = await _db.ComputerMetrics
-            .AsNoTracking()
+        // 1. TOPLAM VERİ SAYISINI ÇEK (ComputerMetrics Tablosundan)
+        var totalCpuRamCount = await _db.ComputerMetrics
             .Where(m => m.ComputerId == computerId && m.CreatedAt >= startDate && m.CreatedAt <= endDate)
-            .OrderBy(m => m.CreatedAt)
-            .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
-            .ToListAsync();
+            .CountAsync();
 
-        var cpuRamHistories = await _db.ComputerThresholdHistories
-            .AsNoTracking()
-            .Where(h => h.ComputerId == computerId && h.ActiveFrom <= endDate)
-            .OrderBy(h => h.ActiveFrom)
-            .ToListAsync();
+        // 2. UYARI SAYILARINI ÇEK (MetricWarningLogs Tablosundan)
+        // Hatırlatma: MetricTypeId => 1: CPU, 2: RAM, 3: Disk
+        var cpuWarningCount = await _db.MetricWarningLogs
+            .Where(w => w.ComputerId == computerId && w.MetricTypeId == 1 && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
+            .CountAsync();
 
-        double totalActiveSeconds = 0;
-        double cpuBelowSeconds = 0;
-        double ramBelowSeconds = 0;
-        int historyIdx = 0;
-
-        for (int i = 1; i < metrics.Count; i++)
-        {
-            var prev = metrics[i - 1];
-            var curr = metrics[i];
-            double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
-
-            if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
-            {
-                totalActiveSeconds += gapSeconds;
-
-                while (historyIdx + 1 < cpuRamHistories.Count && cpuRamHistories[historyIdx + 1].ActiveFrom <= curr.CreatedAt)
-                {
-                    historyIdx++;
-                }
-
-                double currentCpuThreshold = cpuRamHistories.Count > 0 && cpuRamHistories[historyIdx].CpuThreshold.HasValue
-                    ? cpuRamHistories[historyIdx].CpuThreshold.Value
-                    : (computer.CpuThreshold ?? 0);
-
-                double currentRamThreshold = cpuRamHistories.Count > 0 && cpuRamHistories[historyIdx].RamThreshold.HasValue
-                    ? cpuRamHistories[historyIdx].RamThreshold.Value
-                    : (computer.RamThreshold ?? 0);
-
-                if (curr.CpuUsage < currentCpuThreshold) cpuBelowSeconds += gapSeconds;
-                if (curr.RamUsage < currentRamThreshold) ramBelowSeconds += gapSeconds;
-            }
-        }
+        var ramWarningCount = await _db.MetricWarningLogs
+            .Where(w => w.ComputerId == computerId && w.MetricTypeId == 2 && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
+            .CountAsync();
 
         var report = new ThresholdAnalysisReportDto
         {
             ComputerId = computer.Id,
             ComputerName = computer.DisplayName ?? computer.MachineName,
-            TotalActiveSeconds = totalActiveSeconds,
-            CpuResult = new MetricThresholdResult { BelowThresholdSeconds = cpuBelowSeconds, TotalActiveSeconds = totalActiveSeconds },
-            RamResult = new MetricThresholdResult { BelowThresholdSeconds = ramBelowSeconds, TotalActiveSeconds = totalActiveSeconds }
+            TotalActiveCount = totalCpuRamCount,
+            CpuResult = new MetricThresholdResult
+            {
+                TotalCount = totalCpuRamCount,
+                WarningCount = cpuWarningCount,
+                BelowThresholdCount = Math.Max(0, totalCpuRamCount - cpuWarningCount) // Eksiye düşmemesi için Max kullandık
+            },
+            RamResult = new MetricThresholdResult
+            {
+                TotalCount = totalCpuRamCount,
+                WarningCount = ramWarningCount,
+                BelowThresholdCount = Math.Max(0, totalCpuRamCount - ramWarningCount)
+            }
         };
 
-        // 2. OPTİMİZASYON: N+1 Problemini çözmek için DÖNGÜ DIŞINDA tüm diskleri tek sorguda getiriyoruz.
+        // 3. DİSKLER İÇİN AYNI İŞLEM (N+1 Problemini Önleyerek)
         var diskIds = computer.Disks.Select(d => d.Id).ToList();
 
         if (diskIds.Any())
         {
-            var allDiskHistories = await _db.DiskThresholdHistories
-                .AsNoTracking()
-                .Where(h => diskIds.Contains(h.ComputerDiskId) && h.ActiveFrom <= endDate)
-                .OrderBy(h => h.ActiveFrom)
-                .ToListAsync();
-
-            var allDiskMetrics = await _db.DiskMetrics
-                .AsNoTracking()
+            // Tüm disklerin toplam veri sayısını gruplayarak alıyoruz
+            var diskTotalCounts = await _db.DiskMetrics
                 .Where(m => diskIds.Contains(m.ComputerDiskId) && m.CreatedAt >= startDate && m.CreatedAt <= endDate)
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new { m.ComputerDiskId, m.CreatedAt, m.UsedPercent })
-                .ToListAsync();
+                .GroupBy(m => m.ComputerDiskId)
+                .Select(g => new { DiskId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.DiskId, x => x.Count);
 
-            // Verileri hafızada disklere göre grupluyoruz (Veritabanını yormaz)
-            var diskHistoriesDict = allDiskHistories.GroupBy(h => h.ComputerDiskId).ToDictionary(g => g.Key, g => g.ToList());
-            var diskMetricsDict = allDiskMetrics.GroupBy(m => m.ComputerDiskId).ToDictionary(g => g.Key, g => g.ToList());
+            // Tüm disklerin uyarı sayısını gruplayarak alıyoruz
+            var diskWarningCounts = await _db.MetricWarningLogs
+                .Where(w => w.ComputerId == computerId && w.MetricTypeId == 3 && w.ComputerDiskId != null && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
+                .GroupBy(w => w.ComputerDiskId.Value)
+                .Select(g => new { DiskId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.DiskId, x => x.Count);
 
             foreach (var disk in computer.Disks)
             {
-                var diskHistories = diskHistoriesDict.ContainsKey(disk.Id) ? diskHistoriesDict[disk.Id] : new List<DiskThresholdHistory>();
-                var diskMetricsList = diskMetricsDict.ContainsKey(disk.Id) ? diskMetricsDict[disk.Id] : null;
-
-                double diskTotalSeconds = 0;
-                double diskBelowSeconds = 0;
-                int diskHistoryIdx = 0;
-
-                if (diskMetricsList != null && diskMetricsList.Count > 0)
-                {
-                    for (int i = 1; i < diskMetricsList.Count; i++)
-                    {
-                        var prev = diskMetricsList[i - 1];
-                        var curr = diskMetricsList[i];
-                        double gapSeconds = (curr.CreatedAt - prev.CreatedAt).TotalSeconds;
-
-                        if (gapSeconds > 0 && gapSeconds <= maxGapSeconds)
-                        {
-                            diskTotalSeconds += gapSeconds;
-
-                            while (diskHistoryIdx + 1 < diskHistories.Count && diskHistories[diskHistoryIdx + 1].ActiveFrom <= curr.CreatedAt)
-                            {
-                                diskHistoryIdx++;
-                            }
-
-                            double currentDiskThreshold = diskHistories.Count > 0 && diskHistories[diskHistoryIdx].ThresholdPercent.HasValue
-                                ? diskHistories[diskHistoryIdx].ThresholdPercent.Value
-                                : (disk.ThresholdPercent ?? 0);
-
-                            if (curr.UsedPercent < currentDiskThreshold) diskBelowSeconds += gapSeconds;
-                        }
-                    }
-                }
+                int totalDiskCount = diskTotalCounts.ContainsKey(disk.Id) ? diskTotalCounts[disk.Id] : 0;
+                int warningDiskCount = diskWarningCounts.ContainsKey(disk.Id) ? diskWarningCounts[disk.Id] : 0;
 
                 report.DiskResults.Add(new DiskThresholdResult
                 {
                     DiskName = disk.DiskName,
-                    BelowThresholdSeconds = diskBelowSeconds,
-                    TotalActiveSeconds = diskTotalSeconds
+                    TotalCount = totalDiskCount,
+                    WarningCount = warningDiskCount,
+                    BelowThresholdCount = Math.Max(0, totalDiskCount - warningDiskCount)
                 });
             }
         }

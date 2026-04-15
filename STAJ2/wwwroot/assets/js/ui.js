@@ -1816,7 +1816,6 @@
                 return;
             }
 
-            // Tarih Limiti Kontrolü
             const start = new Date(startDate);
             const end = new Date(endDate);
             const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24));
@@ -1836,13 +1835,9 @@
             try {
                 const requestPayload = { StartDate: startDate, EndDate: endDate };
 
-                // 1. Backend'e istek atıyoruz
-                const response = await api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
-
-                // 2. DÜZELTME: ServiceResult sarmalayıcısından veriyi (Data) güvenle çıkar
+                const response = await window.api.post(`/api/Computer/${compId}/threshold-analysis`, requestPayload);
                 const data = response.data ? response.data : response;
 
-                // Backend "Sistem performansı için maksimum 30 gün seçin" gibi bir hata döndüyse fırlat
                 if (response.isSuccess === false) {
                     throw new Error(response.message || "Rapor oluşturulamadı.");
                 }
@@ -1853,35 +1848,41 @@
 
                 document.getElementById('ta-result-title').innerText = `${data.computerName || 'Cihaz'} - Eşik Analizi`;
 
-                const formatTime = (totalSeconds) => {
-                    if (!totalSeconds || totalSeconds <= 0) return "0 Dakika";
+                // --- SÜRE HESAPLAMA FONKSİYONU (AJANIN 1 SANİYEDE BİR VERİ ATTIĞI VARSAYILMIŞTIR) ---
+                // Eğer ajanın 5 saniyede bir veri atıyorsa totalSeconds = count * 5 yapmalısın.
+                const formatTimeFromCount = (count) => {
+                    if (!count || count <= 0) return "0 Sn";
+
+                    const totalSeconds = count * 30; // 1 saniyede 1 veri geliyorsa
                     const h = Math.floor(totalSeconds / 3600);
                     const m = Math.floor((totalSeconds % 3600) / 60);
+                    const s = totalSeconds % 60;
+
                     let timeStr = "";
                     if (h > 0) timeStr += `${h} Saat `;
-                    if (m > 0) timeStr += `${m} Dakika`;
-                    if (h === 0 && m === 0) return "< 1 Dakika";
+                    if (m > 0) timeStr += `${m} Dk`;
+                    if (h === 0 && m === 0) timeStr += `${s} Sn`;
+
                     return timeStr.trim();
                 };
 
                 let html = `
                     <div class="alert mb-4" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: var(--text-main);">
                         <i class="bi bi-clock-history me-2 text-info fs-5 align-middle"></i>
-                        <span class="align-middle"><strong>Toplam Analiz Edilen Aktif Süre:</strong> ${formatTime(data.totalActiveSeconds)}</span>
+                        <span class="align-middle"><strong>Toplam Aktif Süre (Veri):</strong> ${formatTimeFromCount(data.totalActiveCount)} (${data.totalActiveCount} Ölçüm)</span>
                     </div>
                 `;
 
                 const renderBar = (title, icon, colorClass, resultObj) => {
-                    if (!resultObj || resultObj.totalActiveSeconds === 0) {
+                    if (!resultObj || resultObj.totalCount === 0) {
                         return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Bu metrik için geçerli ölçüm bulunamadı.</div></div>`;
                     }
 
-                    // 3. DÜZELTME: Yüzdeyi C#'tan beklemek yerine JavaScript tarafında hatasız biz hesaplıyoruz
                     let pctValue = 0;
                     if (resultObj.belowThresholdPercentage !== undefined) {
                         pctValue = resultObj.belowThresholdPercentage;
-                    } else if (resultObj.totalActiveSeconds > 0) {
-                        pctValue = ((resultObj.belowThresholdSeconds || 0) / resultObj.totalActiveSeconds) * 100;
+                    } else if (resultObj.totalCount > 0) {
+                        pctValue = ((resultObj.belowThresholdCount || 0) / resultObj.totalCount) * 100;
                     }
 
                     const pct = pctValue.toFixed(1);
@@ -1890,9 +1891,27 @@
                     <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title}</h6>
-                            <span class="badge bg-${colorClass} fs-6">%${pct} Eşiğin Altında</span>
+                            <span class="badge bg-${colorClass} fs-6">%${pct} Sorunsuz</span>
                         </div>
-                        <p class="small mb-3" style="color:var(--text-main);">Bu metrik, ölçülen sürenin <b style="color:var(--text-title); font-size:1.05em;">${formatTime(resultObj.belowThresholdSeconds)}</b> boyunca o dönemki eşik sınırlarının altında seyretmiş.</p>
+                        
+                        <div class="row text-center mb-3 mt-3">
+                            <div class="col-4 border-end border-secondary">
+                                <h5 class="text-info mb-0">${resultObj.totalCount}</h5>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Toplam Ölçüm</small>
+                                <small class="text-info fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.totalCount)})</small>
+                            </div>
+                            <div class="col-4 border-end border-secondary">
+                                <h5 class="text-danger mb-0">${resultObj.warningCount}</h5>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Uyarı (Aşılan)</small>
+                                <small class="text-danger fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.warningCount)})</small>
+                            </div>
+                            <div class="col-4">
+                                <h5 class="text-success mb-0">${resultObj.belowThresholdCount}</h5>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Sorunsuz</small>
+                                <small class="text-success fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.belowThresholdCount)})</small>
+                            </div>
+                        </div>
+
                         <div class="progress" style="height: 14px; background-color: var(--bg-input); border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
                             <div class="progress-bar bg-${colorClass}" role="progressbar" style="width: ${pct}%"></div>
                         </div>
@@ -1913,12 +1932,10 @@
                     html += `<div class="text-muted small mt-4"><i class="bi bi-hdd-network me-2"></i>Disk verisi bulunamadı.</div>`;
                 }
 
-                // Hatasız üretilen HTML'i ekrana yazdırıyoruz (Yükleniyor animasyonu kaybolacak)
                 metricsBody.innerHTML = html;
 
             } catch (e) {
                 console.error("Analiz Raporu Hatası:", e);
-                // Çökse dahi artık "Takılı kalma" yerine anlaşılır bir hata kutusu basacak
                 metricsBody.innerHTML = `
                     <div class="alert alert-danger d-flex align-items-center" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">
                         <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-danger"></i>

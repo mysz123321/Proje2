@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel.DataAnnotations;
 
 namespace Staj2.Domain.Entities
 {
@@ -10,15 +9,16 @@ namespace Staj2.Domain.Entities
         public int ComputerId { get; set; }
         public Computer Computer { get; set; }
 
-        [Required]
-        [MaxLength(50)]
-        public string MetricType { get; set; } // Örn: "CPU", "RAM", "Disk"
+        public int MetricTypeId { get; set; }
+        public MetricType MetricType { get; set; }
 
-        [MaxLength(200)]
-        public string DiskName { get; set; } // Sadece MetricType "Disk" ise dolu olur (Örn: "C:\")
+        // --- DEĞİŞEN KISIM: String yerine doğrudan ilişkisel Disk nesnesi (Nullable) ---
+        public int? ComputerDiskId { get; set; }
+        public ComputerDisk ComputerDisk { get; set; }
+        // -------------------------------------------------------------------------------
 
-        public double MetricValue { get; set; } // O an ölçülen değer
-        public double ThresholdValue { get; set; } // O an aşılan eşik değeri
+        public double MetricValue { get; set; }
+        public double ThresholdValue { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }

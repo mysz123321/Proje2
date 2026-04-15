@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Staj2.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using Staj2.Infrastructure.Data;
 namespace Staj2.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415181631_ChangeDiskNameToForeignKey")]
+    partial class ChangeDiskNameToForeignKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -199,6 +202,39 @@ namespace Staj2.Infrastructure.Migrations
                     b.ToTable("ComputerTags", (string)null);
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.ComputerThresholdHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ActiveFrom")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ComputerId")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("CpuThreshold")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("RamThreshold")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComputerId", "ActiveFrom");
+
+                    b.ToTable("ComputerThresholdHistories");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.DiskMetric", b =>
                 {
                     b.Property<long>("Id")
@@ -223,6 +259,36 @@ namespace Staj2.Infrastructure.Migrations
                     SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("ComputerDiskId", "CreatedAt"), new[] { "UsedPercent" });
 
                     b.ToTable("DiskMetrics");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.DiskThresholdHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ActiveFrom")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ComputerDiskId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("ThresholdPercent")
+                        .HasColumnType("float");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComputerDiskId", "ActiveFrom");
+
+                    b.ToTable("DiskThresholdHistories");
                 });
 
             modelBuilder.Entity("Staj2.Domain.Entities.MetricType", b =>
@@ -757,10 +823,32 @@ namespace Staj2.Infrastructure.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("Staj2.Domain.Entities.ComputerThresholdHistory", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.Computer", "Computer")
+                        .WithMany()
+                        .HasForeignKey("ComputerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Computer");
+                });
+
             modelBuilder.Entity("Staj2.Domain.Entities.DiskMetric", b =>
                 {
                     b.HasOne("Staj2.Domain.Entities.ComputerDisk", "ComputerDisk")
                         .WithMany("DiskMetrics")
+                        .HasForeignKey("ComputerDiskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ComputerDisk");
+                });
+
+            modelBuilder.Entity("Staj2.Domain.Entities.DiskThresholdHistory", b =>
+                {
+                    b.HasOne("Staj2.Domain.Entities.ComputerDisk", "ComputerDisk")
+                        .WithMany()
                         .HasForeignKey("ComputerDiskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

@@ -196,8 +196,7 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 _db.MetricWarningLogs.Add(new MetricWarningLog
                 {
                     ComputerId = computer.Id,
-                    MetricType = "CPU",
-                    DiskName = "-", // <--- BURAYI EKLEDİK
+                    MetricTypeId = 1,
                     MetricValue = dto.CpuUsage,
                     ThresholdValue = computer.CpuThreshold.Value,
                     CreatedAt = DateTime.Now
@@ -219,8 +218,7 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 _db.MetricWarningLogs.Add(new MetricWarningLog
                 {
                     ComputerId = computer.Id,
-                    MetricType = "RAM",
-                    DiskName = "-", // <--- BURAYI EKLEDİK
+                    MetricTypeId = 2,
                     MetricValue = dto.RamUsage,
                     ThresholdValue = computer.RamThreshold.Value,
                     CreatedAt = DateTime.Now
@@ -252,8 +250,8 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                             _db.MetricWarningLogs.Add(new MetricWarningLog
                             {
                                 ComputerId = computer.Id,
-                                MetricType = "Disk",
-                                DiskName = diskName,
+                                MetricTypeId = 3, // Disk Type ID
+                                ComputerDiskId = targetDisk.Id, // <--- ARTIK ID VERİYORUZ
                                 MetricValue = currentUsage,
                                 ThresholdValue = targetDisk.ThresholdPercent.Value,
                                 CreatedAt = DateTime.Now
@@ -355,6 +353,8 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
     {
         var query = _db.MetricWarningLogs
             .Include(w => w.Computer)
+            .Include(w => w.MetricType)
+            .Include(w => w.ComputerDisk) // <--- EKLENDİ
             .AsQueryable();
 
         if (!isAdmin)
@@ -377,7 +377,7 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
         var report = new TopWarningsReportDto();
 
         report.TopCpuWarnings = await query
-            .Where(w => w.MetricType == "CPU")
+            .Where(w => w.MetricTypeId == 1)
             .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName })
             .Select(g => new TopWarningItemDto
             {
@@ -386,10 +386,10 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 WarningCount = g.Count()
             })
             .OrderByDescending(x => x.WarningCount)
-            .ToListAsync(); // Take() KALDIRILDI
+            .ToListAsync(); 
 
         report.TopRamWarnings = await query
-            .Where(w => w.MetricType == "RAM")
+            .Where(w => w.MetricTypeId == 2)
             .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName })
             .Select(g => new TopWarningItemDto
             {
@@ -398,20 +398,21 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 WarningCount = g.Count()
             })
             .OrderByDescending(x => x.WarningCount)
-            .ToListAsync(); // Take() KALDIRILDI
+            .ToListAsync();
 
         report.TopDiskWarnings = await query
-            .Where(w => w.MetricType == "Disk")
-            .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName, w.DiskName })
+            .Where(w => w.MetricTypeId == 3)
+            // Gruplamada artık ilişkisel tablodan (ComputerDisk) disk adını alıyoruz
+            .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName, w.ComputerDisk.DiskName })
             .Select(g => new TopWarningItemDto
             {
                 ComputerId = g.Key.ComputerId,
                 ComputerName = !string.IsNullOrWhiteSpace(g.Key.DisplayName) ? g.Key.DisplayName : g.Key.MachineName,
-                DiskName = g.Key.DiskName,
+                DiskName = g.Key.DiskName, // ComputerDisk üzerinden gelen isim
                 WarningCount = g.Count()
             })
             .OrderByDescending(x => x.WarningCount)
-            .ToListAsync(); // Take() KALDIRILDI
+            .ToListAsync();
 
         return ServiceResult<TopWarningsReportDto>.Success(report);
     }

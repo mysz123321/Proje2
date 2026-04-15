@@ -160,44 +160,6 @@ public static class DbSeeder
         // (Yorum satırında bırakılmış)
 
 
-        // ======================================================================
-        // --- 8. YENİ: EŞİK DEĞERİ TARİHÇESİ (THRESHOLD HISTORY) BAŞLATMA ---
-        // ======================================================================
-
-        var allComputers = await context.Computers.ToListAsync();
-        foreach (var comp in allComputers)
-        {
-            // Eğer cihazın tarihçe tablosunda hiç kaydı yoksa, güncel değerleri ile bir başlangıç kaydı at.
-            if (!await context.ComputerThresholdHistories.AnyAsync(h => h.ComputerId == comp.Id))
-            {
-                context.ComputerThresholdHistories.Add(new ComputerThresholdHistory
-                {
-                    ComputerId = comp.Id,
-                    CpuThreshold = comp.CpuThreshold,
-                    RamThreshold = comp.RamThreshold,
-                    ActiveFrom = comp.CreatedAt, // Sisteme girdiği andan itibaren geçerli
-                    CreatedAt = DateTime.Now
-                });
-            }
-        }
-
-        var allDisks = await context.ComputerDisks.ToListAsync();
-        foreach (var disk in allDisks)
-        {
-            if (!await context.DiskThresholdHistories.AnyAsync(h => h.ComputerDiskId == disk.Id))
-            {
-                context.DiskThresholdHistories.Add(new DiskThresholdHistory
-                {
-                    ComputerDiskId = disk.Id,
-                    ThresholdPercent = disk.ThresholdPercent,
-                    ActiveFrom = DateTime.Now.AddMonths(-3),
-                    CreatedAt = DateTime.Now
-                });
-            }
-        }
-        await context.SaveChangesAsync(); // Başlangıç verilerini kaydet
-
-
         //// ======================================================================
         //// --- 9. YENİ: ID=8 BİLGİSAYARI İÇİN MART AYI RAPORLAMA TEST VERİSİ ---
         //// ======================================================================

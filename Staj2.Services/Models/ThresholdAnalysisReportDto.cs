@@ -4,7 +4,7 @@
     {
         public int ComputerId { get; set; }
         public string ComputerName { get; set; }
-        public double TotalActiveSeconds { get; set; }
+        public int TotalActiveCount { get; set; } // Seconds -> Count oldu
 
         public MetricThresholdResult CpuResult { get; set; } = new();
         public MetricThresholdResult RamResult { get; set; } = new();
@@ -13,11 +13,12 @@
 
     public class MetricThresholdResult
     {
-        // ThresholdValue KALDIRILDI! Artık tarihe göre dinamik hesaplanıyor.
-        public double BelowThresholdSeconds { get; set; }
-        public double TotalActiveSeconds { get; set; }
-        // Yüzde hesabı tam senin istediğin gibi toplam saniyeye oranlanıyor
-        public double BelowThresholdPercentage => TotalActiveSeconds > 0 ? (BelowThresholdSeconds / TotalActiveSeconds) * 100 : 0;
+        public int BelowThresholdCount { get; set; } // Eşiğin Altı (Sorunsuz)
+        public int WarningCount { get; set; }        // Eşiğin Üstü (Uyarı Sayısı)
+        public int TotalCount { get; set; }          // Toplam Gelen Veri
+
+        // Yüzde hesabı tam sayılarla (int) yapıldığı için double'a cast ediyoruz
+        public double BelowThresholdPercentage => TotalCount > 0 ? ((double)BelowThresholdCount / TotalCount) * 100 : 0;
     }
 
     public class DiskThresholdResult : MetricThresholdResult
