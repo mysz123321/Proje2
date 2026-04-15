@@ -528,6 +528,62 @@
 
                 ui.loadThresholdComputers();
                 break;
+            case 'warnings':
+                title.innerText = "Uyarı Raporları";
+                subtitle.innerText = "Sistemde eşik değerlerini en çok aşan cihazlar.";
+
+                // Filtre alanını gizle
+                const warningFilterEl = document.getElementById('globalFilters');
+                if (warningFilterEl) {
+                    warningFilterEl.classList.remove('d-flex');
+                    warningFilterEl.classList.add('d-none');
+                }
+
+                content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #0dcaf0 !important;">
+                            <div class="card-header border-bottom border-secondary p-3" style="background:transparent; color:var(--text-title);">
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-cpu text-info me-2"></i>En Çok CPU Uyarısı</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush" id="top-cpu-list">
+                                    <li class="list-group-item text-center py-4" style="background:transparent; color:var(--text-muted);">Yükleniyor...</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #d63384 !important;">
+                            <div class="card-header border-bottom border-secondary p-3" style="background:transparent; color:var(--text-title);">
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-memory text-danger me-2"></i>En Çok RAM Uyarısı</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush" id="top-ram-list">
+                                    <li class="list-group-item text-center py-4" style="background:transparent; color:var(--text-muted);">Yükleniyor...</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #ffc107 !important;">
+                            <div class="card-header border-bottom border-secondary p-3" style="background:transparent; color:var(--text-title);">
+                                <h6 class="mb-0 fw-bold"><i class="bi bi-hdd text-warning me-2"></i>En Çok Disk Uyarısı</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush" id="top-disk-list">
+                                    <li class="list-group-item text-center py-4" style="background:transparent; color:var(--text-muted);">Yükleniyor...</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+
+                // Arayüz çizildikten sonra verileri API'den çeken fonksiyonu çağırıyoruz
+                if (window.fetchTopWarnings) window.fetchTopWarnings();
+                break;
         }
 
     }
@@ -1541,7 +1597,7 @@
             const tbody = document.getElementById(tbodyId);
             if (!tbody) return;
 
-            const ITEMS_PER_PAGE_REPORTS = 2;
+            const ITEMS_PER_PAGE_REPORTS = 5;
             const state = pgState.reports[stateKey];
             const start = (state.page - 1) * ITEMS_PER_PAGE_REPORTS;
             const paginated = state.data.slice(start, start + ITEMS_PER_PAGE_REPORTS);
@@ -1874,7 +1930,98 @@
             }
         }
     };
+    window.warningData = { cpu: [], ram: [], disk: [] };
+    window.warningPages = { cpu: 1, ram: 1, disk: 1 };
+    const WARNING_ITEMS_PER_PAGE = 10; // Her sayfada gösterilecek cihaz sayısı
 
+    window.fetchTopWarnings = async function () {
+        try {
+            // Linkten ?topN=5 kısmını sildik, hepsini getiriyoruz
+            const result = await window.api.get('/api/agent-telemetry/top-warnings');
+            const data = result.data ? result.data : result;
+
+            // Gelen verileri hafızaya alıyoruz
+            window.warningData.cpu = data.topCpuWarnings || [];
+            window.warningData.ram = data.topRamWarnings || [];
+            window.warningData.disk = data.topDiskWarnings || [];
+
+            // Sayfa numaralarını sıfırlıyoruz
+            window.warningPages = { cpu: 1, ram: 1, disk: 1 };
+
+            // Ekranı çizdiriyoruz
+            window.renderPaginatedWarningList('cpu');
+            window.renderPaginatedWarningList('ram');
+            window.renderPaginatedWarningList('disk');
+
+        } catch (err) {
+            console.error("Uyarı Raporu çekilirken hata oluştu: ", err);
+        }
+    };
+
+    window.renderPaginatedWarningList = function (type) {
+        let list = window.warningData[type];
+        let page = window.warningPages[type];
+        let elementId = `top-${type}-list`;
+        let isDisk = (type === 'disk');
+
+        const container = document.getElementById(elementId);
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        // Veri yoksa
+        if (!list || list.length === 0) {
+            container.innerHTML = `<li class="list-group-item text-success text-center py-4" style="background:transparent;"><i class="bi bi-check-circle-fill me-2"></i>Hiç uyarı yok!</li>`;
+            return;
+        }
+
+        // Sayfalama hesaplamaları
+        let totalPages = Math.ceil(list.length / WARNING_ITEMS_PER_PAGE);
+        if (page > totalPages) page = totalPages;
+        if (page < 1) page = 1;
+
+        let startIndex = (page - 1) * WARNING_ITEMS_PER_PAGE;
+        let endIndex = Math.min(startIndex + WARNING_ITEMS_PER_PAGE, list.length);
+        let pageData = list.slice(startIndex, endIndex);
+
+        // O sayfaya ait cihazları çizdirme
+        pageData.forEach(item => {
+            const diskBadge = isDisk && item.diskName ? `<span class="badge bg-secondary ms-2">${item.diskName}</span>` : '';
+
+            container.innerHTML += `
+            <li class="list-group-item d-flex justify-content-between align-items-center" style="background:transparent; color:var(--text-main); border-color:var(--border-color);">
+                <div>
+                    <strong style="color:var(--text-title);">${item.computerName}</strong>
+                    ${diskBadge}
+                </div>
+                <span class="badge bg-danger rounded-pill px-3 py-2">${item.warningCount}</span>
+            </li>
+        `;
+        });
+
+        // Alt kısma Pagination butonlarını ekleme (Sadece 1 sayfadan fazlaysa göster)
+        if (totalPages > 1) {
+            container.innerHTML += `
+            <li class="list-group-item p-2 d-flex justify-content-center" style="background:transparent; border-color:var(--border-color);">
+                <div class="btn-group btn-group-sm shadow-sm">
+                    <button class="btn btn-outline-secondary" ${page === 1 ? 'disabled' : ''} onclick="window.changeWarningPage('${type}', ${page - 1})">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="btn btn-secondary disabled px-3" style="color:white !important;">${page} / ${totalPages}</span>
+                    <button class="btn btn-outline-secondary" ${page === totalPages ? 'disabled' : ''} onclick="window.changeWarningPage('${type}', ${page + 1})">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </li>
+        `;
+        }
+    };
+
+    // Butonlara tıklanınca sayfayı değiştirip sadece o listeyi yeniden çizen fonksiyon
+    window.changeWarningPage = function (type, newPage) {
+        window.warningPages[type] = newPage;
+        window.renderPaginatedWarningList(type);
+    };
     // --- Tema Başlatma (Sayfa Yüklenince) ---
     (function initTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';

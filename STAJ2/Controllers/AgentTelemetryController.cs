@@ -78,4 +78,22 @@ public class AgentTelemetryController : ControllerBase
         // Başarılıysa veriyi dön
         return Ok(result.Data);
     }
+
+    [HttpGet("top-warnings")]
+    [Authorize]
+    public async Task<IActionResult> GetTopWarnings() // Parametre kaldırıldı
+    {
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int userId = int.TryParse(userIdString, out int id) ? id : 0;
+
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+        bool isAdmin = User.IsInRole(adminRoleName);
+
+        var result = await _telemetryService.GetTopWarningsAsync(userId, isAdmin);
+
+        if (!result.IsSuccess)
+            return BadRequest(result.Message);
+
+        return Ok(result.Data);
+    }
 }

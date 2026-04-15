@@ -40,6 +40,8 @@ namespace Staj2.Infrastructure.Data
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<ComputerThresholdHistory> ComputerThresholdHistories { get; set; }
         public DbSet<DiskThresholdHistory> DiskThresholdHistories { get; set; }
+        // TABLOLAR (Mevcutların altına ekle)
+        public DbSet<MetricWarningLog> MetricWarningLogs { get; set; }
         // ====================================================================
         // YENİ: ARAYÜZ (INTERFACE) TABANLI OTOMATİK AUDIT LOGGING
         // ====================================================================
@@ -260,14 +262,26 @@ namespace Staj2.Infrastructure.Data
             });
 
             modelBuilder.Entity<ComputerMetric>()
-    .HasIndex(m => new { m.ComputerId, m.CreatedAt })
-    .IncludeProperties(m => new { m.CpuUsage, m.RamUsage });
+                .HasIndex(m => new { m.ComputerId, m.CreatedAt })
+                .IncludeProperties(m => new { m.CpuUsage, m.RamUsage });
 
-            // DİKKAT: DiskMetric için de sadece CreatedAt değil, Disk ID'si ile birlikte çoklu indeks yapmalıyız!
+                // DİKKAT: DiskMetric için de sadece CreatedAt değil, Disk ID'si ile birlikte çoklu indeks yapmalıyız!
             modelBuilder.Entity<DiskMetric>()
-    .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt })
-    .IncludeProperties(m => new { m.UsedPercent });
+                .HasIndex(m => new { m.ComputerDiskId, m.CreatedAt })
+                .IncludeProperties(m => new { m.UsedPercent });
 
+            modelBuilder.Entity<MetricWarningLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                // Rapor alırken cihazları gruplayacağımız ve tarihe göre filtreleyebileceğimiz için Composite Index ekliyoruz.
+                entity.HasIndex(w => new { w.ComputerId, w.MetricType, w.CreatedAt });
+
+                entity.HasOne(w => w.Computer)
+                      .WithMany()
+                      .HasForeignKey(w => w.ComputerId)
+                      .OnDelete(DeleteBehavior.Cascade); // Bilgisayar silinirse uyarı logları da silinsin
+            });
             // --- THRESHOLD HISTORY İLİŞKİLERİ ---
             modelBuilder.Entity<ComputerThresholdHistory>()
                 .HasOne(h => h.Computer)

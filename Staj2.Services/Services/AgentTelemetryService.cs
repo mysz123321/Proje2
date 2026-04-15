@@ -150,96 +150,130 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             await _db.SaveChangesAsync(ct);
 
             // =======================================================
-            // 5. ALERT (UYARI) KONTROLLERİ VE MAİL İÇERİĞİ HAZIRLAMA
+            // 5. ALERT KONTROLLERİ, LOGLAMA VE MAİL İÇERİĞİ HAZIRLAMA
             // =======================================================
             var alertsToSend = new List<(string Email, string Subject, string Body)>();
             var alertingConfig = _config.GetSection("Alerting");
 
-            // 1. Config'den Yönetici rol adını al, yoksa "Yönetici" kullan
             var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
 
-            // 2. Sistemdeki "Yönetici" rolüne sahip aktif kullanıcılar
             var adminEmails = await _db.Users
                 .Where(u => !u.IsDeleted && u.Roles.Any(r => r.Name == adminRoleName && !r.IsDeleted))
                 .Select(u => u.Email)
                 .ToListAsync(ct);
 
-            // 3. Bu cihaza doğrudan atanmış aktif kullanıcılar (UserComputerAccess tablosu üzerinden)
             var assignedUserEmails = await _db.UserComputerAccesses
                 .Where(uca => uca.ComputerId == computer.Id && !uca.IsDeleted && !uca.User.IsDeleted)
                 .Select(uca => uca.User.Email)
                 .ToListAsync(ct);
 
-            // Yönetici ve Atalı Kullanıcıları birleştir, tekrarlayan mailleri temizle (Distinct)
             var finalRecipients = adminEmails
                 .Concat(assignedUserEmails)
                 .Where(email => !string.IsNullOrWhiteSpace(email))
                 .Distinct()
                 .ToList();
 
-            if (finalRecipients.Count > 0)
+            int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours", 1);
+            string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
+            bool dbUpdateNeeded = false;
+
+            // Mail hazırlayıcı yerel fonksiyon
+            void CreateAlert(string title, string message)
             {
-                int intervalHours = alertingConfig.GetValue<int>("NotifyIntervalHours", 1);
-                string deviceName = !string.IsNullOrWhiteSpace(computer.DisplayName) ? computer.DisplayName : computer.MachineName;
-                bool dbUpdateNeeded = false;
+                if (finalRecipients.Count == 0) return;
 
-                void CreateAlert(string title, string message)
+                string subject = $"🚨 {title}: {deviceName}";
+                string fullBody = $"Merhaba,\n\n{deviceName} ({computer.IpAddress}) cihazında aşağıdaki limit aşımı tespit edilmiştir:\n\n{message}\n\n--------------------------------------------------\nZaman: {DateTime.Now}";
+
+                foreach (var email in finalRecipients)
+                    alertsToSend.Add((email, subject, fullBody));
+            }
+
+            // --- 5.1 CPU KONTROLÜ ---
+            if (computer.CpuThreshold.HasValue && dto.CpuUsage >= computer.CpuThreshold.Value)
+            {
+                // YENİ: Bekleme süresinden bağımsız her zaman logla (Yeni özelliğimiz için)
+                _db.MetricWarningLogs.Add(new MetricWarningLog
                 {
-                    string subject = $"🚨 {title}: {deviceName}";
-                    string fullBody = $"Merhaba,\n\n{deviceName} ({computer.IpAddress}) cihazında aşağıdaki limit aşımı tespit edilmiştir:\n\n{message}\n\n--------------------------------------------------\nZaman: {DateTime.Now}";
+                    ComputerId = computer.Id,
+                    MetricType = "CPU",
+                    DiskName = "-", // <--- BURAYI EKLEDİK
+                    MetricValue = dto.CpuUsage,
+                    ThresholdValue = computer.CpuThreshold.Value,
+                    CreatedAt = DateTime.Now
+                });
+                dbUpdateNeeded = true;
 
-                    foreach (var email in finalRecipients)
-                        alertsToSend.Add((email, subject, fullBody));
+                // Eski: Mail atmak için cooldown bekle
+                if (computer.CpuLastNotifyTime == null || (DateTime.Now - computer.CpuLastNotifyTime.Value).TotalHours >= intervalHours)
+                {
+                    CreateAlert("CPU UYARISI", $"⚠️ CPU KULLANIMI: %{dto.CpuUsage:F1} (Limit: %{computer.CpuThreshold.Value})");
+                    computer.CpuLastNotifyTime = DateTime.Now;
                 }
+            }
 
-                // CPU Kontrolü
-                if (computer.CpuThreshold.HasValue && dto.CpuUsage >= computer.CpuThreshold.Value)
+            // --- 5.2 RAM KONTROLÜ ---
+            if (computer.RamThreshold.HasValue && dto.RamUsage >= computer.RamThreshold.Value)
+            {
+                // YENİ: Bekleme süresinden bağımsız her zaman logla
+                _db.MetricWarningLogs.Add(new MetricWarningLog
                 {
-                    if (computer.CpuLastNotifyTime == null || (DateTime.Now - computer.CpuLastNotifyTime.Value).TotalHours >= intervalHours)
-                    {
-                        CreateAlert("CPU UYARISI", $"⚠️ CPU KULLANIMI: %{dto.CpuUsage:F1} (Limit: %{computer.CpuThreshold.Value})");
-                        computer.CpuLastNotifyTime = DateTime.Now;
-                        dbUpdateNeeded = true;
-                    }
+                    ComputerId = computer.Id,
+                    MetricType = "RAM",
+                    DiskName = "-", // <--- BURAYI EKLEDİK
+                    MetricValue = dto.RamUsage,
+                    ThresholdValue = computer.RamThreshold.Value,
+                    CreatedAt = DateTime.Now
+                });
+                dbUpdateNeeded = true;
+
+                // Eski: Mail atmak için cooldown bekle
+                if (computer.RamLastNotifyTime == null || (DateTime.Now - computer.RamLastNotifyTime.Value).TotalHours >= intervalHours)
+                {
+                    CreateAlert("RAM UYARISI", $"⚠️ RAM KULLANIMI: %{dto.RamUsage:F1} (Limit: %{computer.RamThreshold.Value})");
+                    computer.RamLastNotifyTime = DateTime.Now;
                 }
+            }
 
-                // RAM Kontrolü
-                if (computer.RamThreshold.HasValue && dto.RamUsage >= computer.RamThreshold.Value)
+            // --- 5.3 DİSK KONTROLÜ ---
+            for (int i = 0; i < diskUsageParts.Length; i += 2)
+            {
+                if (i + 1 < diskUsageParts.Length)
                 {
-                    if (computer.RamLastNotifyTime == null || (DateTime.Now - computer.RamLastNotifyTime.Value).TotalHours >= intervalHours)
-                    {
-                        CreateAlert("RAM UYARISI", $"⚠️ RAM KULLANIMI: %{dto.RamUsage:F1} (Limit: %{computer.RamThreshold.Value})");
-                        computer.RamLastNotifyTime = DateTime.Now;
-                        dbUpdateNeeded = true;
-                    }
-                }
+                    string diskName = diskUsageParts[i].Replace(":", "").Trim();
+                    string percentStr = diskUsageParts[i + 1].Replace("%", "").Replace(",", ".");
 
-                // DİSK Kontrolü
-                for (int i = 0; i < diskUsageParts.Length; i += 2)
-                {
-                    if (i + 1 < diskUsageParts.Length)
+                    if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double currentUsage))
                     {
-                        string diskName = diskUsageParts[i].Replace(":", "").Trim();
-                        string percentStr = diskUsageParts[i + 1].Replace("%", "").Replace(",", ".");
-
-                        if (double.TryParse(percentStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double currentUsage))
+                        var targetDisk = computer.Disks.FirstOrDefault(d => d.DiskName == diskName);
+                        if (targetDisk != null && targetDisk.ThresholdPercent.HasValue && currentUsage >= targetDisk.ThresholdPercent.Value)
                         {
-                            var targetDisk = computer.Disks.FirstOrDefault(d => d.DiskName == diskName);
-                            if (targetDisk != null && targetDisk.ThresholdPercent.HasValue && currentUsage >= targetDisk.ThresholdPercent.Value)
+                            // YENİ: Bekleme süresinden bağımsız disk logu ekle
+                            _db.MetricWarningLogs.Add(new MetricWarningLog
                             {
-                                if (targetDisk.LastNotifyTime == null || (DateTime.Now - targetDisk.LastNotifyTime.Value).TotalHours >= intervalHours)
-                                {
-                                    CreateAlert($"DİSK UYARISI ({diskName})", $"⚠️ DİSK DOLULUK ({diskName}): %{currentUsage:F1} (Limit: %{targetDisk.ThresholdPercent.Value})");
-                                    targetDisk.LastNotifyTime = DateTime.Now;
-                                    dbUpdateNeeded = true;
-                                }
+                                ComputerId = computer.Id,
+                                MetricType = "Disk",
+                                DiskName = diskName,
+                                MetricValue = currentUsage,
+                                ThresholdValue = targetDisk.ThresholdPercent.Value,
+                                CreatedAt = DateTime.Now
+                            });
+                            dbUpdateNeeded = true;
+
+                            // Eski: Mail atmak için cooldown bekle
+                            if (targetDisk.LastNotifyTime == null || (DateTime.Now - targetDisk.LastNotifyTime.Value).TotalHours >= intervalHours)
+                            {
+                                CreateAlert($"DİSK UYARISI ({diskName})", $"⚠️ DİSK DOLULUK ({diskName}): %{currentUsage:F1} (Limit: %{targetDisk.ThresholdPercent.Value})");
+                                targetDisk.LastNotifyTime = DateTime.Now;
                             }
                         }
                     }
                 }
-
-                if (dbUpdateNeeded) await _db.SaveChangesAsync(ct);
             }
+
+            // Eklenen logları ve güncellenen Mail cooldown tarihlerini kaydet
+            if (dbUpdateNeeded) await _db.SaveChangesAsync(ct);
+        
 
             dto.Ts = DateTime.Now;
             lock (_latestData) { _latestData[dto.MacAddress] = dto; }
@@ -315,5 +349,70 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
         .ToList();
 
         return ServiceResult<object>.Success(sortedResult);
+    }
+
+    public async Task<ServiceResult<TopWarningsReportDto>> GetTopWarningsAsync(int userId, bool isAdmin)
+    {
+        var query = _db.MetricWarningLogs
+            .Include(w => w.Computer)
+            .AsQueryable();
+
+        if (!isAdmin)
+        {
+            var accessibleCompIds = await _db.UserComputerAccesses
+                .Where(x => x.UserId == userId && !x.IsDeleted)
+                .Select(x => x.ComputerId)
+                .ToListAsync();
+
+            var accessibleTagIds = await _db.UserTagAccesses
+                .Where(x => x.UserId == userId && !x.IsDeleted)
+                .Select(x => x.TagId)
+                .ToListAsync();
+
+            query = query.Where(w =>
+                accessibleCompIds.Contains(w.ComputerId) ||
+                w.Computer.Tags.Any(t => accessibleTagIds.Contains(t.Id)));
+        }
+
+        var report = new TopWarningsReportDto();
+
+        report.TopCpuWarnings = await query
+            .Where(w => w.MetricType == "CPU")
+            .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName })
+            .Select(g => new TopWarningItemDto
+            {
+                ComputerId = g.Key.ComputerId,
+                ComputerName = !string.IsNullOrWhiteSpace(g.Key.DisplayName) ? g.Key.DisplayName : g.Key.MachineName,
+                WarningCount = g.Count()
+            })
+            .OrderByDescending(x => x.WarningCount)
+            .ToListAsync(); // Take() KALDIRILDI
+
+        report.TopRamWarnings = await query
+            .Where(w => w.MetricType == "RAM")
+            .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName })
+            .Select(g => new TopWarningItemDto
+            {
+                ComputerId = g.Key.ComputerId,
+                ComputerName = !string.IsNullOrWhiteSpace(g.Key.DisplayName) ? g.Key.DisplayName : g.Key.MachineName,
+                WarningCount = g.Count()
+            })
+            .OrderByDescending(x => x.WarningCount)
+            .ToListAsync(); // Take() KALDIRILDI
+
+        report.TopDiskWarnings = await query
+            .Where(w => w.MetricType == "Disk")
+            .GroupBy(w => new { w.ComputerId, w.Computer.DisplayName, w.Computer.MachineName, w.DiskName })
+            .Select(g => new TopWarningItemDto
+            {
+                ComputerId = g.Key.ComputerId,
+                ComputerName = !string.IsNullOrWhiteSpace(g.Key.DisplayName) ? g.Key.DisplayName : g.Key.MachineName,
+                DiskName = g.Key.DiskName,
+                WarningCount = g.Count()
+            })
+            .OrderByDescending(x => x.WarningCount)
+            .ToListAsync(); // Take() KALDIRILDI
+
+        return ServiceResult<TopWarningsReportDto>.Success(report);
     }
 }
