@@ -636,6 +636,82 @@
                 // Cihazları getir
                 if (window.ui.loadHeatmapComputers) window.ui.loadHeatmapComputers();
                 break;
+
+            case 'correlation':
+                title.innerText = "Korelasyon Analizi";
+                subtitle.innerText = "Metrikler arasındaki ilişkiyi farklı grafik türleriyle keşfedin.";
+
+                content.innerHTML = `
+                <div class="row">
+                    <div class="col-lg-3 mb-4">
+                        <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders text-primary"></i> Analiz Ayarları</h5>
+                                
+                                <div class="d-flex align-items-center justify-content-between mb-4 p-2 rounded" style="background:var(--bg-input); border:1px solid var(--border-input);">
+                                    <span class="small fw-bold" id="lbl-scatter" style="transition: all 0.3s ease;">Scatter Plot</span>
+                                    <div class="form-check form-switch m-0">
+                                        <input class="form-check-input" type="checkbox" id="corr-type-toggle" 
+                                               ${(localStorage.getItem('corrMode') || 'line') === 'line' ? 'checked' : ''} 
+                                               onchange="ui.handleCorrModeChange(this.checked)">
+                                    </div>
+                                    <span class="small fw-bold" id="lbl-line" style="transition: all 0.3s ease;">Zaman Serisi</span>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
+                                    <select id="corr-computer-select" class="form-select" onchange="ui.loadCorrelationDisks(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                        <option value="">Yükleniyor...</option>
+                                    </select>
+                                </div>
+
+                                <div class="row g-2 mb-4">
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold small text-muted">BAŞLANGIÇ</label>
+                                        <input type="datetime-local" id="corr-start" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main);">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold small text-muted">BİTİŞ</label>
+                                        <input type="datetime-local" id="corr-end" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main);">
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-muted">VERİ SEÇİMİ <span id="selection-limit-info" class="badge bg-secondary ms-1"></span></label>
+                                    <div id="corr-metrics-container">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input corr-check" type="checkbox" id="check-cpu" value="CPU">
+                                            <label class="form-check-label small" for="check-cpu">CPU Kullanımı (%)</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input corr-check" type="checkbox" id="check-ram" value="RAM">
+                                            <label class="form-check-label small" for="check-ram">RAM Kullanımı (%)</label>
+                                        </div>
+                                        <div id="corr-disk-checks" class="mt-2 pt-2 border-top border-secondary" style="border-color:var(--border-color) !important;">
+                                            <small class="text-muted d-block">Diskler (Cihaz Seçin)</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="ui.generateCorrelationAnalysis()">
+                                    <i class="bi bi-graph-up-arrow me-2"></i> Analizi Göster
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-9">
+                        <div id="corr-result-card" class="card border-0 shadow-sm p-3" style="background:var(--bg-card); display:none; height: 550px;">
+                            <canvas id="correlationCanvas"></canvas>
+                        </div>
+                        <div id="corr-placeholder" class="text-center py-5 mt-5">
+                            <i class="bi bi-intersect display-1 text-muted opacity-50 mb-3 d-block"></i>
+                            <h4 class="fw-light" style="color: var(--text-title);">Analiz tipini ve parametreleri seçerek başlayın.</h4>
+                        </div>
+                    </div>
+                </div>`;
+
+                ui.initCorrelationPage();
+                break;
         }
 
     }
@@ -2178,6 +2254,289 @@
             </div>`;
 
             return html;
+        },
+        loadCorrelationComputers: async () => {
+            const selectEl = document.getElementById('corr-computer-select');
+            if (!selectEl) return;
+            try {
+                const computers = await api.get('/api/Computer');
+                const activeComputers = computers.filter(c => !c.isDeleted);
+                let optionsHtml = '<option value="">-- Cihaz Seçiniz --</option>';
+                activeComputers.forEach(c => {
+                    optionsHtml += `<option value="${c.id}">${c.displayName || c.machineName}</option>`;
+                });
+                selectEl.innerHTML = optionsHtml;
+            } catch (e) { selectEl.innerHTML = '<option value="">Yüklenemedi</option>'; }
+        },
+
+        loadCorrelationDisks: async (compId) => {
+            const container = document.getElementById('corr-disk-checks');
+            if (!compId) { container.innerHTML = '<small class="text-muted">Cihaz Seçiniz</small>'; return; }
+            try {
+                const disks = await api.get(`/api/Computer/${compId}/disks`);
+                container.innerHTML = '<small class="text-muted d-block mb-2">Aktif Diskler</small>';
+                disks.forEach(d => {
+                    container.innerHTML += `
+                    <div class="form-check mb-1">
+                        <input class="form-check-input corr-check" type="checkbox" value="Disk_${d.diskName}" id="chkDisk_${d.id}">
+                        <label class="form-check-label small" for="chkDisk_${d.id}">Disk ${d.diskName}</label>
+                    </div>`;
+                });
+            } catch (e) { container.innerHTML = '<small class="text-danger">Diskler alınamadı</small>'; }
+        },
+
+        handleCorrModeChange: (isLine) => {
+            const mode = isLine ? 'line' : 'scatter';
+            localStorage.setItem('corrMode', mode);
+
+            const lblLine = document.getElementById('lbl-line');
+            const lblScatter = document.getElementById('lbl-scatter');
+
+            if (lblLine && lblScatter) {
+                // Aktif olanı vurgula, pasif olanın opaklığını düşür
+                if (isLine) {
+                    lblLine.style.opacity = "1";
+                    lblLine.style.color = "var(--primary-color, #0d6efd)"; // Varsa ana renk, yoksa mavi
+                    lblScatter.style.opacity = "0.4";
+                    lblScatter.style.color = "var(--text-main)";
+                } else {
+                    lblLine.style.opacity = "0.4";
+                    lblLine.style.color = "var(--text-main)";
+                    lblScatter.style.opacity = "1";
+                    lblScatter.style.color = "var(--primary-color, #0d6efd)";
+                }
+            }
+
+            const info = document.getElementById('selection-limit-info');
+            if (info) info.innerText = isLine ? "(Sınırsız Seçim)" : "(Tam 2 Adet Seçin)";
+
+            if (!isLine) {
+                const checked = document.querySelectorAll('.corr-check:checked');
+                if (checked.length > 2) checked.forEach(c => c.checked = false);
+            }
+        },
+
+        initCorrelationPage: () => {
+            const mode = localStorage.getItem('corrMode') || 'line';
+            ui.handleCorrModeChange(mode === 'line');
+            ui.loadCorrelationComputers();
+
+            // Checkbox tıklama kontrolü (Scatter için maksimum 2)
+            document.addEventListener('change', (e) => {
+                if (e.target.classList.contains('corr-check')) {
+                    const currentMode = localStorage.getItem('corrMode') || 'line';
+                    if (currentMode === 'scatter') {
+                        const checked = document.querySelectorAll('.corr-check:checked');
+                        if (checked.length > 2) {
+                            e.target.checked = false;
+                            Swal.fire({ icon: 'info', text: 'Scatter plot için tam olarak 2 veri seçmelisiniz.', timer: 2000, showConfirmButton: false });
+                        }
+                    }
+                }
+            });
+
+            // Varsayılan tarihleri ayarla (Son 24 saat)
+            const now = new Date();
+            const yesterday = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+            const toISO = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            document.getElementById('corr-start').value = toISO(yesterday);
+            document.getElementById('corr-end').value = toISO(now);
+        },
+
+        generateCorrelationAnalysis: async () => {
+            const compId = document.getElementById('corr-computer-select').value;
+            const start = document.getElementById('corr-start').value;
+            const end = document.getElementById('corr-end').value;
+            const mode = localStorage.getItem('corrMode') || 'line';
+            const checkedMetrics = Array.from(document.querySelectorAll('.corr-check:checked'));
+
+            // Doğrulamalar
+            if (!compId) { Swal.fire({ icon: 'warning', text: 'Lütfen bir cihaz seçin.' }); return; }
+            if (checkedMetrics.length === 0) { Swal.fire({ icon: 'warning', text: 'Lütfen en az bir değer seçin.' }); return; }
+            if (mode === 'scatter' && checkedMetrics.length !== 2) {
+                Swal.fire({ icon: 'warning', text: 'Scatter Plot çizmek için tam 2 değer seçmelisiniz (Örn: CPU ve RAM).' });
+                return;
+            }
+
+            document.getElementById('corr-placeholder').style.display = 'none';
+            document.getElementById('corr-result-card').style.display = 'block';
+
+            try {
+                const res = await api.get(`/api/Computer/${compId}/metrics-history?start=${start}&end=${end}`);
+                const ctx = document.getElementById('correlationCanvas').getContext('2d');
+                if (window.myCorrelationChart) window.myCorrelationChart.destroy();
+
+                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                const textColor = isLight ? '#334155' : '#e2e8f0';
+                const gridColor = isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.1)';
+
+                // Zaman Haritası (Milisaniye farkını sıfırlama)
+                const timeMap = {};
+
+                if (res.cpuRam) {
+                    res.cpuRam.forEach(m => {
+                        if (!m.createdAt) return;
+                        const ts = new Date(m.createdAt).setSeconds(0, 0);
+                        if (!timeMap[ts]) timeMap[ts] = {};
+                        timeMap[ts]["CPU"] = m.cpuUsage;
+                        timeMap[ts]["RAM"] = m.ramUsage;
+                    });
+                }
+
+                if (res.disks) {
+                    res.disks.forEach(d => {
+                        if (!d.createdAt) return;
+                        const ts = new Date(d.createdAt).setSeconds(0, 0);
+                        if (!timeMap[ts]) timeMap[ts] = {};
+                        timeMap[ts][`Disk_${d.diskName}`] = d.usedPercent;
+                    });
+                }
+
+                const sortedKeys = Object.keys(timeMap).map(Number).sort((a, b) => a - b);
+
+                if (mode === 'line') {
+                    // --- ZAMAN SERİSİ (LINE CHART) ---
+                    const labels = sortedKeys.map(ts => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+                    const datasets = [];
+
+                    checkedMetrics.forEach((cb, index) => {
+                        const metricKey = cb.value;
+                        const dataArray = sortedKeys.map(ts => {
+                            const val = timeMap[ts][metricKey];
+                            return val !== undefined ? val : null;
+                        });
+
+                        let label = metricKey;
+                        let color = '#0dcaf0';
+                        let fill = false;
+
+                        if (metricKey === "CPU") { color = '#0dcaf0'; fill = true; }
+                        else if (metricKey === "RAM") { color = '#dc3545'; fill = true; }
+                        else if (metricKey.startsWith("Disk_")) {
+                            label = `Disk ${metricKey.substring(5)} (%)`;
+                            color = index % 2 === 0 ? '#198754' : '#ffc107';
+                        }
+
+                        datasets.push({
+                            label: label,
+                            data: dataArray,
+                            borderColor: color,
+                            backgroundColor: color + '20',
+                            tension: 0.3,
+                            fill: fill,
+                            spanGaps: true
+                        });
+                    });
+
+                    window.myCorrelationChart = new Chart(ctx, {
+                        type: 'line',
+                        data: { labels, datasets },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { labels: { color: textColor } } },
+                            scales: {
+                                y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } },
+                                x: { ticks: { color: textColor }, grid: { display: false } }
+                            }
+                        }
+                    });
+
+                } else {
+                    // --- SCATTER PLOT & TRENDLINE (EĞİLİM ÇİZGİSİ) ---
+                    const metric1 = checkedMetrics[0].value;
+                    const metric2 = checkedMetrics[1].value;
+                    const scatterData = [];
+
+                    // Lineer Regresyon hesaplaması için gerekli değişkenler
+                    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+                    let n = 0;
+
+                    sortedKeys.forEach(ts => {
+                        const xVal = timeMap[ts][metric1];
+                        const yVal = timeMap[ts][metric2];
+
+                        if (xVal !== undefined && yVal !== undefined) {
+                            scatterData.push({ x: xVal, y: yVal });
+
+                            // Trendline matematiği verileri
+                            sumX += xVal;
+                            sumY += yVal;
+                            sumXY += (xVal * yVal);
+                            sumX2 += (xVal * xVal);
+                            n++;
+                        }
+                    });
+
+                    // Trendline (En İyi Uyum Çizgisi) Hesaplaması
+                    let trendlineData = [];
+                    if (n > 1) {
+                        const denominator = (n * sumX2 - sumX * sumX);
+                        if (denominator !== 0) {
+                            const m = (n * sumXY - sumX * sumY) / denominator; // Eğim (Slope)
+                            const b = (sumY - m * sumX) / n;                   // Y-kesişimi (Intercept)
+
+                            // Çizgiyi grafiğin başından (0) sonuna (100) kadar çiz
+                            trendlineData = [
+                                { x: 0, y: b },
+                                { x: 100, y: (m * 100) + b }
+                            ];
+                        }
+                    }
+
+                    const label1 = metric1.startsWith("Disk_") ? `Disk ${metric1.substring(5)}` : metric1;
+                    const label2 = metric2.startsWith("Disk_") ? `Disk ${metric2.substring(5)}` : metric2;
+
+                    window.myCorrelationChart = new Chart(ctx, {
+                        data: {
+                            datasets: [
+                                {
+                                    // 1. Veri Seti: Gerçek Noktalar (Scatter)
+                                    type: 'scatter',
+                                    label: `${label1} vs ${label2} Dağılımı`,
+                                    data: scatterData,
+                                    backgroundColor: 'rgba(13, 202, 240, 0.6)',
+                                    borderColor: '#0dcaf0',
+                                    pointRadius: 5, pointHoverRadius: 8
+                                },
+                                {
+                                    // 2. Veri Seti: Trend Çizgisi (Line)
+                                    type: 'line',
+                                    label: 'Eğilim Çizgisi (Trendline)',
+                                    data: trendlineData,
+                                    borderColor: 'rgba(239, 68, 68, 0.8)', // Kırmızı renk
+                                    borderWidth: 2,
+                                    borderDash: [5, 5], // Kesik kesik çizgi stili
+                                    fill: false,
+                                    pointRadius: 0, // Bu çizgide nokta göstermeye gerek yok
+                                    pointHoverRadius: 0,
+                                    tension: 0 // Çizgiyi dümdüz yap (kıvrım olmasın)
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { labels: { color: textColor } },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => {
+                                            if (ctx.datasetIndex === 1) return 'Genel Eğilim Yönü';
+                                            return `${label1}: %${ctx.raw.x.toFixed(1)}, ${label2}: %${ctx.raw.y.toFixed(1)}`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: { title: { display: true, text: label1 + " (%)", color: textColor }, min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } },
+                                y: { title: { display: true, text: label2 + " (%)", color: textColor }, min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {
+                Swal.fire({ icon: 'error', text: e.message || 'Veri işlenirken hata oluştu.' });
+            }
         }
         
     };
