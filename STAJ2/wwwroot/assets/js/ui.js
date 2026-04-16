@@ -584,6 +584,58 @@
                 // Arayüz çizildikten sonra verileri API'den çeken fonksiyonu çağırıyoruz
                 if (window.fetchTopWarnings) window.fetchTopWarnings();
                 break;
+
+            case 'heatmap':
+                title.innerText = "Heatmap Analizi";
+                subtitle.innerText = "Cihaz performansının saatlik ve dakikalık yoğunluk haritası.";
+
+                // Global filtreleri bu sayfada gizle
+                const hmFilterEl = document.getElementById('globalFilters');
+                if (hmFilterEl) { hmFilterEl.classList.remove('d-flex'); hmFilterEl.classList.add('d-none'); }
+
+                content.innerHTML = `
+                <div class="row">
+                    <div class="col-lg-3 mb-4">
+                        <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders text-warning"></i> Parametreler</h5>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
+                                    <select id="heatmap-computer-select" class="form-select" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                        <option value="">Yükleniyor...</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-muted">TARİH SEÇİMİ</label>
+                                    <input type="date" id="heatmap-date" class="form-control" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                </div>
+
+                                <button class="btn btn-warning w-100 fw-bold shadow-sm text-dark" onclick="ui.generateHeatmap()">
+                                    <i class="bi bi-grid-3x3 me-2"></i> Haritayı Çiz
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-9">
+                        <div id="heatmap-results-container" style="display:none;"></div>
+                        
+                        <div id="heatmap-placeholder" class="text-center py-5 mt-5">
+                            <i class="bi bi-grid-3x3-gap display-1 text-muted opacity-50 mb-3 d-block"></i>
+                            <h4 class="fw-light" style="color: var(--text-title);">Analiz için sol menüden cihaz ve tarih seçiniz.</h4>
+                            <p class="text-muted">Seçtiğiniz güne ait 10'ar dakikalık periyotlarla yoğunluk matrisi oluşturulacaktır.</p>
+                        </div>
+                    </div>
+                </div>`;
+
+                // Tarihi varsayılan olarak bugüne ayarla
+                document.getElementById('heatmap-date').valueAsDate = new Date();
+
+                // Cihazları getir
+                if (window.ui.loadHeatmapComputers) window.ui.loadHeatmapComputers();
+                break;
         }
 
     }
@@ -1964,6 +2016,169 @@
             </div>`;
             }
         },
+        loadHeatmapComputers: async () => {
+            const selectEl = document.getElementById('heatmap-computer-select');
+            if (!selectEl) return;
+            try {
+                const computers = await api.get('/api/Computer');
+                const activeComputers = computers.filter(c => !c.isDeleted);
+                let optionsHtml = '<option value="">-- Cihaz Seçiniz --</option>';
+                activeComputers.forEach(c => {
+                    optionsHtml += `<option value="${c.id}">${c.displayName || c.machineName}</option>`;
+                });
+                selectEl.innerHTML = optionsHtml;
+            } catch (e) {
+                selectEl.innerHTML = '<option value="">Cihazlar yüklenemedi</option>';
+            }
+        },
+
+        generateHeatmap: async () => {
+            const compId = document.getElementById('heatmap-computer-select').value;
+            const dateStr = document.getElementById('heatmap-date').value;
+
+            if (!compId || !dateStr) {
+                Swal.fire({ icon: 'warning', text: 'Lütfen cihaz ve tarih seçin.' });
+                return;
+            }
+
+            document.getElementById('heatmap-placeholder').style.display = 'none';
+            const resultsContainer = document.getElementById('heatmap-results-container');
+            resultsContainer.style.display = 'block';
+            resultsContainer.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-warning"></div><div class="mt-2 text-muted">Isı haritası hesaplanıyor...</div></div>';
+
+            try {
+                // Seçilen günün başlangıç ve bitiş saatlerini API'ye gönderiyoruz
+                const start = `${dateStr}T00:00:00`;
+                const end = `${dateStr}T23:59:59`;
+                const response = await api.get(`/api/Computer/${compId}/metrics-history?start=${start}&end=${end}`);
+
+                const cpuRam = response.cpuRam || [];
+                const disks = response.disks || [];
+
+                if (cpuRam.length === 0 && disks.length === 0) {
+                    resultsContainer.innerHTML = `
+                        <div class="alert d-flex align-items-center" style="background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); color: var(--text-main);">
+                            <i class="bi bi-info-circle-fill fs-3 me-3 text-warning"></i>
+                            <div><strong>Veri Bulunamadı!</strong><br><small>Seçilen tarihte bu cihaza ait metrik kaydı bulunmamaktadır.</small></div>
+                        </div>`;
+                    return;
+                }
+
+                let html = '';
+
+                // CPU ve RAM Haritaları
+                if (cpuRam.length > 0) {
+                    html += ui.buildHeatmapGrid("CPU Yoğunluğu", "bi bi-cpu", "info", cpuRam, "cpuUsage", dateStr);
+                    html += ui.buildHeatmapGrid("RAM Yoğunluğu", "bi bi-memory", "danger", cpuRam, "ramUsage", dateStr);
+                }
+
+                // Diskleri isimlerine göre gruplayıp ayrı ayrı haritalarını çıkar
+                if (disks.length > 0) {
+                    const diskGroups = {};
+                    disks.forEach(d => {
+                        if (!diskGroups[d.diskName]) diskGroups[d.diskName] = [];
+                        diskGroups[d.diskName].push(d);
+                    });
+
+                    for (let dName in diskGroups) {
+                        html += ui.buildHeatmapGrid(`Disk [${dName}] Yoğunluğu`, "bi bi-hdd-network", "success", diskGroups[dName], "usedPercent", dateStr);
+                    }
+                }
+
+                resultsContainer.innerHTML = html;
+
+            } catch (e) {
+                resultsContainer.innerHTML = `<div class="alert alert-danger">${e.message || 'Harita oluşturulurken bir hata meydana geldi.'}</div>`;
+            }
+        },
+
+        buildHeatmapGrid: (title, icon, colorClass, dataPoints, valueKey, selectedDate) => {
+            // 6 Satır (Her biri 10 dk = 60 dk) x 24 Sütun (Saatler) matrisi oluştur
+            let grid = Array(6).fill(null).map(() => Array(24).fill(null));
+            let counts = Array(6).fill(null).map(() => Array(24).fill(0));
+
+            dataPoints.forEach(p => {
+                const d = new Date(p.createdAt);
+                const h = d.getHours();
+                const m = d.getMinutes();
+                const r = Math.floor(m / 10); // 0-9dk = 0. satır, 10-19dk = 1. satır ...
+                const c = h;
+
+                if (grid[r][c] === null) grid[r][c] = 0;
+                grid[r][c] += p[valueKey];
+                counts[r][c]++;
+            });
+
+            // Ortalamaları hesapla
+            for (let r = 0; r < 6; r++) {
+                for (let c = 0; c < 24; c++) {
+                    if (counts[r][c] > 0) grid[r][c] = grid[r][c] / counts[r][c];
+                }
+            }
+
+            let html = `
+            <div class="card border-0 shadow-sm mb-4" style="background:var(--bg-card);">
+                <div class="card-header border-bottom border-secondary pt-3 pb-2" style="background:transparent;">
+                    <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title}</h6>
+                </div>
+                <div class="card-body overflow-auto pb-4">
+                    <div style="display: grid; grid-template-columns: 45px repeat(24, minmax(22px, 1fr)); gap: 4px; min-width: 650px;">
+                        
+                        <div></div>
+                        ${Array.from({ length: 24 }, (_, i) => `<div class="text-center fw-bold pb-1" style="font-size:11px; color:var(--text-main); opacity:0.85;">${i.toString().padStart(2, '0')}</div>`).join('')}
+            `;
+
+            // Verileri (Y Ekseni 10'ar dk periyotlar) HTML Matrisine Dök
+            for (let r = 0; r < 6; r++) {
+                let startMin = (r * 10).toString().padStart(2, '0');
+                let endMin = (r * 10 + 9).toString().padStart(2, '0');
+
+                // Y Ekseni Dakikalar - YENİLENDİ: Görünürlük artırıldı
+                html += `<div class="d-flex align-items-center justify-content-end pe-2 fw-bold" style="font-size:10px; color:var(--text-main); opacity:0.85;">${startMin}m</div>`;
+
+                for (let c = 0; c < 24; c++) {
+                    let val = grid[r][c];
+
+                    // YENİLENDİ: Boş kutucuklar için hem açık hem koyu temada görünen transparan gri
+                    let bgColor = 'rgba(128, 128, 128, 0.15)';
+                    let borderColor = 'rgba(128, 128, 128, 0.2)';
+
+                    let tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin} | Veri Yok`;
+
+                    if (val !== null) {
+                        tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin}\nOrtalama Yoğunluk: %${val.toFixed(1)}`;
+
+                        // Renk Skalası (Dolu verilerde border'ı da renge uyduruyoruz)
+                        if (val < 50) { bgColor = '#22c55e'; borderColor = '#16a34a'; }
+                        else if (val < 75) { bgColor = '#eab308'; borderColor = '#ca8a04'; }
+                        else if (val < 90) { bgColor = '#f97316'; borderColor = '#ea580c'; }
+                        else { bgColor = '#ef4444'; borderColor = '#dc2626'; }
+                    }
+
+                    // Her bir kutucuk - YENİLENDİ: Border (sınır) eklendi
+                    html += `<div style="background-color: ${bgColor}; border: 1px solid ${borderColor}; height: 22px; border-radius: 4px; cursor: crosshair; transition: transform 0.1s;" 
+                                  title="${tooltip}" 
+                                  onmouseover="this.style.transform='scale(1.15)'" 
+                                  onmouseout="this.style.transform='scale(1)'"></div>`;
+                }
+            }
+
+            // Lejant Kısmı (Açıklama Skalası) - YENİLENDİ: Veri Yok kutucuğu temaya uygun hale getirildi
+            html += `
+                    </div>
+                    
+                    <div class="d-flex justify-content-end mt-4 gap-4 flex-wrap" style="font-size:12px; color:var(--text-main); opacity:0.9; font-weight: 500;">
+                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#22c55e; border: 1px solid #16a34a; margin-right:6px; border-radius:3px;"></div> %0 - %50 (Normal)</div>
+                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#eab308; border: 1px solid #ca8a04; margin-right:6px; border-radius:3px;"></div> %50 - %75 (Yoğun)</div>
+                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#f97316; border: 1px solid #ea580c; margin-right:6px; border-radius:3px;"></div> %75 - %90 (Ağır)</div>
+                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#ef4444; border: 1px solid #dc2626; margin-right:6px; border-radius:3px;"></div> %90+ (Kritik)</div>
+                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:rgba(128, 128, 128, 0.15); border: 1px solid rgba(128, 128, 128, 0.2); margin-right:6px; border-radius:3px;"></div> Veri Yok</div>
+                    </div>
+                </div>
+            </div>`;
+
+            return html;
+        }
         
     };
     window.warningData = { cpu: [], ram: [], disk: [] };
