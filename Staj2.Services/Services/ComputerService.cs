@@ -552,15 +552,31 @@ public class ComputerService : BaseService, IComputerService
             .Where(m => m.ComputerId == computerId && m.CreatedAt >= startDate && m.CreatedAt <= endDate)
             .CountAsync();
 
-        // 2. UYARI SAYILARINI ÇEK (MetricWarningLogs Tablosundan)
-        // Hatırlatma: MetricTypeId => 1: CPU, 2: RAM, 3: Disk
-        var cpuWarningCount = await _db.MetricWarningLogs
+        // 2. YENİ: UYARI DETAYLARINI ÇEK VE LİSTEYE AL (Aynı zamanda sayıyı da buradan alacağız)
+        var cpuBreaches = await _db.MetricWarningLogs
             .Where(w => w.ComputerId == computerId && w.MetricTypeId == 1 && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
-            .CountAsync();
+            .OrderBy(w => w.CreatedAt)
+            .Select(w => new ThresholdBreachDetailDto
+            {
+                Timestamp = w.CreatedAt,
+                Value = w.MetricValue,
+                ThresholdPercent = w.ThresholdValue
+            })
+            .ToListAsync();
 
-        var ramWarningCount = await _db.MetricWarningLogs
+        var ramBreaches = await _db.MetricWarningLogs
             .Where(w => w.ComputerId == computerId && w.MetricTypeId == 2 && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
-            .CountAsync();
+            .OrderBy(w => w.CreatedAt)
+            .Select(w => new ThresholdBreachDetailDto
+            {
+                Timestamp = w.CreatedAt,
+                Value = w.MetricValue,
+                ThresholdPercent = w.ThresholdValue
+            })
+            .ToListAsync();
+
+        int cpuWarningCount = cpuBreaches.Count;
+        int ramWarningCount = ramBreaches.Count;
 
         var report = new ThresholdAnalysisReportDto
         {
@@ -571,13 +587,15 @@ public class ComputerService : BaseService, IComputerService
             {
                 TotalCount = totalCpuRamCount,
                 WarningCount = cpuWarningCount,
-                BelowThresholdCount = Math.Max(0, totalCpuRamCount - cpuWarningCount) // Eksiye düşmemesi için Max kullandık
+                BelowThresholdCount = Math.Max(0, totalCpuRamCount - cpuWarningCount),
+                Breaches = cpuBreaches // YENİ: Detaylı listeyi DTO'ya bağlıyoruz
             },
             RamResult = new MetricThresholdResult
             {
                 TotalCount = totalCpuRamCount,
                 WarningCount = ramWarningCount,
-                BelowThresholdCount = Math.Max(0, totalCpuRamCount - ramWarningCount)
+                BelowThresholdCount = Math.Max(0, totalCpuRamCount - ramWarningCount),
+                Breaches = ramBreaches // YENİ: Detaylı listeyi DTO'ya bağlıyoruz
             }
         };
 
@@ -593,24 +611,40 @@ public class ComputerService : BaseService, IComputerService
                 .Select(g => new { DiskId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.DiskId, x => x.Count);
 
-            // Tüm disklerin uyarı sayısını gruplayarak alıyoruz
-            var diskWarningCounts = await _db.MetricWarningLogs
+            // YENİ: Tüm disklerin UYARI DETAYLARINI çekiyoruz
+            var allDiskBreaches = await _db.MetricWarningLogs
                 .Where(w => w.ComputerId == computerId && w.MetricTypeId == 3 && w.ComputerDiskId != null && w.CreatedAt >= startDate && w.CreatedAt <= endDate)
-                .GroupBy(w => w.ComputerDiskId.Value)
-                .Select(g => new { DiskId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.DiskId, x => x.Count);
+                .OrderBy(w => w.CreatedAt)
+                .Select(w => new
+                {
+                    DiskId = w.ComputerDiskId.Value,
+                    Breach = new ThresholdBreachDetailDto
+                    {
+                        Timestamp = w.CreatedAt,
+                        Value = w.MetricValue,
+                        ThresholdPercent = w.ThresholdValue
+                    }
+                })
+                .ToListAsync();
+
+            // Çektiğimiz detayları DiskId'ye göre hafızada grupluyoruz
+            var diskBreachesLookup = allDiskBreaches.ToLookup(x => x.DiskId, x => x.Breach);
 
             foreach (var disk in computer.Disks)
             {
                 int totalDiskCount = diskTotalCounts.ContainsKey(disk.Id) ? diskTotalCounts[disk.Id] : 0;
-                int warningDiskCount = diskWarningCounts.ContainsKey(disk.Id) ? diskWarningCounts[disk.Id] : 0;
+
+                // İlgili diskin kendi listesini al
+                var breachesForThisDisk = diskBreachesLookup[disk.Id].ToList();
+                int warningDiskCount = breachesForThisDisk.Count;
 
                 report.DiskResults.Add(new DiskThresholdResult
                 {
                     DiskName = disk.DiskName,
                     TotalCount = totalDiskCount,
                     WarningCount = warningDiskCount,
-                    BelowThresholdCount = Math.Max(0, totalDiskCount - warningDiskCount)
+                    BelowThresholdCount = Math.Max(0, totalDiskCount - warningDiskCount),
+                    Breaches = breachesForThisDisk // YENİ: Disk listesini DTO'ya bağlıyoruz
                 });
             }
         }

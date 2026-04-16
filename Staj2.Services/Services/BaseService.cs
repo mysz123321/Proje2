@@ -22,7 +22,7 @@ public abstract class BaseService
         _db = db;
     }
 
-    // 🌟 YENİ: Hata mesajlarını dinamik üreten yardımcı metot
+    //  YENİ: Hata mesajlarını dinamik üreten yardımcı metot
     private string GenerateDbErrorMessage(DbUpdateException ex, string entityName, DbOperation operation)
     {
         if (string.IsNullOrWhiteSpace(entityName))

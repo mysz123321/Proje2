@@ -1846,34 +1846,41 @@
                     throw new Error("Sunucudan eksik veya hatalı veri döndü.");
                 }
 
+                // --- YENİ: Grafikte kullanmak üzere detay verilerini tarayıcı hafızasına (RAM'e) alıyoruz ---
+                window.currentReportBreaches = {
+                    cpu: data.cpuResult.breaches || [],
+                    ram: data.ramResult.breaches || [],
+                    disks: {}
+                };
+                if (data.diskResults) {
+                    data.diskResults.forEach(d => window.currentReportBreaches.disks[d.diskName] = d.breaches || []);
+                }
+                // --------------------------------------------------------------------------------------------
+
                 document.getElementById('ta-result-title').innerText = `${data.computerName || 'Cihaz'} - Eşik Analizi`;
 
-                // --- SÜRE HESAPLAMA FONKSİYONU (AJANIN 1 SANİYEDE BİR VERİ ATTIĞI VARSAYILMIŞTIR) ---
-                // Eğer ajanın 5 saniyede bir veri atıyorsa totalSeconds = count * 5 yapmalısın.
                 const formatTimeFromCount = (count) => {
                     if (!count || count <= 0) return "0 Sn";
-
-                    const totalSeconds = count * 30; // 1 saniyede 1 veri geliyorsa
+                    const totalSeconds = count * 30; // 1 saniyede 1 veri geliyorsa (veya 30 saniyede)
                     const h = Math.floor(totalSeconds / 3600);
                     const m = Math.floor((totalSeconds % 3600) / 60);
                     const s = totalSeconds % 60;
-
                     let timeStr = "";
                     if (h > 0) timeStr += `${h} Saat `;
                     if (m > 0) timeStr += `${m} Dk`;
                     if (h === 0 && m === 0) timeStr += `${s} Sn`;
-
                     return timeStr.trim();
                 };
 
                 let html = `
-                    <div class="alert mb-4" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: var(--text-main);">
-                        <i class="bi bi-clock-history me-2 text-info fs-5 align-middle"></i>
-                        <span class="align-middle"><strong>Toplam Aktif Süre (Veri):</strong> ${formatTimeFromCount(data.totalActiveCount)} (${data.totalActiveCount} Ölçüm)</span>
-                    </div>
-                `;
+            <div class="alert mb-4" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: var(--text-main);">
+                <i class="bi bi-clock-history me-2 text-info fs-5 align-middle"></i>
+                <span class="align-middle"><strong>Toplam Aktif Süre (Veri):</strong> ${formatTimeFromCount(data.totalActiveCount)} (${data.totalActiveCount} Ölçüm)</span>
+            </div>
+        `;
 
-                const renderBar = (title, icon, colorClass, resultObj) => {
+                // YENİ: typeKey ve diskName parametreleri eklendi
+                const renderBar = (title, icon, colorClass, resultObj, typeKey, diskName = null) => {
                     if (!resultObj || resultObj.totalCount === 0) {
                         return `<div class="mb-4"><h6 style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2"></i>${title}</h6><div class="text-muted small">Bu metrik için geçerli ölçüm bulunamadı.</div></div>`;
                     }
@@ -1884,49 +1891,60 @@
                     } else if (resultObj.totalCount > 0) {
                         pctValue = ((resultObj.belowThresholdCount || 0) / resultObj.totalCount) * 100;
                     }
-
                     const pct = pctValue.toFixed(1);
 
-                    return `
-                    <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title}</h6>
-                            <span class="badge bg-${colorClass} fs-6">%${pct} Sorunsuz</span>
-                        </div>
-                        
-                        <div class="row text-center mb-3 mt-3">
-                            <div class="col-4 border-end border-secondary">
-                                <h5 class="text-info mb-0">${resultObj.totalCount}</h5>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Toplam Ölçüm</small>
-                                <small class="text-info fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.totalCount)})</small>
-                            </div>
-                            <div class="col-4 border-end border-secondary">
-                                <h5 class="text-danger mb-0">${resultObj.warningCount}</h5>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Uyarı (Aşılan)</small>
-                                <small class="text-danger fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.warningCount)})</small>
-                            </div>
-                            <div class="col-4">
-                                <h5 class="text-success mb-0">${resultObj.belowThresholdCount}</h5>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Sorunsuz</small>
-                                <small class="text-success fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.belowThresholdCount)})</small>
-                            </div>
-                        </div>
+                    // YENİ: Sadece uyarı varsa grafiği göster butonunu hazırla
+                    let chartBtnHtml = '';
+                    if (resultObj.warningCount > 0) {
+                        chartBtnHtml = `
+                <button class="btn btn-sm btn-outline-${colorClass} mt-3 w-100 fw-bold" onclick="showBreachChart('${title}', '${typeKey}', '${diskName}')">
+                    <i class="bi bi-graph-up-arrow me-1"></i> Aşım Grafiğini Göster
+                </button>`;
+                    }
 
-                        <div class="progress" style="height: 14px; background-color: var(--bg-input); border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
-                            <div class="progress-bar bg-${colorClass}" role="progressbar" style="width: ${pct}%"></div>
-                        </div>
-                    </div>`;
+                    return `
+            <div class="mb-4 p-3 rounded" style="border: 1px solid var(--border-color); background: var(--bg-card-muted, transparent);">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 fw-bold" style="color:var(--text-title);"><i class="${icon} text-${colorClass} me-2 fs-5"></i>${title}</h6>
+                    <span class="badge bg-${colorClass} fs-6">%${pct} Sorunsuz</span>
+                </div>
+                
+                <div class="row text-center mb-3 mt-3">
+                    <div class="col-4 border-end border-secondary">
+                        <h5 class="text-info mb-0">${resultObj.totalCount}</h5>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">Toplam Ölçüm</small>
+                        <small class="text-info fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.totalCount)})</small>
+                    </div>
+                    <div class="col-4 border-end border-secondary">
+                        <h5 class="text-danger mb-0">${resultObj.warningCount}</h5>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">Uyarı (Aşılan)</small>
+                        <small class="text-danger fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.warningCount)})</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-success mb-0">${resultObj.belowThresholdCount}</h5>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">Sorunsuz</small>
+                        <small class="text-success fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.belowThresholdCount)})</small>
+                    </div>
+                </div>
+
+                <div class="progress" style="height: 14px; background-color: var(--bg-input); border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
+                    <div class="progress-bar bg-${colorClass}" role="progressbar" style="width: ${pct}%"></div>
+                </div>
+                
+                ${chartBtnHtml} 
+            </div>`;
                 };
 
-                html += renderBar("CPU Kullanımı", "bi bi-cpu", "info", data.cpuResult);
-                html += renderBar("RAM Kullanımı", "bi bi-memory", "danger", data.ramResult);
+                // typeKey'ler eklendi
+                html += renderBar("CPU Kullanımı", "bi bi-cpu", "info", data.cpuResult, "cpu");
+                html += renderBar("RAM Kullanımı", "bi bi-memory", "danger", data.ramResult, "ram");
 
                 if (data.diskResults && data.diskResults.length > 0) {
                     html += `<h6 class="fw-bold mb-3 mt-4 pb-2 border-bottom" style="color:var(--text-title); border-color:var(--border-color) !important;">
-                                <i class="bi bi-hdd-network text-success me-2"></i>Disk Kullanımları
-                             </h6>`;
+                        <i class="bi bi-hdd-network text-success me-2"></i>Disk Kullanımları
+                     </h6>`;
                     data.diskResults.forEach(d => {
-                        html += renderBar(`Disk ${d.diskName}`, "bi bi-hdd", "success", d);
+                        html += renderBar(`Disk ${d.diskName}`, "bi bi-hdd", "success", d, "disk", d.diskName);
                     });
                 } else {
                     html += `<div class="text-muted small mt-4"><i class="bi bi-hdd-network me-2"></i>Disk verisi bulunamadı.</div>`;
@@ -1937,15 +1955,16 @@
             } catch (e) {
                 console.error("Analiz Raporu Hatası:", e);
                 metricsBody.innerHTML = `
-                    <div class="alert alert-danger d-flex align-items-center" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">
-                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-danger"></i>
-                        <div>
-                            <strong class="d-block mb-1">Rapor Alınamadı</strong>
-                            <small>${e.message || 'Analiz sırasında beklenmeyen bir hata oluştu.'}</small>
-                        </div>
-                    </div>`;
+            <div class="alert alert-danger d-flex align-items-center" style="background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.3); color: var(--text-main);">
+                <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-danger"></i>
+                <div>
+                    <strong class="d-block mb-1">Rapor Alınamadı</strong>
+                    <small>${e.message || 'Analiz sırasında beklenmeyen bir hata oluştu.'}</small>
+                </div>
+            </div>`;
             }
-        }
+        },
+        
     };
     window.warningData = { cpu: [], ram: [], disk: [] };
     window.warningPages = { cpu: 1, ram: 1, disk: 1 };
@@ -1974,7 +1993,83 @@
             console.error("Uyarı Raporu çekilirken hata oluştu: ", err);
         }
     };
+    window.showBreachChart = function (title, typeKey, diskName) {
+        let breachesList = [];
 
+        // Hafızaya aldığımız veriden ilgili olanı çek
+        if (typeKey === 'cpu') breachesList = window.currentReportBreaches.cpu;
+        else if (typeKey === 'ram') breachesList = window.currentReportBreaches.ram;
+        else if (typeKey === 'disk') breachesList = window.currentReportBreaches.disks[diskName];
+
+        if (!breachesList || breachesList.length === 0) {
+            Swal.fire({ icon: 'info', text: 'Gösterilecek eşik aşım detayı yok.' });
+            return;
+        }
+
+        document.getElementById('breachModalTitle').innerText = `${title} - Aşım Grafiği`;
+
+        // 1. Tarihleri ayır
+        const labels = breachesList.map(b => {
+            const d = new Date(b.timestamp);
+            return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        });
+
+        // 2. Metrik (Kullanım) Değerlerini ayır
+        const dataPoints = breachesList.map(b => b.value);
+
+        // 3. YENİ: Eşik (Limit) Değerlerini her bir an için ayrı ayrı ayır
+        const thresholdPoints = breachesList.map(b => b.thresholdPercent);
+
+        const ctx = document.getElementById('breachCanvas').getContext('2d');
+        if (window.currentBreachChart) window.currentBreachChart.destroy();
+
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        const textColor = isLight ? '#334155' : '#e2e8f0';
+        const gridColor = isLight ? '#cbd5e1' : '#334155';
+
+        window.currentBreachChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: `${title} Aşım Oranları (%)`,
+                        data: dataPoints,
+                        borderColor: '#ef4444',
+                        backgroundColor: '#ef444433',
+                        pointBackgroundColor: '#dc2626',
+                        pointRadius: 4,
+                        pointHoverRadius: 7,
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        // YENİ: Veriyi tek bir sayı ile doldurmak yerine dinamik diziyi (thresholdPoints) veriyoruz
+                        label: `Tanımlı Eşik Sınırı (%)`,
+                        data: thresholdPoints,
+                        borderColor: '#eab308',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 2, // Eşiğin değiştiği yerler belli olsun diye hafif nokta eklendi
+                        fill: false,
+                        tension: 0.1 // Eşik değişimlerinde çizgi keskin görünsün
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: textColor } } },
+                scales: {
+                    x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                    y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
+                }
+            }
+        });
+
+        const modal = new bootstrap.Modal(document.getElementById('breachChartModal'));
+        modal.show();
+    };
     window.renderPaginatedWarningList = function (type) {
         let list = window.warningData[type];
         let page = window.warningPages[type];

@@ -19,8 +19,14 @@
 
         // Yüzde hesabı tam sayılarla (int) yapıldığı için double'a cast ediyoruz
         public double BelowThresholdPercentage => TotalCount > 0 ? ((double)BelowThresholdCount / TotalCount) * 100 : 0;
+        public List<ThresholdBreachDetailDto> Breaches { get; set; } = new();
     }
-
+    public class ThresholdBreachDetailDto
+    {
+        public DateTime Timestamp { get; set; }
+        public double Value { get; set; }
+        public double ThresholdPercent { get; set; }
+    }
     public class DiskThresholdResult : MetricThresholdResult
     {
         public string DiskName { get; set; }

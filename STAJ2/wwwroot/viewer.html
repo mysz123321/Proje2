@@ -391,7 +391,7 @@
         </div>
     </div>
 
-    
+
 
     <div id="rolePermissionsModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -530,6 +530,27 @@
                 <div class="modal-footer border-top border-secondary" style="border-color:var(--border-color) !important;">
                     <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
                     <button class="btn btn-warning text-dark fw-bold" onclick="ui.saveUserTagAccess()"><i class="bi bi-save me-1"></i> Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="breachChartModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); color: var(--text-main);">
+                <div class="modal-header border-bottom border-secondary">
+                    <h5 class="modal-title fw-bold text-danger">
+                        <i class="bi bi-graph-up-arrow"></i> <span id="breachModalTitle">Eşik Aşım Analizi</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="small text-muted mb-3">Sistemde limitin aşıldığı net tarih, saat ve performans oranları aşağıda işaretlenmiştir.</p>
+                    <div style="position: relative; height: 350px; width: 100%;">
+                        <canvas id="breachCanvas"></canvas>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
                 </div>
             </div>
         </div>
