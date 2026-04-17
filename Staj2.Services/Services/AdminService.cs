@@ -131,8 +131,8 @@ public class AdminService : BaseService, IAdminService
             if (role.Name == adminRoleName)
                 return ServiceResult.Failure($"Sistem varsayılan '{adminRoleName}' rolü silinemez.");
 
-            //if (role.Users.Any(u => !u.IsDeleted))
-            //    return ServiceResult.Failure("Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin.");
+            if (role.Users.Any(u => !u.IsDeleted))
+                return ServiceResult.Failure("Bu role sahip aktif kullanıcılar var! Silmek için önce o kullanıcıların rolünü değiştirin.");
 
             role.IsDeleted = true;
             role.DeletedAt = DateTime.Now;

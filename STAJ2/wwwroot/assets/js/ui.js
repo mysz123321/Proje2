@@ -1622,7 +1622,7 @@
             }
 
             // 2. YETERLİ VERİ KONTROLÜ (En az 15 Ham Veri)
-            if (!dataList || dataList.length < 15000) {
+            if (!dataList || dataList.length < 15) {
                 return `
             <div class="mt-4 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
                 <i class="bi bi-hourglass text-secondary fs-3 me-3"></i>
@@ -2366,9 +2366,16 @@
                 const ctx = document.getElementById('correlationCanvas').getContext('2d');
                 if (window.myCorrelationChart) window.myCorrelationChart.destroy();
 
-                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-                const textColor = isLight ? '#334155' : '#e2e8f0';
-                const gridColor = isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.1)';
+                // --- GÜVENLİ TEMA ALGILAMA ---
+                // Eğer data-theme "dark" ise koyu tema kabul et, değilse her zaman açık (light) tema kabul et ki bozulmasın.
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const isDarkMode = currentTheme === 'dark';
+
+                // Koyu temada beyaz (#e2e8f0), Açık temada koyu gri (#334155) kullan
+                const textColor = isDarkMode ? '#e2e8f0' : '#334155';
+
+                // Koyu temada çizgiler şeffaf beyaz, Açık temada şeffaf siyah olsun
+                const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)';
 
                 // Zaman Haritası (Milisaniye farkını sıfırlama)
                 const timeMap = {};

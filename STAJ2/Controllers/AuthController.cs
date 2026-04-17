@@ -61,7 +61,6 @@ public class AuthController : ControllerBase
         if (!result.IsSuccess)
             return NotFound(new { message = result.Message });
 
-        // Eski result.Permissions yerine standart result.Data kullanıyoruz
         return Ok(result.Data);
     }
 
@@ -73,7 +72,6 @@ public class AuthController : ControllerBase
         if (!result.IsSuccess)
             return Unauthorized(new { message = result.Message });
 
-        // Servisten zaten { Token, RefreshToken } paketini Data içinde dönüyoruz
         return Ok(result.Data);
     }
 

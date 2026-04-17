@@ -46,7 +46,6 @@ public class GlobalExceptionMiddleware
         }
 
         // İstemciye (UI/Frontend) dönecek JSON formatı
-        // (Sizin UI'nız muhtemelen isSuccess, errorMessage gibi formatlar bekliyor)
         var response = new
         {
             isSuccess = false,

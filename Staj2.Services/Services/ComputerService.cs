@@ -184,8 +184,8 @@ public class ComputerService : BaseService, IComputerService
         if (startTime > endTime)
             return ServiceResult<object>.Failure("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
 
-        if ((endTime - startTime).TotalDays > 7)
-            return ServiceResult<object>.Failure("Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.");
+        //if ((endTime - startTime).TotalDays > 7)
+        //    return ServiceResult<object>.Failure("Lütfen maksimum 7 günlük bir tarih aralığı seçiniz.");
 
         var cpuRamMetrics = await _db.ComputerMetrics
             .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
