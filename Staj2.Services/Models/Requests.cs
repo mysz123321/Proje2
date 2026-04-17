@@ -1,4 +1,6 @@
-﻿namespace Staj2.Services.Models
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Staj2.Services.Models
 {
     // Kullanıcı İşlemleri için
     public class ChangeRolesRequest { public List<int> NewRoleIds { get; set; } = new(); }
@@ -33,7 +35,14 @@
     }
     public class CreateRegistrationRequest
     {
-        public string Username { get; set; } = null!;
-        public string Email { get; set; } = null!;
+        [Required(ErrorMessage = "Kullanıcı adı zorunludur.")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Kullanıcı adı 3 ile 50 karakter arasında olmalıdır.")]
+        [RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir.")]
+        public string Username { get; set; }
+
+        [Required(ErrorMessage = "Email adresi zorunludur.")]
+        [EmailAddress(ErrorMessage = "Geçerli bir email adresi giriniz.")]
+        [StringLength(100, ErrorMessage = "Email adresi çok uzun.")]
+        public string Email { get; set; }
     }
 }

@@ -458,8 +458,8 @@ function renderBaseCharts(cpuRamData) {
     historyCharts.ram = createLineChart('ramChart', 'RAM Kullanımı (%)', labels, ramData, '#facc15');
 
     // MİNİ RAPOR TETİKLEYİCİLERİ
-    generateMiniReport(cpuRamData, 'cpuUsage', 'cpuMiniReport', '%');
-    generateMiniReport(cpuRamData, 'ramUsage', 'ramMiniReport', '%');
+    generateMiniReport(cpuRamData, 'cpuUsage', 'cpuMiniReport', '%', 'cpuChart');
+    generateMiniReport(cpuRamData, 'ramUsage', 'ramMiniReport', '%', 'ramChart');
 }
 
 function formatChartDate(dateString) {
@@ -530,7 +530,7 @@ function toggleDiskChart(isVisible, diskName, chartId) {
         historyCharts.disks[diskName] = createLineChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, diskUsageData, '#10b981');
 
         // MİNİ RAPORU TETİKLE
-        generateMiniReport(diskData, 'usedPercent', `report_${chartId}`, '%');
+        generateMiniReport(diskData, 'usedPercent', `report_${chartId}`, '%', chartId);
 
     } else {
         container.style.display = 'none';
@@ -591,7 +591,7 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
 // ----------------- MİNİ RAPOR OLUŞTURUCU (ALGORİTMA 2 VE 3) -----------------
 // ----------------- MİNİ RAPOR OLUŞTURUCU VE TAHMİNLEME (ALGORİTMA) -----------------
 // ----------------- MİNİ RAPOR OLUŞTURUCU VE TAHMİNLEME (ALGORİTMA) -----------------
-function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
+function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasId = null) {
     const container = document.getElementById(containerId);
     if (!container || !dataList || dataList.length === 0) return;
 
@@ -634,25 +634,26 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
         }
     }
 
-    // --- TEMEL GÖSTERGELER HTML ---
     let html = `
         <div class="row g-2 text-center text-md-start small">
-            <div class="col-md-4">
-                <div class="p-2 border rounded border-success h-100" style="background: rgba(25, 135, 84, 0.1);">
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem.createdAt}')" title="Grafikte göster">
+                <div class="p-2 border rounded border-success h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-success fw-bold"><i class="bi bi-arrow-down-circle-fill"></i> Minimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${minItem[valueKey].toFixed(1)}${unit}</span><br>
                     <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(minItem.createdAt)}</span>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="p-2 border rounded border-info h-100" style="background: rgba(13, 202, 240, 0.1);">
+
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.toggleAverageLine('${canvasId}', ${avg.toFixed(1)})" title="Ortalama çizgisini göster/gizle">
+                <div class="p-2 border rounded border-info h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-info fw-bold"><i class="bi bi-activity"></i> Ortalama</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${avg.toFixed(1)}${unit}</span><br>
                     <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">Seçili Aralık</span>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="p-2 border rounded border-danger h-100" style="background: rgba(220, 53, 69, 0.1);">
+
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem.createdAt}')" title="Grafikte göster">
+                <div class="p-2 border rounded border-danger h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-danger fw-bold"><i class="bi bi-arrow-up-circle-fill"></i> Maksimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${maxItem[valueKey].toFixed(1)}${unit}</span><br>
                     <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(maxItem.createdAt)}</span>
@@ -669,12 +670,20 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%') {
                     <i class="bi bi-exclamation-triangle-fill"></i> Zirve Noktaları (Top ${top8.length}) <small style="color: var(--text-muted); font-weight: normal;">- En az 5 dk aralıklı</small>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    ${top8.map(t => `
-                        <div class="border border-warning rounded p-2 d-flex flex-column align-items-center justify-content-center shadow-sm flex-grow-1" style="background: rgba(255, 193, 7, 0.05); min-width: 120px;">
+                    ${top8.map(t => {
+            const timeStr = new Date(t.createdAt).toISOString();
+            return `
+                        <div class="border border-warning rounded p-2 d-flex flex-column align-items-center justify-content-center shadow-sm flex-grow-1" 
+                             style="background: rgba(255, 193, 7, 0.05); min-width: 120px; cursor: pointer; transition: background 0.2s;"
+                             onclick="window.highlightChartPoint('${canvasId}', '${timeStr}')"
+                             onmouseover="this.style.background='rgba(255, 193, 7, 0.2)'"
+                             onmouseout="this.style.background='rgba(255, 193, 7, 0.05)'"
+                             title="Grafikte göster">
                             <span class="fw-bold text-warning" style="font-size: 1rem;">${t[valueKey].toFixed(1)}${unit}</span>
                             <span style="font-size: 0.75rem; margin-top: 2px; color: var(--text-muted); text-align: center;">${formatDate(t.createdAt)}</span>
                         </div>
-                    `).join('')}
+                        `;
+        }).join('')}
                 </div>
             </div>
         `;
@@ -939,7 +948,80 @@ function renderPaginationControls(containerId, currentPage, totalPages, changeFn
     html += '</ul>';
     container.innerHTML = html;
 }
+window.highlightChartPoint = function (canvasId, timeStr) {
+    if (!canvasId) return;
 
+    // Hangi grafik nesnesi olduğunu buluyoruz
+    let chartInstance = null;
+    if (canvasId === 'cpuChart') chartInstance = historyCharts.cpu;
+    else if (canvasId === 'ramChart') chartInstance = historyCharts.ram;
+    else {
+        // Dinamik disk grafikleri için
+        const diskName = Object.keys(historyCharts.disks).find(key => `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}` === canvasId);
+        if (diskName) chartInstance = historyCharts.disks[diskName];
+    }
+
+    if (chartInstance) {
+        // Tıklanan zamanın, grafikteki EKSEN FORMATINA uydurulması (eşleşme için şart)
+        const targetTime = formatChartDate(timeStr);
+        const dataIndex = chartInstance.data.labels.findIndex(label => label === targetTime);
+
+        if (dataIndex !== -1) {
+            const meta = chartInstance.getDatasetMeta(0);
+            const point = meta.data[dataIndex];
+
+            // 1. Tooltip'i açık hale getir
+            chartInstance.tooltip.setActiveElements([
+                { datasetIndex: 0, index: dataIndex }
+            ], { x: point.x, y: point.y });
+
+            // 2. Noktanın hover (büyüme) state'ini tetikle
+            chartInstance.setActiveElements([
+                { datasetIndex: 0, index: dataIndex }
+            ]);
+
+            chartInstance.update();
+
+            // 3. Kullanıcının ekranını (scroll) yavaşça grafiğe kaydır
+            document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+};
+
+window.toggleAverageLine = function (canvasId, avgValue) {
+    let chartInstance = null;
+    if (canvasId === 'cpuChart') chartInstance = historyCharts.cpu;
+    else if (canvasId === 'ramChart') chartInstance = historyCharts.ram;
+    else {
+        const diskName = Object.keys(historyCharts.disks).find(key => `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}` === canvasId);
+        if (diskName) chartInstance = historyCharts.disks[diskName];
+    }
+
+    if (!chartInstance) return;
+
+    // 'AverageLine' isimli bir dataset var mı kontrol et
+    const avgDatasetIndex = chartInstance.data.datasets.findIndex(ds => ds.label === 'Ortalama Değer');
+
+    if (avgDatasetIndex > -1) {
+        // Eğer varsa sil
+        chartInstance.data.datasets.splice(avgDatasetIndex, 1);
+    } else {
+        // Yoksa yeni bir dataset olarak yatay çizgi ekle
+        const avgLineData = Array(chartInstance.data.labels.length).fill(avgValue);
+        chartInstance.data.datasets.push({
+            label: 'Ortalama Değer',
+            data: avgLineData,
+            borderColor: '#0dcaf0',
+            borderWidth: 2,
+            borderDash: [10, 5], // Kesikli çizgi
+            pointRadius: 0, // Nokta gösterme
+            fill: false,
+            order: 0 // Üstte görünsün
+        });
+    }
+    chartInstance.update();
+    document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
 // --- BAŞLATMA ---
 $(document).ready(function () {
     $('#modalTagSelect').select2({

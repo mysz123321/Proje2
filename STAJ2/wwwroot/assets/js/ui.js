@@ -648,14 +648,12 @@
                             <div class="card-body">
                                 <h5 class="fw-bold mb-4" style="color:var(--text-title);"><i class="bi bi-sliders text-primary"></i> Analiz Ayarları</h5>
                                 
-                                <div class="d-flex align-items-center justify-content-between mb-4 p-2 rounded" style="background:var(--bg-input); border:1px solid var(--border-input);">
-                                    <span class="small fw-bold" id="lbl-scatter" style="transition: all 0.3s ease;">Scatter Plot</span>
-                                    <div class="form-check form-switch m-0">
-                                        <input class="form-check-input" type="checkbox" id="corr-type-toggle" 
-                                               ${(localStorage.getItem('corrMode') || 'line') === 'line' ? 'checked' : ''} 
-                                               onchange="ui.handleCorrModeChange(this.checked)">
-                                    </div>
-                                    <span class="small fw-bold" id="lbl-line" style="transition: all 0.3s ease;">Zaman Serisi</span>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-muted">GRAFİK TİPİ</label>
+                                    <select id="corr-type-select" class="form-select" onchange="ui.handleCorrModeChange(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                                        <option value="line" ${(localStorage.getItem('corrMode') || 'line') === 'line' ? 'selected' : ''}>Zaman Serisi (Line)</option>
+                                        <option value="scatter" ${(localStorage.getItem('corrMode') || 'line') === 'scatter' ? 'selected' : ''}>Dağılım (Scatter Plot)</option>
+                                    </select>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-bold small text-muted">CİHAZ SEÇİMİ</label>
@@ -2215,45 +2213,54 @@
                 for (let c = 0; c < 24; c++) {
                     let val = grid[r][c];
 
-                    // YENİLENDİ: Boş kutucuklar için hem açık hem koyu temada görünen transparan gri
                     let bgColor = 'rgba(128, 128, 128, 0.15)';
                     let borderColor = 'rgba(128, 128, 128, 0.2)';
-
                     let tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin} | Veri Yok`;
+                    let cat = 'yok'; // YENİ: Kategori tutucu
 
                     if (val !== null) {
                         tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin}\nOrtalama Yoğunluk: %${val.toFixed(1)}`;
 
-                        // Renk Skalası (Dolu verilerde border'ı da renge uyduruyoruz)
-                        if (val < 50) { bgColor = '#22c55e'; borderColor = '#16a34a'; }
-                        else if (val < 75) { bgColor = '#eab308'; borderColor = '#ca8a04'; }
-                        else if (val < 90) { bgColor = '#f97316'; borderColor = '#ea580c'; }
-                        else { bgColor = '#ef4444'; borderColor = '#dc2626'; }
+                        if (val < 50) { bgColor = '#22c55e'; borderColor = '#16a34a'; cat = 'normal'; }
+                        else if (val < 75) { bgColor = '#eab308'; borderColor = '#ca8a04'; cat = 'yogun'; }
+                        else if (val < 90) { bgColor = '#f97316'; borderColor = '#ea580c'; cat = 'agir'; }
+                        else { bgColor = '#ef4444'; borderColor = '#dc2626'; cat = 'kritik'; }
                     }
 
-                    // Her bir kutucuk - YENİLENDİ: Border (sınır) eklendi
-                    html += `<div style="background-color: ${bgColor}; border: 1px solid ${borderColor}; height: 22px; border-radius: 4px; cursor: crosshair; transition: transform 0.1s;" 
+                    // YENİ: class ve data-category eklendi
+                    html += `<div class="heatmap-cell" data-category="${cat}" style="background-color: ${bgColor}; border: 1px solid ${borderColor}; height: 22px; border-radius: 4px; cursor: crosshair; transition: transform 0.1s, opacity 0.3s;" 
                                   title="${tooltip}" 
                                   onmouseover="this.style.transform='scale(1.15)'" 
                                   onmouseout="this.style.transform='scale(1)'"></div>`;
                 }
             }
 
-            // Lejant Kısmı (Açıklama Skalası) - YENİLENDİ: Veri Yok kutucuğu temaya uygun hale getirildi
+            // Lejant Kısmı
             html += `
                     </div>
                     
-                    <div class="d-flex justify-content-end mt-4 gap-4 flex-wrap" style="font-size:12px; color:var(--text-main); opacity:0.9; font-weight: 500;">
-                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#22c55e; border: 1px solid #16a34a; margin-right:6px; border-radius:3px;"></div> %0 - %50 (Normal)</div>
-                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#eab308; border: 1px solid #ca8a04; margin-right:6px; border-radius:3px;"></div> %50 - %75 (Yoğun)</div>
-                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#f97316; border: 1px solid #ea580c; margin-right:6px; border-radius:3px;"></div> %75 - %90 (Ağır)</div>
-                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:#ef4444; border: 1px solid #dc2626; margin-right:6px; border-radius:3px;"></div> %90+ (Kritik)</div>
-                        <div class="d-flex align-items-center"><div style="width:14px; height:14px; background:rgba(128, 128, 128, 0.15); border: 1px solid rgba(128, 128, 128, 0.2); margin-right:6px; border-radius:3px;"></div> Veri Yok</div>
+                    <div class="d-flex justify-content-end mt-4 gap-4 flex-wrap" style="font-size:12px; color:var(--text-main); font-weight: 500;">
+                        <div id="legend-normal" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('normal')">
+                            <div style="width:14px; height:14px; background:#22c55e; border: 1px solid #16a34a; margin-right:6px; border-radius:3px;"></div> %0 - %50 (Normal)
+                        </div>
+                        <div id="legend-yogun" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yogun')">
+                            <div style="width:14px; height:14px; background:#eab308; border: 1px solid #ca8a04; margin-right:6px; border-radius:3px;"></div> %50 - %75 (Yoğun)
+                        </div>
+                        <div id="legend-agir" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('agir')">
+                            <div style="width:14px; height:14px; background:#f97316; border: 1px solid #ea580c; margin-right:6px; border-radius:3px;"></div> %75 - %90 (Ağır)
+                        </div>
+                        <div id="legend-kritik" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('kritik')">
+                            <div style="width:14px; height:14px; background:#ef4444; border: 1px solid #dc2626; margin-right:6px; border-radius:3px;"></div> %90+ (Kritik)
+                        </div>
+                        <div id="legend-yok" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yok')">
+                            <div style="width:14px; height:14px; background:rgba(128, 128, 128, 0.15); border: 1px solid rgba(128, 128, 128, 0.2); margin-right:6px; border-radius:3px;"></div> Veri Yok
+                        </div>
                     </div>
                 </div>
             </div>`;
 
             return html;
+        
         },
         loadCorrelationComputers: async () => {
             const selectEl = document.getElementById('corr-computer-select');
@@ -2285,27 +2292,9 @@
             } catch (e) { container.innerHTML = '<small class="text-danger">Diskler alınamadı</small>'; }
         },
 
-        handleCorrModeChange: (isLine) => {
-            const mode = isLine ? 'line' : 'scatter';
+        handleCorrModeChange: (mode) => {
             localStorage.setItem('corrMode', mode);
-
-            const lblLine = document.getElementById('lbl-line');
-            const lblScatter = document.getElementById('lbl-scatter');
-
-            if (lblLine && lblScatter) {
-                // Aktif olanı vurgula, pasif olanın opaklığını düşür
-                if (isLine) {
-                    lblLine.style.opacity = "1";
-                    lblLine.style.color = "var(--primary-color, #0d6efd)"; // Varsa ana renk, yoksa mavi
-                    lblScatter.style.opacity = "0.4";
-                    lblScatter.style.color = "var(--text-main)";
-                } else {
-                    lblLine.style.opacity = "0.4";
-                    lblLine.style.color = "var(--text-main)";
-                    lblScatter.style.opacity = "1";
-                    lblScatter.style.color = "var(--primary-color, #0d6efd)";
-                }
-            }
+            const isLine = mode === 'line';
 
             const info = document.getElementById('selection-limit-info');
             if (info) info.innerText = isLine ? "(Sınırsız Seçim)" : "(Tam 2 Adet Seçin)";
@@ -2544,6 +2533,52 @@
             } catch (e) {
                 Swal.fire({ icon: 'error', text: e.message || 'Veri işlenirken hata oluştu.' });
             }
+        },
+        filterHeatmap: (cat) => {
+            if (!window.activeHeatmapFilters) window.activeHeatmapFilters = [];
+
+            const index = window.activeHeatmapFilters.indexOf(cat);
+            if (index > -1) {
+                // Seçiliyse çıkar
+                window.activeHeatmapFilters.splice(index, 1);
+            } else {
+                // Seçili değilse ekle
+                window.activeHeatmapFilters.push(cat);
+            }
+
+            // 1. HARİTA HÜCRELERİNİ GÜNCELLE
+            document.querySelectorAll('.heatmap-cell').forEach(el => {
+                const cellCat = el.getAttribute('data-category');
+                if (window.activeHeatmapFilters.length === 0 || window.activeHeatmapFilters.includes(cellCat)) {
+                    el.style.opacity = '1';
+                    el.style.transform = 'scale(1)';
+                } else {
+                    el.style.opacity = '0.05';
+                    el.style.transform = 'scale(0.9)';
+                }
+            });
+
+            // 2. LEJANT (GÖSTERGE) BUTONLARINI GÜNCELLE
+            const allCategories = ['normal', 'yogun', 'agir', 'kritik', 'yok'];
+
+            allCategories.forEach(c => {
+                const legendEl = document.getElementById(`legend-${c}`);
+                if (legendEl) {
+                    if (window.activeHeatmapFilters.length === 0) {
+                        // HİÇBİRİ SEÇİLİ DEĞİLSE: Hepsi varsayılan tam görünür
+                        legendEl.style.opacity = '1';
+                        legendEl.style.filter = 'grayscale(0%)';
+                    } else if (window.activeHeatmapFilters.includes(c)) {
+                        // BU SEÇİLİYSE: Tam görünür yap
+                        legendEl.style.opacity = '1';
+                        legendEl.style.filter = 'grayscale(0%)';
+                    } else {
+                        // BU SEÇİLİ DEĞİL (Başka bir şey seçili): Rengini soldur ve şeffaf yap
+                        legendEl.style.opacity = '0.3';
+                        legendEl.style.filter = 'grayscale(80%)';
+                    }
+                }
+            });
         }
         
     };
