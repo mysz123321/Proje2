@@ -677,3 +677,16 @@ html[data-theme="dark"] .swal2-validation-message {
     background: var(--bg-hover) !important;
     color: var(--text-main) !important;
 }
+/* Sidebar alt kısmı (kullanıcı paneli) için boşluk bırak */
+#main-nav {
+    margin-bottom: 20px;
+}
+/* Sidebar için kaydırma çubuğunu gizle ama kaydırma özelliğini koru */
+#sidebar {
+    -ms-overflow-style: none; /* Internet Explorer ve Edge için */
+    scrollbar-width: none; /* Firefox için */
+}
+
+    #sidebar::-webkit-scrollbar {
+        display: none; /* Chrome, Safari ve Opera için */
+    }
