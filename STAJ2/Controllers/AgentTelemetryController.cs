@@ -81,15 +81,13 @@ public class AgentTelemetryController : ControllerBase
 
     [HttpGet("top-warnings")]
     [Authorize]
-    public async Task<IActionResult> GetTopWarnings() // Parametre kaldırıldı
+    public async Task<IActionResult> GetTopWarnings(DateTime? startDate, DateTime? endDate) // Parametreleri buradan alıyoruz
     {
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        int userId = int.TryParse(userIdString, out int id) ? id : 0;
+        var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var isAdmin = User.IsInRole("Yönetici");
 
-        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
-        bool isAdmin = User.IsInRole(adminRoleName);
-
-        var result = await _telemetryService.GetTopWarningsAsync(userId, isAdmin);
+        // HATALI SATIR BURASIYDI. Doğrusu bu şekildedir:
+        var result = await _telemetryService.GetTopWarningsAsync(userId, isAdmin, startDate, endDate);
 
         if (!result.IsSuccess)
             return BadRequest(result.Message);

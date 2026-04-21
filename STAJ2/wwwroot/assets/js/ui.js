@@ -540,6 +540,23 @@
                 }
 
                 content.innerHTML = `
+                <div class="row mb-3">
+                    <div class="col-12 d-flex justify-content-end gap-2 align-items-end flex-wrap">
+                        <div>
+                            <label class="form-label small text-muted mb-1 fw-bold">Başlangıç Tarihi</label>
+                            <input type="date" id="warning-start" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1 fw-bold">Bitiş Tarihi</label>
+                            <input type="date" id="warning-end" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-primary btn-sm fw-bold shadow-sm" onclick="window.fetchTopWarnings()"><i class="bi bi-filter"></i> Filtrele</button>
+                            <button class="btn btn-secondary btn-sm fw-bold shadow-sm" onclick="window.clearWarningFilters()"><i class="bi bi-eraser"></i> Temizle</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #0dcaf0 !important;">
@@ -581,7 +598,6 @@
                     </div>
                 </div>`;
 
-                // Arayüz çizildikten sonra verileri API'den çeken fonksiyonu çağırıyoruz
                 if (window.fetchTopWarnings) window.fetchTopWarnings();
                 break;
 
@@ -2588,8 +2604,21 @@
 
     window.fetchTopWarnings = async function () {
         try {
-            // Linkten ?topN=5 kısmını sildik, hepsini getiriyoruz
-            const result = await window.api.get('/api/agent-telemetry/top-warnings');
+            let url = '/api/agent-telemetry/top-warnings';
+
+            // YENİ EKLENDİ: Eğer ekranda seçili tarih varsa query string olarak URL'ye ekle
+            let start = document.getElementById('warning-start') ? document.getElementById('warning-start').value : null;
+            let end = document.getElementById('warning-end') ? document.getElementById('warning-end').value : null;
+
+            let queryParams = [];
+            if (start) queryParams.push(`startDate=${start}`);
+            if (end) queryParams.push(`endDate=${end}`);
+
+            if (queryParams.length > 0) {
+                url += '?' + queryParams.join('&');
+            }
+
+            const result = await window.api.get(url);
             const data = result.data ? result.data : result;
 
             // Gelen verileri hafızaya alıyoruz
@@ -2608,6 +2637,13 @@
         } catch (err) {
             console.error("Uyarı Raporu çekilirken hata oluştu: ", err);
         }
+    };
+
+    // YENİ EKLENDİ: Tarihleri temizleyen butonun fonksiyonu
+    window.clearWarningFilters = function () {
+        if (document.getElementById('warning-start')) document.getElementById('warning-start').value = '';
+        if (document.getElementById('warning-end')) document.getElementById('warning-end').value = '';
+        window.fetchTopWarnings();
     };
     window.showBreachChart = function (title, typeKey, diskName) {
         let breachesList = [];

@@ -40,14 +40,16 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             if (string.IsNullOrWhiteSpace(dto.MacAddress))
                 return ServiceResult<List<(string Email, string Subject, string Body)>>.Failure("MacAddress is required.");
 
-            // 2. Bilgisayar Kaydı veya Güncelleme
+            bool isNewComputer = false; // YENİ EKLENDİ: Cihazın yeni olup olmadığını takip edeceğiz
+
             var computer = await _db.Computers
                 .Include(c => c.Disks)
-                .Include(c => c.Tags) // Tags sonradan DTO'ya basmak için gerekli
+                .Include(c => c.Tags)
                 .FirstOrDefaultAsync(c => c.MacAddress == dto.MacAddress, ct);
 
             if (computer == null)
             {
+                isNewComputer = true; // YENİ EKLENDİ
                 computer = new Computer
                 {
                     MacAddress = dto.MacAddress,
@@ -78,6 +80,25 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             // Transaction aktif olduğu için bu save işlemi aslında henüz kalıcı olarak DB'ye Commitlenmiyor
             await _db.SaveChangesAsync(ct);
 
+            if (isNewComputer)
+            {
+                var adminName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+                var adminUserIds = await _db.Users
+                    .Where(u => !u.IsDeleted && u.Roles.Any(r => r.Name == adminName && !r.IsDeleted))
+                    .Select(u => u.Id)
+                    .ToListAsync(ct);
+
+                foreach (var adminId in adminUserIds)
+                {
+                    _db.UserComputerAccesses.Add(new UserComputerAccess
+                    {
+                        UserId = adminId,
+                        ComputerId = computer.Id
+                    });
+                }
+                // Atamaları veritabanına kalıcı olarak yazıyoruz
+                await _db.SaveChangesAsync(ct);
+            }
             // 3. Yeni Disk Mantığı
             var diskTotalParts = dto.TotalDiskGb.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < diskTotalParts.Length; i += 2)
@@ -349,13 +370,28 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
         return ServiceResult<object>.Success(sortedResult);
     }
 
-    public async Task<ServiceResult<TopWarningsReportDto>> GetTopWarningsAsync(int userId, bool isAdmin)
+    public async Task<ServiceResult<TopWarningsReportDto>> GetTopWarningsAsync(int userId, bool isAdmin, DateTime? startDate = null, DateTime? endDate = null)
     {
         var query = _db.MetricWarningLogs
             .Include(w => w.Computer)
             .Include(w => w.MetricType)
-            .Include(w => w.ComputerDisk) // <--- EKLENDİ
+            .Include(w => w.ComputerDisk)
             .AsQueryable();
+
+        // =======================================================
+        // YENİ EKLENDİ: Tarih filtrelerini Query'ye uyguluyoruz
+        // =======================================================
+        if (startDate.HasValue)
+        {
+            var startOfDay = startDate.Value.Date;
+            query = query.Where(w => w.CreatedAt >= startOfDay);
+        }
+        if (endDate.HasValue)
+        {
+            // Seçilen günün 23:59:59'unu kapsayacak şekilde ayarlıyoruz
+            var endOfDay = endDate.Value.Date.AddDays(1).AddTicks(-1);
+            query = query.Where(w => w.CreatedAt <= endOfDay);
+        }
 
         if (!isAdmin)
         {
