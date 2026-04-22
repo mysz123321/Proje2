@@ -182,10 +182,7 @@ public class ComputerService : BaseService, IComputerService
         if (startTime > endTime)
             return ServiceResult<object>.Failure("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
 
-        var totalMinutes = (endTime - startTime).TotalMinutes;
-        int bucketSizeInMinutes = totalMinutes <= 150 ? 0 : (int)Math.Ceiling(totalMinutes / 200.0);
-
-        // 1. ADIM: Verileri veritabanından en küçük haliyle (sadece tarih, değerler) RAM'e al
+        // 1. ADIM: Verileri veritabanından RAM'e al
         var rawCpuRam = await _db.ComputerMetrics
             .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
             .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
@@ -196,9 +193,36 @@ public class ComputerService : BaseService, IComputerService
             .Select(m => new { m.CreatedAt, m.UsedPercent, diskName = m.ComputerDisk.DiskName })
             .ToListAsync();
 
-        // 2. ADIM: Gruplamaları C# üzerinde (Memory) yap
-        if (bucketSizeInMinutes == 0)
+        // Veri yoksa boş dön
+        if (!rawCpuRam.Any() && !rawDisks.Any())
         {
+            return ServiceResult<object>.Success(new { CpuRam = rawCpuRam, Disks = rawDisks });
+        }
+
+        // Gerçek veri zaman aralığını bul (Baştaki ve Sondaki Veri)
+        var firstDataTime = rawCpuRam.Any() ? rawCpuRam.Min(m => m.CreatedAt) : rawDisks.Min(m => m.CreatedAt);
+        var lastDataTime = rawCpuRam.Any() ? rawCpuRam.Max(m => m.CreatedAt) : rawDisks.Max(m => m.CreatedAt);
+
+        if (rawDisks.Any())
+        {
+            var diskMin = rawDisks.Min(m => m.CreatedAt);
+            var diskMax = rawDisks.Max(m => m.CreatedAt);
+            if (diskMin < firstDataTime) firstDataTime = diskMin;
+            if (diskMax > lastDataTime) lastDataTime = diskMax;
+        }
+
+        // --- YENİ: Nokta Sayısı (Downsampling) Hesaplaması ---
+        int maxAllowedPoints = 200;
+
+        // DÜZELTME: X ekseninde oluşacak gerçek nokta (zaman) sayısını baz alıyoruz. 
+        // Disk sayısının (birden fazla disk olmasının) toplam satırı şişirip kova mantığını haksız yere tetiklemesini engelliyoruz.
+        int currentDataCount = rawCpuRam.Any()
+            ? rawCpuRam.Count
+            : rawDisks.Select(d => d.CreatedAt).Distinct().Count();
+
+        if (currentDataCount <= maxAllowedPoints)
+        {
+            // 2. ADIM (Veri Azsa): 250'den az veri varsa HİÇ GRUPLAMA YAPMA (Saniye saniyesine göster)
             var data = new
             {
                 CpuRam = rawCpuRam.OrderByDescending(m => m.CreatedAt),
@@ -208,7 +232,12 @@ public class ComputerService : BaseService, IComputerService
         }
         else
         {
-            long bucketTicks = TimeSpan.FromMinutes(bucketSizeInMinutes).Ticks;
+            // 2. ADIM (Veri Çoksa): Toplam zaman aralığını tam 250 eşit parçaya (kovaya) böl
+            long totalTicks = (lastDataTime - firstDataTime).Ticks;
+            long bucketTicks = totalTicks / maxAllowedPoints;
+
+            // Güvenlik önlemi: Aynı milisaniyede gelmiş veriler totalTicks'i 0 yaparsa diye
+            if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
             var groupedCpuRam = rawCpuRam
                 .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)

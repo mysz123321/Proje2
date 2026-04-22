@@ -85,8 +85,10 @@
             const mainItems = sidebarItems.filter(item => !item.isProtected);
             const adminItems = sidebarItems.filter(item => item.isProtected);
 
+            const lastView = sessionStorage.getItem('lastActiveView') || 'computers';
+
             mainItems.forEach(item => {
-                const isActive = item.targetView === 'computers' ? 'active' : '';
+                const isActive = item.targetView === lastView ? 'active' : '';
 
                 html += `
         <li class="nav-item">
@@ -126,6 +128,8 @@
     }
 
     async function switchView(view) {
+        sessionStorage.setItem('lastActiveView', view);
+
         const content = document.getElementById('dynamic-content');
         const title = document.getElementById('view-title');
         const subtitle = document.getElementById('view-subtitle');

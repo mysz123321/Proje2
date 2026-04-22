@@ -588,8 +588,11 @@
                 await auth.loadLivePermissions();
             }
 
-            ui.renderSidebar();
-            ui.switchView('computers');
+            ui.renderSidebar().then(() => {
+                // F5 atıldığında en son kalınan sekmeyi al, yoksa varsayılan 'computers' aç
+                const lastView = sessionStorage.getItem('lastActiveView') || 'computers';
+                ui.switchView(lastView);
+            });
 
             // --- YENİ EKLENEN KISIM: F5 (Yenileme) Durumunda En Güncel Rolleri Çek ---
             // Sayfa her açıldığında arka planda sessizce token'ı yenileyerek güncel rolleri alır.
