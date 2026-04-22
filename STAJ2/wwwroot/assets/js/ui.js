@@ -1673,8 +1673,8 @@
             let slope = denominator !== 0 ? ((n * sumXY) - (sumX * sumY)) / denominator : 0;
 
             // 4. TAHMİNLEME VE ARAYÜZ YAZDIRMA
-            let titleText = isHistory ? "Bilimsel Dolum Tahmini (Seçili Tarih Aralığı)" : "Bilimsel Dolum Tahmini (Son 3 Gün)";
-            let predictionPrefix = isHistory ? "Seçilen tarih aralığındaki gerçek trende göre" : "Son 3 gündeki gerçek trende göre";
+            let titleText = isHistory ? "Bilimsel Dolum Tahmini (Seçili Tarih Aralığı)" : "Bilimsel Dolum Tahmini (Son 5 Gün)";
+            let predictionPrefix = isHistory ? "Seçilen tarih aralığındaki gerçek trende göre" : "Son 5 gündeki gerçek trende göre";
 
             let predictionText = '';
             let iconClass = 'bi-info-circle text-info';

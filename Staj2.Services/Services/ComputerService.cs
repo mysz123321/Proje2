@@ -232,7 +232,7 @@ public class ComputerService : BaseService, IComputerService
         }
         else
         {
-            // 2. ADIM (Veri Çoksa): Toplam zaman aralığını tam 250 eşit parçaya (kovaya) böl
+            // 2. ADIM (Veri Çoksa): Toplam zaman aralığını tam 200 eşit parçaya (kovaya) böl
             long totalTicks = (lastDataTime - firstDataTime).Ticks;
             long bucketTicks = totalTicks / maxAllowedPoints;
 
@@ -538,6 +538,9 @@ public class ComputerService : BaseService, IComputerService
     // 12. Rapor Detayları İçin Son 5 Veri Gününün Trendi (Yeni Eklendi)
     public async Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName)
     {
+        // Regresyon için ideal hedef nokta sayısı. Çok yüksek olursa tarayıcı yorulur, düşük olursa sapma artar.
+        int maxPointsForRegression = 1000;
+
         if (metricType == "CPU" || metricType == "RAM")
         {
             var dates = await _db.ComputerMetrics
@@ -553,24 +556,25 @@ public class ComputerService : BaseService, IComputerService
             var minDate = dates.Min();
             var maxDate = dates.Max().AddDays(1);
 
-            var totalMinutes = (maxDate - minDate).TotalMinutes;
-            int bucketSizeInMinutes = totalMinutes <= 150 ? 0 : (int)Math.Ceiling(totalMinutes / 300.0);
-
-            // 1. ADIM: Veritabanından en yalın haliyle RAM'e çek (Client-Side Evaluation için)
+            // 1. ADIM: Veritabanından en yalın haliyle RAM'e çek 
             var rawData = await _db.ComputerMetrics
                 .Where(m => m.ComputerId == computerId && m.CreatedAt >= minDate && m.CreatedAt < maxDate)
                 .Select(m => new { m.CreatedAt, value = metricType == "CPU" ? m.CpuUsage : m.RamUsage })
-                .ToListAsync(); // Veritabanı sorgusu burada biter
+                .ToListAsync();
 
-            // 2. ADIM: Gruplamayı bellekte yap
-            if (bucketSizeInMinutes == 0)
+            // 2. ADIM: Veri sayısına göre gruplama (Zamana göre değil)
+            if (rawData.Count <= maxPointsForRegression)
             {
                 var data = rawData.OrderBy(m => m.CreatedAt).Select(m => new { createdAt = m.CreatedAt, value = m.value }).ToList();
                 return ServiceResult<object>.Success(data);
             }
             else
             {
-                long bucketTicks = TimeSpan.FromMinutes(bucketSizeInMinutes).Ticks;
+                long totalTicks = (maxDate - minDate).Ticks;
+                long bucketTicks = totalTicks / maxPointsForRegression;
+
+                // Aynı milisaniyede gelme ihtimaline karşı güvenlik
+                if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
                 var groupedData = rawData
                     .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
@@ -599,24 +603,24 @@ public class ComputerService : BaseService, IComputerService
             var minDate = dates.Min();
             var maxDate = dates.Max().AddDays(1);
 
-            var totalMinutes = (maxDate - minDate).TotalMinutes;
-            int bucketSizeInMinutes = totalMinutes <= 150 ? 0 : (int)Math.Ceiling(totalMinutes / 300.0);
-
             // 1. ADIM: Diski veritabanından yalın çek
             var rawData = await _db.DiskMetrics
                 .Where(m => m.ComputerDisk.ComputerId == computerId && m.ComputerDisk.DiskName == diskName && m.CreatedAt >= minDate && m.CreatedAt < maxDate)
                 .Select(m => new { m.CreatedAt, value = m.UsedPercent })
-                .ToListAsync(); // Veritabanı işlemi bitti
+                .ToListAsync();
 
             // 2. ADIM: Bellekte grupla
-            if (bucketSizeInMinutes == 0)
+            if (rawData.Count <= maxPointsForRegression)
             {
                 var data = rawData.OrderBy(m => m.CreatedAt).Select(m => new { createdAt = m.CreatedAt, value = m.value }).ToList();
                 return ServiceResult<object>.Success(data);
             }
             else
             {
-                long bucketTicks = TimeSpan.FromMinutes(bucketSizeInMinutes).Ticks;
+                long totalTicks = (maxDate - minDate).Ticks;
+                long bucketTicks = totalTicks / maxPointsForRegression;
+
+                if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
                 var groupedData = rawData
                     .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
