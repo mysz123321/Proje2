@@ -763,11 +763,41 @@ function createCandleChart(canvasId, labelText, candleData, diskName = null, isD
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            onClick: (event, elements) => {
+            onClick: (event, elements, chart) => {
                 if (isDrillDown) return;
 
+                let index = -1;
+
+                // 1. Standart yol: elements dizisinde eleman varsa kullan
                 if (elements.length > 0) {
-                    const index = elements[0].index;
+                    index = elements[0].index;
+                } else {
+                    // 2. Finansal eklenti için alternatif: getElementsAtEventForMode dene
+                    const nativeEvent = event.native || event;
+                    const activeEls = chart.getElementsAtEventForMode(nativeEvent, 'nearest', { intersect: false }, true);
+                    if (activeEls.length > 0) {
+                        index = activeEls[0].index;
+                    } else {
+                        // 3. Son çare: X pozisyonuna göre en yakın mumu bul
+                        const rect = chart.canvas.getBoundingClientRect();
+                        const xPixel = (nativeEvent.clientX || nativeEvent.x) - rect.left;
+                        const xScale = chart.scales.x;
+                        const clickedTime = xScale.getValueForPixel(xPixel);
+
+                        if (clickedTime && candleData.length > 0) {
+                            let closestDist = Infinity;
+                            candleData.forEach((c, i) => {
+                                const dist = Math.abs(c.x - clickedTime);
+                                if (dist < closestDist) {
+                                    closestDist = dist;
+                                    index = i;
+                                }
+                            });
+                        }
+                    }
+                }
+
+                if (index >= 0 && index < candleData.length) {
                     const candle = candleData[index];
                     const startTime = new Date(candle.x).toISOString();
                     
@@ -810,6 +840,24 @@ function createCandleChart(canvasId, labelText, candleData, diskName = null, isD
                 }
             },
             plugins: {
+                zoom: isDrillDown ? {
+                    limits: {
+                        x: {
+                            min: candleData.length > 0 ? candleData[0].x : undefined,
+                            max: candleData.length > 0 ? candleData[candleData.length - 1].x : undefined
+                        }
+                    },
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        mode: 'x',
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        threshold: 5,
+                    }
+                } : {},
                 legend: { labels: { color: textColor, font: { weight: 'bold' } } },
                 tooltip: {
                     callbacks: {
@@ -1351,44 +1399,106 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
             return;
         }
 
-        const labels = detailData.map(m => formatChartDate(m.createdAt));
-        const values = detailData.map(m => m[valueKey]);
-        const mins = detailData.map(m => m[valueKey.replace('Avg', 'Min')]);
-        const maxs = detailData.map(m => m[valueKey.replace('Avg', 'Max')]);
+        // Mevcut grafik moduna göre detay grafiği oluştur
+        if (currentHistoryMode === 'candle') {
+            // Candlestick modu: OHLC verilerini hazırla
+            let candleData;
+            if (diskName) {
+                candleData = detailData.map(d => ({
+                    x: new Date(d.createdAt).getTime(),
+                    o: d.usedOpen,
+                    h: d.usedMax,
+                    l: d.usedMin,
+                    c: d.usedClose
+                }));
+            } else {
+                const prefix = labelText.includes('CPU') ? 'cpu' : 'ram';
+                candleData = detailData.map(m => ({
+                    x: new Date(m.createdAt).getTime(),
+                    o: m[prefix + 'Open'],
+                    h: m[prefix + 'Max'],
+                    l: m[prefix + 'Min'],
+                    c: m[prefix + 'Close']
+                }));
+            }
 
-        // Detay Grafiği Oluştur (isDrillDown = true geçiyoruz ki tekrar tıklanmasın)
-        bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
+            bucketDetailChart = createCandleChart('bucketDetailChart', labelText, candleData, diskName, true);
 
-        let sum = 0;
-        let maxVal = -1;
-        
-        values.forEach(v => {
-            sum += v;
-            if (v > maxVal) maxVal = v;
-        });
+            // OHLC özet istatistiklerini hesapla
+            let sumClose = 0, peakHigh = -1, lowestLow = 999;
+            candleData.forEach(c => {
+                sumClose += c.c;
+                if (c.h > peakHigh) peakHigh = c.h;
+                if (c.l < lowestLow) lowestLow = c.l;
+            });
+            const avgClose = sumClose / candleData.length;
 
-        const avg = sum / values.length;
-
-        summaryContainer.innerHTML = `
-            <div class="col-md-4">
-                <div class="p-3 border rounded border-info text-center" style="background: rgba(255,255,255,0.05);">
-                    <div class="text-info small fw-bold mb-1">ARALIK ORTALAMASI</div>
-                    <div class="fs-4 fw-bold text-main">${avg.toFixed(2)}%</div>
+            summaryContainer.innerHTML = `
+                <div class="col-md-3">
+                    <div class="p-3 border rounded border-info text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-info small fw-bold mb-1">ORT. KAPANIŞ</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${avgClose.toFixed(2)}%</div>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 border rounded border-danger text-center" style="background: rgba(255,255,255,0.05);">
-                    <div class="text-danger small fw-bold mb-1">ARALIK ZİRVESİ (PEAK)</div>
-                    <div class="fs-4 fw-bold text-main">${maxVal.toFixed(2)}%</div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded border-danger text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-danger small fw-bold mb-1">EN YÜKSEK (HIGH)</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${peakHigh.toFixed(2)}%</div>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 border rounded border-success text-center" style="background: rgba(255,255,255,0.05);">
-                    <div class="text-success small fw-bold mb-1">VERİ NOKTASI SAYISI</div>
-                    <div class="fs-4 fw-bold text-main">${detailData.length} Adet</div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded border-success text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-success small fw-bold mb-1">EN DÜŞÜK (LOW)</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${lowestLow.toFixed(2)}%</div>
+                    </div>
                 </div>
-            </div>
-        `;
+                <div class="col-md-3">
+                    <div class="p-3 border rounded border-warning text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-warning small fw-bold mb-1">MUM SAYISI</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${candleData.length} Adet</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Band (Area) modu: Mevcut davranış
+            const labels = detailData.map(m => formatChartDate(m.createdAt));
+            const values = detailData.map(m => m[valueKey]);
+            const mins = detailData.map(m => m[valueKey.replace('Avg', 'Min')]);
+            const maxs = detailData.map(m => m[valueKey.replace('Avg', 'Max')]);
+
+            bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
+
+            let sum = 0;
+            let maxVal = -1;
+            
+            values.forEach(v => {
+                sum += v;
+                if (v > maxVal) maxVal = v;
+            });
+
+            const avg = sum / values.length;
+
+            summaryContainer.innerHTML = `
+                <div class="col-md-4">
+                    <div class="p-3 border rounded border-info text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-info small fw-bold mb-1">ARALIK ORTALAMASI</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${avg.toFixed(2)}%</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded border-danger text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-danger small fw-bold mb-1">ARALIK ZİRVESİ (PEAK)</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${maxVal.toFixed(2)}%</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded border-success text-center" style="background: rgba(255,255,255,0.05);">
+                        <div class="text-success small fw-bold mb-1">VERİ NOKTASI SAYISI</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${detailData.length} Adet</div>
+                    </div>
+                </div>
+            `;
+        }
 
     } catch (e) {
         summaryContainer.innerHTML = `<div class="alert alert-danger w-100">Hata: ${e.message}</div>`;
