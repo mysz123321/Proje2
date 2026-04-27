@@ -1,6 +1,7 @@
-﻿// STAJ2/wwwroot/assets/js/agent-ui.js
+// STAJ2/wwwroot/assets/js/agent-ui.js
 
 // --- GRAFİKLER İÇİN EKLENEN GLOBAL DEĞİŞKENLER ---
+let currentHistoryMode = 'band';
 let historyCharts = { cpu: null, ram: null, disks: {} };
 let currentHistoryData = { cpuRam: [], disks: [] };
 
@@ -154,20 +155,18 @@ function renderTable() {
         `;
 
         if (a.diskUsage && a.diskUsage !== "-") {
-            // HATA 1 ÇÖZÜMÜ: Sondaki [^\d]* ifadesi silindi, böylece regex sıradaki diskin harfini yutmayacak.
             let regex = /([A-Za-z]:[\\/]?)[^\d]*(\d+)/g;
             let match;
 
             while ((match = regex.exec(a.diskUsage)) !== null) {
-                let dName = match[1].replace(/[\\/]/g, ''); // Ekranda şık durması için "C:" formatında bırakıyoruz.
+                let dName = match[1].replace(/[\\/]/g, '');
                 let dUsage = parseInt(match[2]);
 
-                // HATA 2 ÇÖZÜMÜ: Eşik değerini backend'den okurken eşleşmesi için ":" işaretini temizliyoruz (Örn: "C:" -> "C" oluyor).
                 let diskKey = dName.replace(':', '');
 
-                let diskLimit = 90; // Varsayılan
+                let diskLimit = 90;
                 if (a.diskThresholds && a.diskThresholds[diskKey] !== undefined) {
-                    diskLimit = a.diskThresholds[diskKey]; // Artık eşleşme başarılı olacak ve backend'den gelen limit kullanılacak!
+                    diskLimit = a.diskThresholds[diskKey];
                 }
 
                 let dColor = getDonutColor(dUsage, diskLimit);
@@ -446,20 +445,65 @@ window.fetchHistoryMetrics = async () => {
     }
 };
 
+function destroyChart(idOrInstance) {
+    if (!idOrInstance) return;
+    
+    // Eğer instance geldiyse onu kullan
+    if (typeof idOrInstance === 'object' && typeof idOrInstance.destroy === 'function') {
+        idOrInstance.destroy();
+        return;
+    }
+
+    // Eğer ID geldiyse global registry'den bul ve imha et (Already in use hatasını kesin önler)
+    const chart = Chart.getChart(idOrInstance);
+    if (chart) {
+        chart.destroy();
+    }
+}
+
 function renderBaseCharts(cpuRamData) {
     const labels = cpuRamData.map(m => formatChartDate(m.createdAt));
-    const cpuData = cpuRamData.map(m => m.cpuUsage);
-    const ramData = cpuRamData.map(m => m.ramUsage);
+    
+    // Güvenli imha
+    destroyChart('cpuChart');
+    destroyChart('ramChart');
+    historyCharts.cpu = null;
+    historyCharts.ram = null;
 
-    if (historyCharts.cpu) historyCharts.cpu.destroy();
-    if (historyCharts.ram) historyCharts.ram.destroy();
+    if (currentHistoryMode === 'candle') {
+        const cpuCandles = cpuRamData.map(m => ({
+            x: new Date(m.createdAt).getTime(),
+            o: m.cpuOpen,
+            h: m.cpuMax,
+            l: m.cpuMin,
+            c: m.cpuClose
+        }));
+        const ramCandles = cpuRamData.map(m => ({
+            x: new Date(m.createdAt).getTime(),
+            o: m.ramOpen,
+            h: m.ramMax,
+            l: m.ramMin,
+            c: m.ramClose
+        }));
 
-    historyCharts.cpu = createLineChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuData, '#38bdf8');
-    historyCharts.ram = createLineChart('ramChart', 'RAM Kullanımı (%)', labels, ramData, '#facc15');
+        historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuCandles, null);
+        historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramCandles, null);
+    } else {
+        const cpuAvg = cpuRamData.map(m => m.cpuAvg);
+        const cpuMin = cpuRamData.map(m => m.cpuMin);
+        const cpuMax = cpuRamData.map(m => m.cpuMax);
+        
+        const ramAvg = cpuRamData.map(m => m.ramAvg);
+        const ramMin = cpuRamData.map(m => m.ramMin);
+        const ramMax = cpuRamData.map(m => m.ramMax);
+
+        historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null);
+        historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null);
+    }
 
     // MİNİ RAPOR TETİKLEYİCİLERİ
-    generateMiniReport(cpuRamData, 'cpuUsage', 'cpuMiniReport', '%', 'cpuChart');
-    generateMiniReport(cpuRamData, 'ramUsage', 'ramMiniReport', '%', 'ramChart');
+    generateMiniReport(cpuRamData, 'cpuAvg', 'cpuMiniReport', '%', 'cpuChart');
+    generateMiniReport(cpuRamData, 'ramAvg', 'ramMiniReport', '%', 'ramChart');
 }
 
 function formatChartDate(dateString) {
@@ -482,6 +526,13 @@ function generateDiskFilters(disksData) {
     const dynamicChartsContainer = document.getElementById('dynamicDiskCharts');
     if (dynamicChartsContainer) dynamicChartsContainer.innerHTML = '';
 
+    // ÖNEMLİ: Mevcut disk grafiklerini imha etmeden objeyi sıfırlama (Canvas reuse hatasını önler)
+    if (historyCharts.disks) {
+        Object.keys(historyCharts.disks).forEach(key => {
+            const chartId = `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}`;
+            destroyChart(chartId);
+        });
+    }
     historyCharts.disks = {};
 
     diskNames.forEach(diskName => {
@@ -497,7 +548,6 @@ function generateDiskFilters(disksData) {
 
         const chartId = `diskChart_${diskName.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-        // DİSK KARTINA RAPOR İÇİN DIV EKLENDİ
         const chartHtml = `
             <div class="card border border-secondary shadow-sm" id="container_${chartId}" style="background-color: var(--bg-card); display: none;">
                 <div class="card-body p-2" style="overflow: hidden;">
@@ -520,30 +570,41 @@ function toggleDiskChart(isVisible, diskName, chartId) {
     const container = document.getElementById(`container_${chartId}`);
     const reportContainer = document.getElementById(`report_${chartId}`);
 
+    // Mevcut grafiği her durumda imha et (reuse hatasını önlemek için)
+    destroyChart(chartId);
+    if (historyCharts.disks[diskName]) delete historyCharts.disks[diskName];
+
     if (isVisible) {
         container.style.display = 'block';
 
         const diskData = currentHistoryData.disks.filter(d => d.diskName === diskName);
         const labels = diskData.map(d => formatChartDate(d.createdAt));
-        const diskUsageData = diskData.map(d => d.usedPercent);
 
-        historyCharts.disks[diskName] = createLineChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, diskUsageData, '#10b981');
+        if (currentHistoryMode === 'candle') {
+            const diskCandles = diskData.map(d => ({
+                x: new Date(d.createdAt).getTime(),
+                o: d.usedOpen,
+                h: d.usedMax,
+                l: d.usedMin,
+                c: d.usedClose
+            }));
+            historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles, diskName);
+        } else {
+            const usedAvg = diskData.map(d => d.usedAvg);
+            const usedMin = diskData.map(d => d.usedMin);
+            const usedMax = diskData.map(d => d.usedMax);
+            historyCharts.disks[diskName] = createBandChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, usedAvg, usedMin, usedMax, '#10b981', diskName);
+        }
 
-        // MİNİ RAPORU TETİKLE
-        generateMiniReport(diskData, 'usedPercent', `report_${chartId}`, '%', chartId);
+        generateMiniReport(diskData, 'usedAvg', `report_${chartId}`, '%', chartId);
 
     } else {
         container.style.display = 'none';
         if (reportContainer) reportContainer.style.display = 'none';
-
-        if (historyCharts.disks[diskName]) {
-            historyCharts.disks[diskName].destroy();
-            delete historyCharts.disks[diskName];
-        }
     }
 }
 
-function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
+function createBandChart(canvasId, labelText, labels, avgData, minData, maxData, colorHex, diskName = null, isDrillDown = false) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
@@ -554,30 +615,105 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: labelText,
-                data: dataPoints,
-                borderColor: colorHex,
-                backgroundColor: colorHex + '33',
-                borderWidth: 2,
-                tension: 0.3,
-                fill: true,
-                pointRadius: 1,
-                pointHoverRadius: 6
-            }]
+            datasets: [
+                {
+                    label: 'Maksimum',
+                    data: maxData,
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3
+                },
+                {
+                    label: 'Minimum',
+                    data: minData,
+                    borderColor: 'transparent',
+                    backgroundColor: colorHex + '33',
+                    pointRadius: 0,
+                    fill: '-1',
+                    tension: 0.3
+                },
+                {
+                    label: labelText + ' (Ortalama)',
+                    data: avgData,
+                    borderColor: colorHex,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 1,
+                    pointHoverRadius: 6
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (event, elements) => {
+                // Detay grafiği ise tekrar drill-down yapma
+                if (isDrillDown) return;
+
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    let startTime, endTime;
+
+                    if (diskName) {
+                        const dData = currentHistoryData.disks.filter(d => d.diskName === diskName);
+                        startTime = dData[index].createdAt;
+                        endTime = (index < dData.length - 1) ? dData[index + 1].createdAt : new Date(new Date(startTime).getTime() + 60000).toISOString();
+                    } else {
+                        startTime = currentHistoryData.cpuRam[index].createdAt;
+                        endTime = (index < currentHistoryData.cpuRam.length - 1) ? currentHistoryData.cpuRam[index + 1].createdAt : new Date(new Date(startTime).getTime() + 60000).toISOString();
+                    }
+
+                    window.openBucketDetail(startTime, endTime, labelText, diskName);
+                }
+            },
             interaction: {
                 mode: 'index',
                 intersect: false,
             },
             plugins: {
-                legend: { labels: { color: textColor, font: { weight: 'bold' } } },
+                zoom: isDrillDown ? {
+                    limits: {
+                        x: { min: 0, max: labels.length - 1 }
+                    },
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        mode: 'x',
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        threshold: 5,
+                    }
+                } : {},
+                legend: {
+                    labels: {
+                        color: textColor,
+                        font: { weight: 'bold' },
+                        filter: function(item) {
+                            return item.text.includes('Ortalama');
+                        }
+                    }
+                },
                 tooltip: {
                     mode: 'index',
-                    intersect: false
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += context.parsed.y.toFixed(2) + '%';
+                            }
+                            return label;
+                        }
+                    }
                 }
             },
             scales: {
@@ -588,9 +724,133 @@ function createLineChart(canvasId, labelText, labels, dataPoints, colorHex) {
     });
 }
 
-// ----------------- MİNİ RAPOR OLUŞTURUCU (ALGORİTMA 2 VE 3) -----------------
-// ----------------- MİNİ RAPOR OLUŞTURUCU VE TAHMİNLEME (ALGORİTMA) -----------------
-// ----------------- MİNİ RAPOR OLUŞTURUCU VE TAHMİNLEME (ALGORİTMA) -----------------
+function createCandleChart(canvasId, labelText, candleData, diskName = null, isDrillDown = false) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+
+    // Chart.js 4+ için finansal grafiklerin otomatik register olup olmadığını kontrol et
+    // Eğer değilse manuel register denenebilir (CDN versiyonuna göre değişir)
+    if (typeof Chart !== 'undefined' && Chart.FinancialController) {
+         Chart.register(Chart.FinancialController, Chart.CandlestickElement);
+    }
+
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const textColor = isLight ? '#334155' : '#e2e8f0';
+    const gridColor = isLight ? '#cbd5e1' : '#334155';
+
+    return new Chart(ctx, {
+        type: 'candlestick',
+        data: {
+            datasets: [{
+                label: labelText,
+                data: candleData,
+                // Blokların (mumların) genişliğini sabitlemek için eklenen özellikler
+                barThickness: 'flex',
+                categoryPercentage: 0.9,
+                barPercentage: 0.9,
+                borderColor: {
+                    up: '#22c55e',
+                    down: '#ef4444',
+                    unchanged: '#94a3b8'
+                },
+                backgroundColor: {
+                    up: '#22c55e', // Mum içi doluluğu için opak renkler
+                    down: '#ef4444',
+                    unchanged: '#94a3b8'
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            onClick: (event, elements) => {
+                if (isDrillDown) return;
+
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const candle = candleData[index];
+                    const startTime = new Date(candle.x).toISOString();
+                    
+                    let endTime;
+                    if (index < candleData.length - 1) {
+                        endTime = new Date(candleData[index + 1].x).toISOString();
+                    } else {
+                        endTime = new Date(candle.x + 60000).toISOString();
+                    }
+
+                    window.openBucketDetail(startTime, endTime, labelText, diskName);
+                }
+            },
+            parsing: false, // Performans ve doğru eşleşme için parsing kapatılabilir
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        // Birim zorlamasını kaldırdık, Chart.js aralığa göre (Gün/Ay/Yıl) otomatik seçecek
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'HH:mm',
+                            day: 'dd MMM',
+                            month: 'MMM yyyy'
+                        },
+                        tooltipFormat: 'dd MMM yyyy HH:mm'
+                    },
+                    ticks: { 
+                        color: textColor, 
+                        maxTicksLimit: 10,
+                        autoSkip: true
+                    },
+                    grid: { color: gridColor }
+                },
+                y: {
+                    min: 0,
+                    max: 100,
+                    ticks: { color: textColor },
+                    grid: { color: gridColor }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: textColor, font: { weight: 'bold' } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const p = context.raw;
+                            return [
+                                `Açılış: ${p.o.toFixed(1)}%`,
+                                `En Yüksek: ${p.h.toFixed(1)}%`,
+                                `En Düşük: ${p.l.toFixed(1)}%`,
+                                `Kapanış: ${p.c.toFixed(1)}%`
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+window.setHistoryMode = function(mode) {
+    currentHistoryMode = mode;
+    
+    document.getElementById('mode-band-btn').classList.toggle('active', mode === 'band');
+    document.getElementById('mode-candle-btn').classList.toggle('active', mode === 'candle');
+
+    if (currentHistoryData) {
+        renderBaseCharts(currentHistoryData.cpuRam);
+        
+        const activeDisks = [];
+        document.querySelectorAll('.disk-toggle:checked').forEach(input => {
+            activeDisks.push({
+                name: input.value,
+                id: `diskChart_${input.value.replace(/[^a-zA-Z0-9]/g, '')}`
+            });
+        });
+
+        activeDisks.forEach(d => {
+            toggleDiskChart(true, d.name, d.id);
+        });
+    }
+};
+
 function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasId = null) {
     const container = document.getElementById(containerId);
     if (!container || !dataList || dataList.length === 0) return;
@@ -602,15 +862,36 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
 
     let maxItem = dataList[0];
     let minItem = dataList[0];
+    let maxItemValue = -1;
+    let minItemValue = 999999;
     let sum = 0;
 
     // 1. Min, Max, Ortalama Bulma
+    // Eğer veride Min/Max alanları varsa (Band Chart için gelmişse) mutlak değerleri oradan alıyoruz
+    const minKey = valueKey.replace('Avg', 'Min');
+    const maxKey = valueKey.replace('Avg', 'Max');
+
     dataList.forEach(item => {
         let val = item[valueKey];
-        if (val > maxItem[valueKey]) maxItem = item;
-        if (val < minItem[valueKey]) minItem = item;
         sum += val;
+
+        // Mutlak maksimum/minimum bulma (Band verisi varsa ona bak, yoksa Avg'ye bak)
+        let itemMax = (item[maxKey] !== undefined) ? item[maxKey] : val;
+        let itemMin = (item[minKey] !== undefined) ? item[minKey] : val;
+
+        if (itemMax > maxItemValue) {
+            maxItemValue = itemMax;
+            maxItem = item;
+        }
+        if (itemMin < minItemValue) {
+            minItemValue = itemMin;
+            minItem = item;
+        }
     });
+
+    // Rapor için değerleri sabitleyelim (maxItemValue ve minItemValue'yu UI'da göstereceğiz)
+    const displayMax = maxItemValue;
+    const displayMin = minItemValue;
 
     let avg = sum / dataList.length;
 
@@ -639,7 +920,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
             <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem.createdAt}')" title="Grafikte göster">
                 <div class="p-2 border rounded border-success h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-success fw-bold"><i class="bi bi-arrow-down-circle-fill"></i> Minimum</div>
-                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${minItem[valueKey].toFixed(1)}${unit}</span><br>
+                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMin.toFixed(1)}${unit}</span><br>
                     <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(minItem.createdAt)}</span>
                 </div>
             </div>
@@ -655,7 +936,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
             <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem.createdAt}')" title="Grafikte göster">
                 <div class="p-2 border rounded border-danger h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-danger fw-bold"><i class="bi bi-arrow-up-circle-fill"></i> Maksimum</div>
-                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${maxItem[valueKey].toFixed(1)}${unit}</span><br>
+                    <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMax.toFixed(1)}${unit}</span><br>
                     <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(maxItem.createdAt)}</span>
                 </div>
             </div>
@@ -695,7 +976,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
     let predictionHtml = '';
 
     // CPU bir depolama alanı olmadığı için dolum analizi yapmayı atlıyoruz
-    if (valueKey === 'cpuUsage') {
+    if (valueKey === 'cpuAvg') {
         predictionHtml = `
             <div class="mt-3 p-3 border rounded shadow-sm d-flex align-items-center border-secondary" style="background: rgba(108, 117, 125, 0.1);">
                 <i class="bi bi-cpu text-secondary fs-3 me-3"></i>
@@ -951,38 +1232,35 @@ function renderPaginationControls(containerId, currentPage, totalPages, changeFn
 window.highlightChartPoint = function (canvasId, timeStr) {
     if (!canvasId) return;
 
-    // Hangi grafik nesnesi olduğunu buluyoruz
     let chartInstance = null;
     if (canvasId === 'cpuChart') chartInstance = historyCharts.cpu;
     else if (canvasId === 'ramChart') chartInstance = historyCharts.ram;
     else {
-        // Dinamik disk grafikleri için
         const diskName = Object.keys(historyCharts.disks).find(key => `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}` === canvasId);
         if (diskName) chartInstance = historyCharts.disks[diskName];
     }
 
     if (chartInstance) {
-        // Tıklanan zamanın, grafikteki EKSEN FORMATINA uydurulması (eşleşme için şart)
-        const targetTime = formatChartDate(timeStr);
-        const dataIndex = chartInstance.data.labels.findIndex(label => label === targetTime);
+        const targetTime = currentHistoryMode === 'candle' ? new Date(timeStr).getTime() : formatChartDate(timeStr);
+        const dataIndex = chartInstance.data.labels 
+            ? chartInstance.data.labels.findIndex(label => label === targetTime)
+            : chartInstance.data.datasets[0].data.findIndex(d => d.x === targetTime);
 
         if (dataIndex !== -1) {
-            const meta = chartInstance.getDatasetMeta(0);
+            // Candlestick modunda 0. dataset, Band modunda 2. dataset (Avg) hedef alınır
+            const targetDsIndex = currentHistoryMode === 'candle' ? 0 : 2;
+            const meta = chartInstance.getDatasetMeta(targetDsIndex);
             const point = meta.data[dataIndex];
 
-            // 1. Tooltip'i açık hale getir
             chartInstance.tooltip.setActiveElements([
-                { datasetIndex: 0, index: dataIndex }
+                { datasetIndex: targetDsIndex, index: dataIndex }
             ], { x: point.x, y: point.y });
 
-            // 2. Noktanın hover (büyüme) state'ini tetikle
             chartInstance.setActiveElements([
-                { datasetIndex: 0, index: dataIndex }
+                { datasetIndex: targetDsIndex, index: dataIndex }
             ]);
 
             chartInstance.update();
-
-            // 3. Kullanıcının ekranını (scroll) yavaşça grafiğe kaydır
             document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
@@ -999,30 +1277,123 @@ window.toggleAverageLine = function (canvasId, avgValue) {
 
     if (!chartInstance) return;
 
-    // 'AverageLine' isimli bir dataset var mı kontrol et
     const avgDatasetIndex = chartInstance.data.datasets.findIndex(ds => ds.label === 'Ortalama Değer');
 
     if (avgDatasetIndex > -1) {
-        // Eğer varsa sil
         chartInstance.data.datasets.splice(avgDatasetIndex, 1);
     } else {
-        // Yoksa yeni bir dataset olarak yatay çizgi ekle
-        const avgLineData = Array(chartInstance.data.labels.length).fill(avgValue);
+        const labelsCount = chartInstance.data.labels ? chartInstance.data.labels.length : chartInstance.data.datasets[0].data.length;
+        let avgLineData;
+        
+        if (currentHistoryMode === 'candle') {
+            // Candlestick modunda X ekseni zaman (time) olduğu için her noktaya karşılık gelen zamanı almalıyız
+            avgLineData = chartInstance.data.datasets[0].data.map(p => ({ x: p.x, y: avgValue }));
+        } else {
+            avgLineData = Array(labelsCount).fill(avgValue);
+        }
+
         chartInstance.data.datasets.push({
             label: 'Ortalama Değer',
             data: avgLineData,
             borderColor: '#0dcaf0',
             borderWidth: 2,
-            borderDash: [10, 5], // Kesikli çizgi
-            pointRadius: 0, // Nokta gösterme
+            borderDash: [10, 5],
+            pointRadius: 0,
             fill: false,
-            order: 0 // Üstte görünsün
+            order: 0
         });
     }
     chartInstance.update();
     document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 // --- BAŞLATMA ---
+let bucketDetailChart = null;
+
+window.openBucketDetail = async function(startTime, endTime, labelText, diskName = null) {
+    // ID düzeltildi: historyPageComputerSelect
+    const computerId = document.getElementById('historyPageComputerSelect')?.value;
+    if (!computerId) {
+        console.error("Bilgisayar ID bulunamadı.");
+        return;
+    }
+
+    // Modal nesnesini al veya oluştur
+    const modalEl = document.getElementById('bucketDetailModal');
+    let modal = bootstrap.Modal.getInstance(modalEl);
+    if (!modal) modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    const rangeText = `${formatChartDate(startTime)} - ${formatChartDate(endTime)}`;
+    document.getElementById('bucketDetailTimeRange').innerText = `${labelText} için Detaylı Görünüm: ${rangeText}`;
+    
+    const summaryContainer = document.getElementById('bucketDetailSummary');
+    summaryContainer.innerHTML = '<div class="text-center w-100 py-3"><div class="spinner-border text-info" role="status"></div><p class="mt-2 small text-muted">Detaylı veriler getiriliyor...</p></div>';
+
+    if (bucketDetailChart) bucketDetailChart.destroy();
+
+    try {
+        const response = await api.get(`/api/Computer/${computerId}/metrics-history?start=${startTime}&end=${endTime}&maxPoints=1000`);
+        
+        let detailData = [];
+        let valueKey = '';
+
+        if (diskName) {
+            detailData = (response.disks || []).filter(d => d.diskName === diskName).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            valueKey = 'usedAvg';
+        } else {
+            detailData = (response.cpuRam || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            valueKey = labelText.includes('CPU') ? 'cpuAvg' : 'ramAvg';
+        }
+        
+        if (detailData.length === 0) {
+            summaryContainer.innerHTML = '<div class="alert alert-warning w-100">Bu aralıkta detaylı veri bulunamadı.</div>';
+            return;
+        }
+
+        const labels = detailData.map(m => formatChartDate(m.createdAt));
+        const values = detailData.map(m => m[valueKey]);
+        const mins = detailData.map(m => m[valueKey.replace('Avg', 'Min')]);
+        const maxs = detailData.map(m => m[valueKey.replace('Avg', 'Max')]);
+
+        // Detay Grafiği Oluştur (isDrillDown = true geçiyoruz ki tekrar tıklanmasın)
+        bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
+
+        let sum = 0;
+        let maxVal = -1;
+        
+        values.forEach(v => {
+            sum += v;
+            if (v > maxVal) maxVal = v;
+        });
+
+        const avg = sum / values.length;
+
+        summaryContainer.innerHTML = `
+            <div class="col-md-4">
+                <div class="p-3 border rounded border-info text-center" style="background: rgba(255,255,255,0.05);">
+                    <div class="text-info small fw-bold mb-1">ARALIK ORTALAMASI</div>
+                    <div class="fs-4 fw-bold text-main">${avg.toFixed(2)}%</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 border rounded border-danger text-center" style="background: rgba(255,255,255,0.05);">
+                    <div class="text-danger small fw-bold mb-1">ARALIK ZİRVESİ (PEAK)</div>
+                    <div class="fs-4 fw-bold text-main">${maxVal.toFixed(2)}%</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 border rounded border-success text-center" style="background: rgba(255,255,255,0.05);">
+                    <div class="text-success small fw-bold mb-1">VERİ NOKTASI SAYISI</div>
+                    <div class="fs-4 fw-bold text-main">${detailData.length} Adet</div>
+                </div>
+            </div>
+        `;
+
+    } catch (e) {
+        summaryContainer.innerHTML = `<div class="alert alert-danger w-100">Hata: ${e.message}</div>`;
+    }
+};
+
 $(document).ready(function () {
     $('#modalTagSelect').select2({
         dropdownParent: $('#tagsModal'),

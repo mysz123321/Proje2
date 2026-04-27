@@ -1,4 +1,4 @@
-﻿using Staj2.Services.Models;
+using Staj2.Services.Models;
 
 namespace Staj2.Services.Interfaces;
 
@@ -26,7 +26,7 @@ public interface IComputerService
 
     // 6. Metrik Geçmişi
     // Eskiden: Task<(bool isBadRequest, string? errorMessage, object? data)>
-    Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end);
+    Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int maxPoints = 200);
 
     // 7. Tüm Cihazları Getir
     // Eskiden: Task<object>

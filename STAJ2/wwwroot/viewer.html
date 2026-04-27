@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="utf-8" />
@@ -10,6 +10,11 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/css/app.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.0/dist/chartjs-chart-financial.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
@@ -547,6 +552,35 @@
                     <p class="small text-muted mb-3">Sistemde limitin aşıldığı net tarih, saat ve performans oranları aşağıda işaretlenmiştir.</p>
                     <div style="position: relative; height: 350px; width: 100%;">
                         <canvas id="breachCanvas"></canvas>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BUCKET DETAY MODALI (Drill-Down) -->
+    <div class="modal fade" id="bucketDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 95% !important; width: 95% !important;">
+            <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1px solid var(--border-color);">
+                <div class="modal-header border-bottom border-secondary">
+                    <h5 class="modal-title text-info"><i class="bi bi-zoom-in"></i> Aralık Detay Analizi</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 small mb-3" style="background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.2); color: var(--text-main);">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <span id="bucketDetailTimeRange">Seçili zaman aralığı detayları</span>
+                    </div>
+                    
+                    <div style="position: relative; height: 400px; width: 100%;" class="mb-4">
+                        <canvas id="bucketDetailChart"></canvas>
+                    </div>
+
+                    <div id="bucketDetailSummary" class="row g-3">
+                        <!-- Detay metrik özetleri buraya gelecek -->
                     </div>
                 </div>
                 <div class="modal-footer border-top border-secondary">

@@ -86,7 +86,6 @@ public class AgentTelemetryController : ControllerBase
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
         var isAdmin = User.IsInRole("Yönetici");
 
-        // HATALI SATIR BURASIYDI. Doğrusu bu şekildedir:
         var result = await _telemetryService.GetTopWarningsAsync(userId, isAdmin, startDate, endDate);
 
         if (!result.IsSuccess)

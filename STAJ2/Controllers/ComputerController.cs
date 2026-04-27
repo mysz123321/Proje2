@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Staj2.Infrastructure.Data;
@@ -118,9 +118,9 @@ public class ComputerController : ControllerBase
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
     [HttpGet("{id:int}/metrics-history")]
     [HasPermission(AppPermissions.None)]
-    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string? start, [FromQuery] string? end)
+    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string? start, [FromQuery] string? end, [FromQuery] int maxPoints = 200)
     {
-        var result = await _computerService.GetMetricsHistoryAsync(id, start, end);
+        var result = await _computerService.GetMetricsHistoryAsync(id, start, end, maxPoints);
 
         if (!result.IsSuccess)
             return BadRequest(new { message = result.Message, title = "Uyarı" });

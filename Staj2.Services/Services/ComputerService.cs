@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
@@ -168,7 +168,7 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (Okuma İşlemi)
-    public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end)
+    public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int maxPoints = 200)
     {
         if (id <= 0)
             return ServiceResult<object>.Failure("Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.");
@@ -212,7 +212,7 @@ public class ComputerService : BaseService, IComputerService
         }
 
         // --- YENİ: Nokta Sayısı (Downsampling) Hesaplaması ---
-        int maxAllowedPoints = 200;
+        int maxAllowedPoints = maxPoints;
 
         // DÜZELTME: X ekseninde oluşacak gerçek nokta (zaman) sayısını baz alıyoruz. 
         // Disk sayısının (birden fazla disk olmasının) toplam satırı şişirip kova mantığını haksız yere tetiklemesini engelliyoruz.
@@ -220,13 +220,33 @@ public class ComputerService : BaseService, IComputerService
             ? rawCpuRam.Count
             : rawDisks.Select(d => d.CreatedAt).Distinct().Count();
 
-        if (currentDataCount <= maxAllowedPoints)
+        if (maxPoints == 0 || currentDataCount <= maxAllowedPoints)
         {
-            // 2. ADIM (Veri Azsa): 250'den az veri varsa HİÇ GRUPLAMA YAPMA (Saniye saniyesine göster)
+            // Veri Azsa veya Limitsiz istenmişse: HİÇ GRUPLAMA YAPMA (Saniye saniyesine göster)
             var data = new
             {
-                CpuRam = rawCpuRam.OrderByDescending(m => m.CreatedAt),
-                Disks = rawDisks.OrderByDescending(m => m.CreatedAt)
+                CpuRam = rawCpuRam.Select(m => new {
+                    m.CreatedAt,
+                    CpuAvg = (double)m.CpuUsage,
+                    CpuMin = (double)m.CpuUsage,
+                    CpuMax = (double)m.CpuUsage,
+                    CpuOpen = (double)m.CpuUsage,
+                    CpuClose = (double)m.CpuUsage,
+                    RamAvg = (double)m.RamUsage,
+                    RamMin = (double)m.RamUsage,
+                    RamMax = (double)m.RamUsage,
+                    RamOpen = (double)m.RamUsage,
+                    RamClose = (double)m.RamUsage
+                }).OrderByDescending(m => m.CreatedAt),
+                Disks = rawDisks.Select(m => new {
+                    m.CreatedAt,
+                    UsedAvg = (double)m.UsedPercent,
+                    UsedMin = (double)m.UsedPercent,
+                    UsedMax = (double)m.UsedPercent,
+                    UsedOpen = (double)m.UsedPercent,
+                    UsedClose = (double)m.UsedPercent,
+                    m.diskName
+                }).OrderByDescending(m => m.CreatedAt)
             };
             return ServiceResult<object>.Success(data);
         }
@@ -241,20 +261,38 @@ public class ComputerService : BaseService, IComputerService
 
             var groupedCpuRam = rawCpuRam
                 .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
-                .Select(g => new {
-                    CreatedAt = new DateTime(g.Key * bucketTicks),
-                    CpuUsage = Math.Round(g.Average(m => m.CpuUsage), 2),
-                    RamUsage = Math.Round(g.Average(m => m.RamUsage), 2)
+                .Select(g => {
+                    var sorted = g.OrderBy(x => x.CreatedAt).ToList();
+                    return new {
+                        CreatedAt = new DateTime(g.Key * bucketTicks),
+                        CpuAvg = Math.Round(g.Average(m => m.CpuUsage), 2),
+                        CpuMin = Math.Round(g.Min(m => m.CpuUsage), 2),
+                        CpuMax = Math.Round(g.Max(m => m.CpuUsage), 2),
+                        CpuOpen = Math.Round(sorted.First().CpuUsage, 2),
+                        CpuClose = Math.Round(sorted.Last().CpuUsage, 2),
+                        RamAvg = Math.Round(g.Average(m => m.RamUsage), 2),
+                        RamMin = Math.Round(g.Min(m => m.RamUsage), 2),
+                        RamMax = Math.Round(g.Max(m => m.RamUsage), 2),
+                        RamOpen = Math.Round(sorted.First().RamUsage, 2),
+                        RamClose = Math.Round(sorted.Last().RamUsage, 2)
+                    };
                 })
                 .OrderByDescending(m => m.CreatedAt)
                 .ToList();
 
             var groupedDisks = rawDisks
                 .GroupBy(m => new { m.diskName, Bucket = m.CreatedAt.Ticks / bucketTicks })
-                .Select(g => new {
-                    CreatedAt = new DateTime(g.Key.Bucket * bucketTicks),
-                    UsedPercent = Math.Round(g.Average(m => m.UsedPercent), 2),
-                    diskName = g.Key.diskName
+                .Select(g => {
+                    var sorted = g.OrderBy(x => x.CreatedAt).ToList();
+                    return new {
+                        CreatedAt = new DateTime(g.Key.Bucket * bucketTicks),
+                        UsedAvg = Math.Round(g.Average(m => m.UsedPercent), 2),
+                        UsedMin = Math.Round(g.Min(m => m.UsedPercent), 2),
+                        UsedMax = Math.Round(g.Max(m => m.UsedPercent), 2),
+                        UsedOpen = Math.Round(sorted.First().UsedPercent, 2),
+                        UsedClose = Math.Round(sorted.Last().UsedPercent, 2),
+                        diskName = g.Key.diskName
+                    };
                 })
                 .OrderByDescending(m => m.CreatedAt)
                 .ToList();

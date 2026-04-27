@@ -1,4 +1,4 @@
-﻿// STAJ2/wwwroot/assets/js/ui.js
+// STAJ2/wwwroot/assets/js/ui.js
 
 (function () {
     // --- SAYFALAMA VE HAFIZA (STATE) YÖNETİMİ ---
@@ -319,26 +319,32 @@
                         </div>
 
                         <div id="historyResults" style="display:none; width: 100%;">
+                            <div class="d-flex justify-content-end mb-3">
+                                <div class="btn-group btn-group-sm p-1 rounded" style="background: var(--bg-card); border: 1px solid var(--border-color);">
+                                    <button class="btn btn-outline-info active" id="mode-band-btn" onclick="window.setHistoryMode('band')"><i class="bi bi-bandaid"></i> Bant Grafiği</button>
+                                    <button class="btn btn-outline-info" id="mode-candle-btn" onclick="window.setHistoryMode('candle')"><i class="bi bi-graph-up-arrow"></i> Mum Grafiği</button>
+                                </div>
+                            </div>
                             <div id="chartsContainer" class="d-flex flex-column gap-4 w-100 pb-4">
                                 <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
-    <div class="card-header border-bottom border-secondary text-info fw-bold"><i class="bi bi-cpu"></i> CPU Kullanımı</div>
-    <div class="card-body p-2" style="overflow: hidden;">
-        <div style="position: relative; height: 250px; width: 100%;">
-            <canvas id="cpuChart"></canvas>
-        </div>
-        <div id="cpuMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
-    </div>
-</div>  
+                                    <div class="card-header border-bottom border-secondary text-info fw-bold"><i class="bi bi-cpu"></i> CPU Kullanımı</div>
+                                    <div class="card-body p-2" style="overflow: hidden;">
+                                        <div style="position: relative; height: 250px; width: 100%;">
+                                            <canvas id="cpuChart"></canvas>
+                                        </div>
+                                        <div id="cpuMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
+                                    </div>
+                                </div>  
 
                                 <div class="card border border-secondary shadow-sm" style="background-color: var(--bg-card);">
-    <div class="card-header border-bottom border-secondary text-danger fw-bold"><i class="bi bi-memory"></i> RAM Kullanımı</div>
-    <div class="card-body p-2" style="overflow: hidden;">
-        <div style="position: relative; height: 250px; width: 100%;">
-            <canvas id="ramChart"></canvas>
-        </div>
-        <div id="ramMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
-    </div>
-</div>
+                                    <div class="card-header border-bottom border-secondary text-danger fw-bold"><i class="bi bi-memory"></i> RAM Kullanımı</div>
+                                    <div class="card-body p-2" style="overflow: hidden;">
+                                        <div style="position: relative; height: 250px; width: 100%;">
+                                            <canvas id="ramChart"></canvas>
+                                        </div>
+                                        <div id="ramMiniReport" class="mt-3 p-2 rounded" style="background: var(--bg-card-muted); border: 1px solid var(--border-color); display: none;"></div>
+                                    </div>
+                                </div>
 
                                 <div id="dynamicDiskCharts" class="d-flex flex-column gap-4"></div>
                             </div>
@@ -671,8 +677,9 @@
                                 <div class="mb-4">
                                     <label class="form-label fw-bold small text-muted">GRAFİK TİPİ</label>
                                     <select id="corr-type-select" class="form-select" onchange="ui.handleCorrModeChange(this.value)" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
-                                        <option value="line" ${(localStorage.getItem('corrMode') || 'line') === 'line' ? 'selected' : ''}>Zaman Serisi (Line)</option>
-                                        <option value="scatter" ${(localStorage.getItem('corrMode') || 'line') === 'scatter' ? 'selected' : ''}>Dağılım (Scatter Plot)</option>
+                                        <option value="" disabled selected>-- Seçiniz --</option>
+                                        <option value="line">Zaman Serisi (Line)</option>
+                                        <option value="scatter">Dağılım (Scatter Plot)</option>
                                     </select>
                                 </div>
                                 <div class="mb-3">
@@ -2162,8 +2169,8 @@
 
                 // CPU ve RAM Haritaları
                 if (cpuRam.length > 0) {
-                    html += ui.buildHeatmapGrid("CPU Yoğunluğu", "bi bi-cpu", "info", cpuRam, "cpuUsage", dateStr);
-                    html += ui.buildHeatmapGrid("RAM Yoğunluğu", "bi bi-memory", "danger", cpuRam, "ramUsage", dateStr);
+                    html += ui.buildHeatmapGrid("CPU Yoğunluğu", "bi bi-cpu", "info", cpuRam, "cpuAvg", dateStr);
+                    html += ui.buildHeatmapGrid("RAM Yoğunluğu", "bi bi-memory", "danger", cpuRam, "ramAvg", dateStr);
                 }
 
                 // Diskleri isimlerine göre gruplayıp ayrı ayrı haritalarını çıkar
@@ -2175,7 +2182,7 @@
                     });
 
                     for (let dName in diskGroups) {
-                        html += ui.buildHeatmapGrid(`Disk [${dName}] Yoğunluğu`, "bi bi-hdd-network", "success", diskGroups[dName], "usedPercent", dateStr);
+                        html += ui.buildHeatmapGrid(`Disk [${dName}] Yoğunluğu`, "bi bi-hdd-network", "success", diskGroups[dName], "usedAvg", dateStr);
                     }
                 }
 
@@ -2326,8 +2333,9 @@
         },
 
         initCorrelationPage: () => {
-            const mode = localStorage.getItem('corrMode') || 'line';
-            ui.handleCorrModeChange(mode === 'line');
+            // Kullanıcı boş gelmesini istediği için hafızadan yüklemiyoruz
+            const info = document.getElementById('selection-limit-info');
+            if (info) info.innerText = "(Önce Tip Seçin)";
             ui.loadCorrelationComputers();
 
             // Checkbox tıklama kontrolü (Scatter için maksimum 2)
@@ -2356,10 +2364,11 @@
             const compId = document.getElementById('corr-computer-select').value;
             const start = document.getElementById('corr-start').value;
             const end = document.getElementById('corr-end').value;
-            const mode = localStorage.getItem('corrMode') || 'line';
+            const mode = document.getElementById('corr-type-select').value;
             const checkedMetrics = Array.from(document.querySelectorAll('.corr-check:checked'));
 
             // Doğrulamalar
+            if (!mode) { Swal.fire({ icon: 'warning', text: 'Lütfen bir analiz tipi (Line veya Scatter) seçin.' }); return; }
             if (!compId) { Swal.fire({ icon: 'warning', text: 'Lütfen bir cihaz seçin.' }); return; }
             if (checkedMetrics.length === 0) { Swal.fire({ icon: 'warning', text: 'Lütfen en az bir değer seçin.' }); return; }
             if (mode === 'scatter' && checkedMetrics.length !== 2) {
@@ -2394,8 +2403,9 @@
                         if (!m.createdAt) return;
                         const ts = new Date(m.createdAt).setSeconds(0, 0);
                         if (!timeMap[ts]) timeMap[ts] = {};
-                        timeMap[ts]["CPU"] = m.cpuUsage;
-                        timeMap[ts]["RAM"] = m.ramUsage;
+                        // Field isimleri güncellendi: cpuUsage -> cpuAvg, ramUsage -> ramAvg
+                        timeMap[ts]["CPU"] = m.cpuAvg;
+                        timeMap[ts]["RAM"] = m.ramAvg;
                     });
                 }
 
@@ -2404,7 +2414,8 @@
                         if (!d.createdAt) return;
                         const ts = new Date(d.createdAt).setSeconds(0, 0);
                         if (!timeMap[ts]) timeMap[ts] = {};
-                        timeMap[ts][`Disk_${d.diskName}`] = d.usedPercent;
+                        // Field ismi güncellendi: usedPercent -> usedAvg
+                        timeMap[ts][`Disk_${d.diskName}`] = d.usedAvg;
                     });
                 }
 
