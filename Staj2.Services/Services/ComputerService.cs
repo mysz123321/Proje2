@@ -168,8 +168,10 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (Okuma İşlemi)
-    public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int maxPoints = 200)
+    public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int? maxPoints = null)
     {
+        // Parametre olarak gelmemişse appsettings'den, o da yoksa 200 (hardcoded default) al
+        int maxAllowedPoints = maxPoints ?? _config.GetValue<int>("ChartSettings:DefaultMaxPoints", 200);
         if (id <= 0)
             return ServiceResult<object>.Failure("Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.");
 
@@ -211,8 +213,7 @@ public class ComputerService : BaseService, IComputerService
             if (diskMax > lastDataTime) lastDataTime = diskMax;
         }
 
-        // --- YENİ: Nokta Sayısı (Downsampling) Hesaplaması ---
-        int maxAllowedPoints = maxPoints;
+        // maxAllowedPoints zaten yukarıda hesaplandı
 
         // DÜZELTME: X ekseninde oluşacak gerçek nokta (zaman) sayısını baz alıyoruz. 
         // Disk sayısının (birden fazla disk olmasının) toplam satırı şişirip kova mantığını haksız yere tetiklemesini engelliyoruz.
@@ -577,7 +578,7 @@ public class ComputerService : BaseService, IComputerService
     public async Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName)
     {
         // Regresyon için ideal hedef nokta sayısı. Çok yüksek olursa tarayıcı yorulur, düşük olursa sapma artar.
-        int maxPointsForRegression = 1000;
+        int maxPointsForRegression = _config.GetValue<int>("ChartSettings:RegressionMaxPoints", 1000);
 
         if (metricType == "CPU" || metricType == "RAM")
         {
@@ -724,9 +725,10 @@ public class ComputerService : BaseService, IComputerService
             .Select(w => new ThresholdBreachDetailDto { Timestamp = w.CreatedAt, Value = w.MetricValue, ThresholdPercent = w.ThresholdValue })
             .ToListAsync();
 
-        // MAKSİMUM 100 NOKTA KURALINI UYGULA
-        var cpuBreaches = DecimateBreaches(cpuBreachesRaw, 70);
-        var ramBreaches = DecimateBreaches(ramBreachesRaw, 70);
+        // MAKSİMUM NOKTA KURALINI UYGULA
+        int targetPoints = _config.GetValue<int>("ChartSettings:ThresholdAnalysisTargetPoints", 70);
+        var cpuBreaches = DecimateBreaches(cpuBreachesRaw, targetPoints);
+        var ramBreaches = DecimateBreaches(ramBreachesRaw, targetPoints);
 
         var report = new ThresholdAnalysisReportDto
         {
@@ -775,8 +777,8 @@ public class ComputerService : BaseService, IComputerService
                 int totalDiskCount = diskTotalCounts.ContainsKey(disk.Id) ? diskTotalCounts[disk.Id] : 0;
                 var rawBreachesForThisDisk = diskBreachesLookup[disk.Id].ToList();
 
-                // DİSK İÇİN 100 NOKTA KURALI
-                var decimatedDiskBreaches = DecimateBreaches(rawBreachesForThisDisk, 70);
+                // DİSK İÇİN NOKTA KURALI
+                var decimatedDiskBreaches = DecimateBreaches(rawBreachesForThisDisk, targetPoints);
 
                 report.DiskResults.Add(new DiskThresholdResult
                 {

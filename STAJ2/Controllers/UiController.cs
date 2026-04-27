@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Staj2.Services.Interfaces;
+using Microsoft.Extensions.Configuration;
 
 namespace STAJ2.Controllers;
 
@@ -11,10 +12,12 @@ namespace STAJ2.Controllers;
 public class UiController : ControllerBase
 {
     private readonly IUiService _uiService;
+    private readonly IConfiguration _config;
 
-    public UiController(IUiService uiService)
+    public UiController(IUiService uiService, IConfiguration config)
     {
         _uiService = uiService;
+        _config = config;
     }
 
     // DRY (Don't Repeat Yourself) prensibi için userId getirme işlemini metoda aldık
@@ -52,6 +55,17 @@ public class UiController : ControllerBase
 
         // Eski result.Permissions yerine standart result.Data kullanıyoruz
         return Ok(result.Data);
+    }
+
+    [HttpGet("chart-settings")]
+    public IActionResult GetChartSettings()
+    {
+        var settings = new
+        {
+            defaultMaxPoints = _config.GetValue<int>("ChartSettings:DefaultMaxPoints", 200),
+            detailMaxPoints = _config.GetValue<int>("ChartSettings:DetailMaxPoints", 1000)
+        };
+        return Ok(settings);
     }
 
     // İleride açmak istersen bu şekilde standart formata uygun açabilirsin:

@@ -3,6 +3,7 @@
 // --- GRAFİKLER İÇİN EKLENEN GLOBAL DEĞİŞKENLER ---
 let currentHistoryMode = 'band';
 let historyCharts = { cpu: null, ram: null, disks: {} };
+let chartSettings = { defaultMaxPoints: 200, detailMaxPoints: 1000 }; // Fallback defaults
 let currentHistoryData = { cpuRam: [], disks: [] };
 
 // --- İki sekme için ayrı etiket dizileri ---
@@ -1332,7 +1333,7 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
     if (bucketDetailChart) bucketDetailChart.destroy();
 
     try {
-        const response = await api.get(`/api/Computer/${computerId}/metrics-history?start=${startTime}&end=${endTime}&maxPoints=1000`);
+        const response = await api.get(`/api/Computer/${computerId}/metrics-history?start=${startTime}&end=${endTime}&maxPoints=${chartSettings.detailMaxPoints}`);
         
         let detailData = [];
         let valueKey = '';
@@ -1424,6 +1425,11 @@ $(document).ready(function () {
     });
 
     window.loadFilterTags();
+
+    // Chart ayarlarını çek
+    api.get('/api/Ui/chart-settings').then(settings => {
+        if (settings) chartSettings = settings;
+    }).catch(e => console.error("Chart ayarları yüklenemedi:", e));
 
     // Uygulama ilk açıldığında çalıştır
     loadAgents();

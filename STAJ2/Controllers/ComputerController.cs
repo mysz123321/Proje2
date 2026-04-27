@@ -118,7 +118,7 @@ public class ComputerController : ControllerBase
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir
     [HttpGet("{id:int}/metrics-history")]
     [HasPermission(AppPermissions.None)]
-    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string? start, [FromQuery] string? end, [FromQuery] int maxPoints = 200)
+    public async Task<IActionResult> GetMetricsHistory(int id, [FromQuery] string? start, [FromQuery] string? end, [FromQuery] int? maxPoints = null)
     {
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end, maxPoints);
 
