@@ -168,6 +168,7 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 6. Belirli bir tarih aralığındaki metrik geçmişini getir (Okuma İşlemi)
+    // GAP INJECTION: Cihazın kapalı olduğu zaman dilimlerini null değerlerle temsil eder
     public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int? maxPoints = null)
     {
         // Parametre olarak gelmemişse appsettings'den, o da yoksa 200 (hardcoded default) al
@@ -198,7 +199,7 @@ public class ComputerService : BaseService, IComputerService
         // Veri yoksa boş dön
         if (!rawCpuRam.Any() && !rawDisks.Any())
         {
-            return ServiceResult<object>.Success(new { CpuRam = rawCpuRam, Disks = rawDisks });
+            return ServiceResult<object>.Success(new { CpuRam = new List<CpuRamBucketDto>(), Disks = new List<DiskBucketDto>() });
         }
 
         // Gerçek veri zaman aralığını bul (Baştaki ve Sondaki Veri)
@@ -213,7 +214,8 @@ public class ComputerService : BaseService, IComputerService
             if (diskMax > lastDataTime) lastDataTime = diskMax;
         }
 
-        // maxAllowedPoints zaten yukarıda hesaplandı
+        // GAP INJECTION: Ardışık iki veri noktası arasındaki boşluk bu eşiği aşarsa null nokta enjekte edilir
+        var gapThreshold = TimeSpan.FromMinutes(5);
 
         // DÜZELTME: X ekseninde oluşacak gerçek nokta (zaman) sayısını baz alıyoruz. 
         // Disk sayısının (birden fazla disk olmasının) toplam satırı şişirip kova mantığını haksız yere tetiklemesini engelliyoruz.
@@ -223,82 +225,191 @@ public class ComputerService : BaseService, IComputerService
 
         if (maxPoints == 0 || currentDataCount <= maxAllowedPoints)
         {
-            // Veri Azsa veya Limitsiz istenmişse: HİÇ GRUPLAMA YAPMA (Saniye saniyesine göster)
-            var data = new
+            // SENARYO A: Veri Azsa veya Limitsiz istenmişse - Gap Injection ile saniye saniyesine göster
+
+            // CPU/RAM verisini sırala ve gap'leri enjekte et
+            var sortedCpuRam = rawCpuRam.OrderBy(m => m.CreatedAt).ToList();
+            var cpuRamWithGaps = new List<CpuRamBucketDto>();
+
+            for (int i = 0; i < sortedCpuRam.Count; i++)
             {
-                CpuRam = rawCpuRam.Select(m => new {
-                    m.CreatedAt,
-                    CpuAvg = (double)m.CpuUsage,
-                    CpuMin = (double)m.CpuUsage,
-                    CpuMax = (double)m.CpuUsage,
-                    CpuOpen = (double)m.CpuUsage,
-                    CpuClose = (double)m.CpuUsage,
-                    RamAvg = (double)m.RamUsage,
-                    RamMin = (double)m.RamUsage,
-                    RamMax = (double)m.RamUsage,
-                    RamOpen = (double)m.RamUsage,
-                    RamClose = (double)m.RamUsage
-                }).OrderByDescending(m => m.CreatedAt),
-                Disks = rawDisks.Select(m => new {
-                    m.CreatedAt,
-                    UsedAvg = (double)m.UsedPercent,
-                    UsedMin = (double)m.UsedPercent,
-                    UsedMax = (double)m.UsedPercent,
-                    UsedOpen = (double)m.UsedPercent,
-                    UsedClose = (double)m.UsedPercent,
-                    m.diskName
-                }).OrderByDescending(m => m.CreatedAt)
-            };
+                var current = sortedCpuRam[i];
+                cpuRamWithGaps.Add(new CpuRamBucketDto
+                {
+                    CreatedAt = current.CreatedAt,
+                    CpuAvg = (double)current.CpuUsage,
+                    CpuMin = (double)current.CpuUsage,
+                    CpuMax = (double)current.CpuUsage,
+                    CpuOpen = (double)current.CpuUsage,
+                    CpuClose = (double)current.CpuUsage,
+                    RamAvg = (double)current.RamUsage,
+                    RamMin = (double)current.RamUsage,
+                    RamMax = (double)current.RamUsage,
+                    RamOpen = (double)current.RamUsage,
+                    RamClose = (double)current.RamUsage
+                });
+
+                // Ardışık iki nokta arasında 5 dk'dan fazla boşluk varsa null nokta enjekte et
+                if (i < sortedCpuRam.Count - 1)
+                {
+                    var next = sortedCpuRam[i + 1];
+                    if ((next.CreatedAt - current.CreatedAt) > gapThreshold)
+                    {
+                        cpuRamWithGaps.Add(new CpuRamBucketDto
+                        {
+                            CreatedAt = current.CreatedAt.AddSeconds(1),
+                            CpuAvg = null, CpuMin = null, CpuMax = null,
+                            CpuOpen = null, CpuClose = null,
+                            RamAvg = null, RamMin = null, RamMax = null,
+                            RamOpen = null, RamClose = null
+                        });
+                    }
+                }
+            }
+
+            // Disk verisini disk bazında sırala ve gap'leri enjekte et
+            var diskNames = rawDisks.Select(d => d.diskName).Distinct().ToList();
+            var disksWithGaps = new List<DiskBucketDto>();
+
+            foreach (var dn in diskNames)
+            {
+                var sortedDisk = rawDisks.Where(d => d.diskName == dn).OrderBy(d => d.CreatedAt).ToList();
+                for (int i = 0; i < sortedDisk.Count; i++)
+                {
+                    var current = sortedDisk[i];
+                    disksWithGaps.Add(new DiskBucketDto
+                    {
+                        CreatedAt = current.CreatedAt,
+                        UsedAvg = (double)current.UsedPercent,
+                        UsedMin = (double)current.UsedPercent,
+                        UsedMax = (double)current.UsedPercent,
+                        UsedOpen = (double)current.UsedPercent,
+                        UsedClose = (double)current.UsedPercent,
+                        DiskName = dn
+                    });
+
+                    if (i < sortedDisk.Count - 1)
+                    {
+                        var next = sortedDisk[i + 1];
+                        if ((next.CreatedAt - current.CreatedAt) > gapThreshold)
+                        {
+                            disksWithGaps.Add(new DiskBucketDto
+                            {
+                                CreatedAt = current.CreatedAt.AddSeconds(1),
+                                UsedAvg = null, UsedMin = null, UsedMax = null,
+                                UsedOpen = null, UsedClose = null,
+                                DiskName = dn
+                            });
+                        }
+                    }
+                }
+            }
+
+            var data = new { CpuRam = cpuRamWithGaps, Disks = disksWithGaps };
             return ServiceResult<object>.Success(data);
         }
         else
         {
-            // 2. ADIM (Veri Çoksa): Toplam zaman aralığını tam 200 eşit parçaya (kovaya) böl
+            // SENARYO B: Veri Çoksa - Zaman Odaklı Grid ile Bucket Yaklaşımı
+            // Sadece mevcut veriyi GroupBy ile bölmek yerine, boş bir zaman gridi oluştur ve verileri kovalara yerleştir.
             long totalTicks = (lastDataTime - firstDataTime).Ticks;
             long bucketTicks = totalTicks / maxAllowedPoints;
 
             // Güvenlik önlemi: Aynı milisaniyede gelmiş veriler totalTicks'i 0 yaparsa diye
             if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
-            var groupedCpuRam = rawCpuRam
+            // CPU/RAM: Veriyi kovalara dağıt
+            var cpuRamLookup = rawCpuRam
                 .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
-                .Select(g => {
-                    var sorted = g.OrderBy(x => x.CreatedAt).ToList();
-                    return new {
-                        CreatedAt = new DateTime(g.Key * bucketTicks),
-                        CpuAvg = Math.Round(g.Average(m => m.CpuUsage), 2),
-                        CpuMin = Math.Round(g.Min(m => m.CpuUsage), 2),
-                        CpuMax = Math.Round(g.Max(m => m.CpuUsage), 2),
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Boş zaman gridi oluştur ve kovalara yerleştir
+            var gridCpuRam = new List<CpuRamBucketDto>();
+            long firstBucket = firstDataTime.Ticks / bucketTicks;
+            long lastBucket = lastDataTime.Ticks / bucketTicks;
+
+            for (long b = firstBucket; b <= lastBucket; b++)
+            {
+                var bucketTime = new DateTime(b * bucketTicks);
+                if (cpuRamLookup.TryGetValue(b, out var items))
+                {
+                    var sorted = items.OrderBy(x => x.CreatedAt).ToList();
+                    gridCpuRam.Add(new CpuRamBucketDto
+                    {
+                        CreatedAt = bucketTime,
+                        CpuAvg = Math.Round(items.Average(m => m.CpuUsage), 2),
+                        CpuMin = Math.Round(items.Min(m => m.CpuUsage), 2),
+                        CpuMax = Math.Round(items.Max(m => m.CpuUsage), 2),
                         CpuOpen = Math.Round(sorted.First().CpuUsage, 2),
                         CpuClose = Math.Round(sorted.Last().CpuUsage, 2),
-                        RamAvg = Math.Round(g.Average(m => m.RamUsage), 2),
-                        RamMin = Math.Round(g.Min(m => m.RamUsage), 2),
-                        RamMax = Math.Round(g.Max(m => m.RamUsage), 2),
+                        RamAvg = Math.Round(items.Average(m => m.RamUsage), 2),
+                        RamMin = Math.Round(items.Min(m => m.RamUsage), 2),
+                        RamMax = Math.Round(items.Max(m => m.RamUsage), 2),
                         RamOpen = Math.Round(sorted.First().RamUsage, 2),
                         RamClose = Math.Round(sorted.Last().RamUsage, 2)
-                    };
-                })
-                .OrderByDescending(m => m.CreatedAt)
-                .ToList();
+                    });
+                }
+                else
+                {
+                    // Boş kova: Veri yok, null değerlerle temsil et
+                    gridCpuRam.Add(new CpuRamBucketDto
+                    {
+                        CreatedAt = bucketTime,
+                        CpuAvg = null, CpuMin = null, CpuMax = null,
+                        CpuOpen = null, CpuClose = null,
+                        RamAvg = null, RamMin = null, RamMax = null,
+                        RamOpen = null, RamClose = null
+                    });
+                }
+            }
 
-            var groupedDisks = rawDisks
-                .GroupBy(m => new { m.diskName, Bucket = m.CreatedAt.Ticks / bucketTicks })
-                .Select(g => {
-                    var sorted = g.OrderBy(x => x.CreatedAt).ToList();
-                    return new {
-                        CreatedAt = new DateTime(g.Key.Bucket * bucketTicks),
-                        UsedAvg = Math.Round(g.Average(m => m.UsedPercent), 2),
-                        UsedMin = Math.Round(g.Min(m => m.UsedPercent), 2),
-                        UsedMax = Math.Round(g.Max(m => m.UsedPercent), 2),
-                        UsedOpen = Math.Round(sorted.First().UsedPercent, 2),
-                        UsedClose = Math.Round(sorted.Last().UsedPercent, 2),
-                        diskName = g.Key.diskName
-                    };
-                })
-                .OrderByDescending(m => m.CreatedAt)
-                .ToList();
+            // DİSK: Her disk için ayrı zaman gridi oluştur
+            var allDiskNames = rawDisks.Select(d => d.diskName).Distinct().ToList();
+            var gridDisks = new List<DiskBucketDto>();
 
-            var data = new { CpuRam = groupedCpuRam, Disks = groupedDisks };
+            foreach (var dn in allDiskNames)
+            {
+                var diskDataForName = rawDisks.Where(d => d.diskName == dn).ToList();
+                var diskLookup = diskDataForName
+                    .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                // Bu diskin gerçek veri aralığını bul
+                long diskFirstBucket = diskDataForName.Min(d => d.CreatedAt).Ticks / bucketTicks;
+                long diskLastBucket = diskDataForName.Max(d => d.CreatedAt).Ticks / bucketTicks;
+
+                for (long b = diskFirstBucket; b <= diskLastBucket; b++)
+                {
+                    var bucketTime = new DateTime(b * bucketTicks);
+                    if (diskLookup.TryGetValue(b, out var items))
+                    {
+                        var sorted = items.OrderBy(x => x.CreatedAt).ToList();
+                        gridDisks.Add(new DiskBucketDto
+                        {
+                            CreatedAt = bucketTime,
+                            UsedAvg = Math.Round(items.Average(m => m.UsedPercent), 2),
+                            UsedMin = Math.Round(items.Min(m => m.UsedPercent), 2),
+                            UsedMax = Math.Round(items.Max(m => m.UsedPercent), 2),
+                            UsedOpen = Math.Round(sorted.First().UsedPercent, 2),
+                            UsedClose = Math.Round(sorted.Last().UsedPercent, 2),
+                            DiskName = dn
+                        });
+                    }
+                    else
+                    {
+                        // Boş kova: Veri yok, null değerlerle temsil et
+                        gridDisks.Add(new DiskBucketDto
+                        {
+                            CreatedAt = bucketTime,
+                            UsedAvg = null, UsedMin = null, UsedMax = null,
+                            UsedOpen = null, UsedClose = null,
+                            DiskName = dn
+                        });
+                    }
+                }
+            }
+
+            var data = new { CpuRam = gridCpuRam, Disks = gridDisks };
             return ServiceResult<object>.Success(data);
         }
     }

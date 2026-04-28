@@ -472,14 +472,15 @@ function renderBaseCharts(cpuRamData) {
     historyCharts.ram = null;
 
     if (currentHistoryMode === 'candle') {
-        const cpuCandles = cpuRamData.map(m => ({
+        // Candlestick: null OHLC değerli (gap) noktaları filtrele
+        const cpuCandles = cpuRamData.filter(m => m.cpuOpen != null).map(m => ({
             x: new Date(m.createdAt).getTime(),
             o: m.cpuOpen,
             h: m.cpuMax,
             l: m.cpuMin,
             c: m.cpuClose
         }));
-        const ramCandles = cpuRamData.map(m => ({
+        const ramCandles = cpuRamData.filter(m => m.ramOpen != null).map(m => ({
             x: new Date(m.createdAt).getTime(),
             o: m.ramOpen,
             h: m.ramMax,
@@ -490,13 +491,14 @@ function renderBaseCharts(cpuRamData) {
         historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuCandles, null);
         historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramCandles, null);
     } else {
-        const cpuAvg = cpuRamData.map(m => m.cpuAvg);
-        const cpuMin = cpuRamData.map(m => m.cpuMin);
-        const cpuMax = cpuRamData.map(m => m.cpuMax);
+        // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
+        const cpuAvg = cpuRamData.map(m => m.cpuAvg != null ? m.cpuAvg : null);
+        const cpuMin = cpuRamData.map(m => m.cpuMin != null ? m.cpuMin : null);
+        const cpuMax = cpuRamData.map(m => m.cpuMax != null ? m.cpuMax : null);
         
-        const ramAvg = cpuRamData.map(m => m.ramAvg);
-        const ramMin = cpuRamData.map(m => m.ramMin);
-        const ramMax = cpuRamData.map(m => m.ramMax);
+        const ramAvg = cpuRamData.map(m => m.ramAvg != null ? m.ramAvg : null);
+        const ramMin = cpuRamData.map(m => m.ramMin != null ? m.ramMin : null);
+        const ramMax = cpuRamData.map(m => m.ramMax != null ? m.ramMax : null);
 
         historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null);
         historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null);
@@ -582,7 +584,8 @@ function toggleDiskChart(isVisible, diskName, chartId) {
         const labels = diskData.map(d => formatChartDate(d.createdAt));
 
         if (currentHistoryMode === 'candle') {
-            const diskCandles = diskData.map(d => ({
+            // Candlestick: null OHLC değerli (gap) noktaları filtrele
+            const diskCandles = diskData.filter(d => d.usedOpen != null).map(d => ({
                 x: new Date(d.createdAt).getTime(),
                 o: d.usedOpen,
                 h: d.usedMax,
@@ -591,9 +594,10 @@ function toggleDiskChart(isVisible, diskName, chartId) {
             }));
             historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles, diskName);
         } else {
-            const usedAvg = diskData.map(d => d.usedAvg);
-            const usedMin = diskData.map(d => d.usedMin);
-            const usedMax = diskData.map(d => d.usedMax);
+            // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
+            const usedAvg = diskData.map(d => d.usedAvg != null ? d.usedAvg : null);
+            const usedMin = diskData.map(d => d.usedMin != null ? d.usedMin : null);
+            const usedMax = diskData.map(d => d.usedMax != null ? d.usedMax : null);
             historyCharts.disks[diskName] = createBandChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, usedAvg, usedMin, usedMax, '#10b981', diskName);
         }
 
@@ -612,6 +616,101 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
     const textColor = isLight ? '#334155' : '#e2e8f0';
     const gridColor = isLight ? '#cbd5e1' : '#334155';
 
+    // --- CUSTOM PLUGIN: Gap (Çevrimdışı) bölgelerini kırmızı alan olarak tarar ---
+    const gapHighlightPlugin = {
+        id: 'gapHighlight_' + canvasId,
+        beforeDraw(chart) {
+            const avgDatasetIndex = 2; // Ortalama dataset'i
+            const meta = chart.getDatasetMeta(avgDatasetIndex);
+            if (!meta || !meta.data || meta.data.length === 0) return;
+
+            const avgDs = chart.data.datasets[avgDatasetIndex];
+            if (!avgDs) return;
+
+            const chartCtx = chart.ctx;
+            const yScale = chart.scales.y;
+            const data = avgDs.data;
+
+            // Gap bölgelerini tespit et (ardışık null değer aralıkları)
+            let gapRegions = [];
+            let gapStartIdx = null;
+
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] === null || data[i] === undefined) {
+                    if (gapStartIdx === null) gapStartIdx = i;
+                } else {
+                    if (gapStartIdx !== null) {
+                        gapRegions.push({ start: gapStartIdx, end: i - 1 });
+                        gapStartIdx = null;
+                    }
+                }
+            }
+            if (gapStartIdx !== null) {
+                gapRegions.push({ start: gapStartIdx, end: data.length - 1 });
+            }
+
+            if (gapRegions.length === 0) return;
+
+            chartCtx.save();
+
+            gapRegions.forEach(region => {
+                // Kırmızı alanın başlangıç ve bitiş piksellerini hesapla
+                // Gap'in öncesindeki son geçerli noktadan, sonrasındaki ilk geçerli noktaya kadar
+                const prevIdx = region.start > 0 ? region.start - 1 : 0;
+                const nextIdx = region.end < data.length - 1 ? region.end + 1 : data.length - 1;
+
+                const prevPoint = meta.data[prevIdx];
+                const nextPoint = meta.data[nextIdx];
+
+                if (!prevPoint || !nextPoint) return;
+
+                const x1 = prevPoint.x;
+                const x2 = nextPoint.x;
+                const yTop = yScale.top;
+                const yBottom = yScale.bottom;
+                const width = x2 - x1;
+
+                if (width <= 0) return;
+
+                // Kırmızı yarı-saydam dolgu
+                const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+                chartCtx.fillStyle = isLightTheme ? 'rgba(239, 68, 68, 0.10)' : 'rgba(239, 68, 68, 0.12)';
+                chartCtx.fillRect(x1, yTop, width, yBottom - yTop);
+
+                // Kesikli kırmızı kenarlık çizgileri
+                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+                chartCtx.lineWidth = 1.5;
+                chartCtx.setLineDash([6, 4]);
+
+                chartCtx.beginPath();
+                chartCtx.moveTo(x1, yTop);
+                chartCtx.lineTo(x1, yBottom);
+                chartCtx.stroke();
+
+                chartCtx.beginPath();
+                chartCtx.moveTo(x2, yTop);
+                chartCtx.lineTo(x2, yBottom);
+                chartCtx.stroke();
+
+                chartCtx.setLineDash([]);
+
+                // Gap bölgesinin ortasına "Çevrimdışı" etiketi
+                if (width > 50) {
+                    const centerX = x1 + width / 2;
+                    const centerY = yTop + (yBottom - yTop) / 2;
+                    
+                    chartCtx.font = 'bold 10px Inter, sans-serif';
+                    chartCtx.textAlign = 'center';
+                    chartCtx.textBaseline = 'middle';
+                    chartCtx.fillStyle = isLightTheme ? 'rgba(220, 38, 38, 0.6)' : 'rgba(252, 129, 129, 0.7)';
+                    chartCtx.fillText('⏻ Çevrimdışı', centerX, centerY);
+                }
+            });
+
+            chartCtx.restore();
+        }
+    };
+
     return new Chart(ctx, {
         type: 'line',
         data: {
@@ -624,7 +723,8 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     backgroundColor: 'transparent',
                     pointRadius: 0,
                     fill: false,
-                    tension: 0.3
+                    tension: 0.3,
+                    spanGaps: false
                 },
                 {
                     label: 'Minimum',
@@ -633,7 +733,8 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     backgroundColor: colorHex + '33',
                     pointRadius: 0,
                     fill: '-1',
-                    tension: 0.3
+                    tension: 0.3,
+                    spanGaps: false
                 },
                 {
                     label: labelText + ' (Ortalama)',
@@ -644,10 +745,12 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     tension: 0.3,
                     fill: false,
                     pointRadius: 1,
-                    pointHoverRadius: 6
+                    pointHoverRadius: 6,
+                    spanGaps: false
                 }
             ]
         },
+        plugins: [gapHighlightPlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -661,9 +764,13 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
 
                     if (diskName) {
                         const dData = currentHistoryData.disks.filter(d => d.diskName === diskName);
+                        // Gap noktasına (null değerli) tıklanmışsa drill-down açma
+                        if (dData[index] && dData[index].usedAvg == null) return;
                         startTime = dData[index].createdAt;
                         endTime = (index < dData.length - 1) ? dData[index + 1].createdAt : new Date(new Date(startTime).getTime() + 60000).toISOString();
                     } else {
+                        // Gap noktasına (null değerli) tıklanmışsa drill-down açma
+                        if (currentHistoryData.cpuRam[index] && currentHistoryData.cpuRam[index].cpuAvg == null) return;
                         startTime = currentHistoryData.cpuRam[index].createdAt;
                         endTime = (index < currentHistoryData.cpuRam.length - 1) ? currentHistoryData.cpuRam[index + 1].createdAt : new Date(new Date(startTime).getTime() + 60000).toISOString();
                     }
@@ -704,15 +811,128 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
+                        title: function(tooltipItems) {
+                            if (!tooltipItems || tooltipItems.length === 0) return '';
+                            const idx = tooltipItems[0].dataIndex;
+                            const isGap = avgData[idx] === null || avgData[idx] === undefined;
+                            if (isGap) {
+                                return '⚠ Çevrimdışı Bölge';
                             }
-                            if (context.parsed.y !== null) {
+                            const timeLabel = labels[idx] || '';
+                            return timeLabel;
+                        },
+                        afterTitle: function(tooltipItems) {
+                            if (!tooltipItems || tooltipItems.length === 0) return '';
+                            const idx = tooltipItems[0].dataIndex;
+                            const currentIsValid = avgData[idx] !== null && avgData[idx] !== undefined;
+                            if (!currentIsValid) return '';
+
+                            // Bu noktanın hemen ardında bir gap (çevrimdışı bölge) var mı kontrol et
+                            const nextIdx = idx + 1;
+                            if (nextIdx >= avgData.length) return '';
+                            const nextIsGap = avgData[nextIdx] === null || avgData[nextIdx] === undefined;
+                            if (!nextIsGap) return '';
+
+                            // Ham veri kaynağını belirle
+                            const rawDataSource = diskName
+                                ? (currentHistoryData.disks || []).filter(d => d.diskName === diskName)
+                                : (currentHistoryData.cpuRam || []);
+
+                            // Detaylı tarih formatlayıcı
+                            const formatDetailedDate = (dateStr) => {
+                                const d = new Date(dateStr);
+                                return d.toLocaleDateString('tr-TR', {
+                                    day: 'numeric', month: 'short', year: 'numeric',
+                                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                });
+                            };
+
+                            // Gap'in bittiği ilk geçerli noktayı bul
+                            let resumeIdx = null;
+                            for (let i = nextIdx; i < avgData.length; i++) {
+                                if (avgData[i] !== null && avgData[i] !== undefined) {
+                                    resumeIdx = i;
+                                    break;
+                                }
+                            }
+
+                            // Kesinti süresini ve zamanlarını hesapla
+                            const cutOffRaw = rawDataSource[idx];
+                            const resumeRaw = resumeIdx !== null ? rawDataSource[resumeIdx] : null;
+
+                            let infoLines = ['─────────────────────', '⏻ Sonraki Çevrimdışı Bölge:'];
+
+                            if (cutOffRaw) {
+                                infoLines.push('  Kesilme: ' + formatDetailedDate(cutOffRaw.createdAt));
+                            }
+                            if (resumeRaw) {
+                                infoLines.push('  Geri gelme: ' + formatDetailedDate(resumeRaw.createdAt));
+                            }
+
+                            if (cutOffRaw && resumeRaw) {
+                                const diffMs = new Date(resumeRaw.createdAt) - new Date(cutOffRaw.createdAt);
+                                const totalMin = Math.floor(diffMs / 60000);
+                                const days = Math.floor(totalMin / 1440);
+                                const hours = Math.floor((totalMin % 1440) / 60);
+                                const mins = totalMin % 60;
+                                let durationParts = [];
+                                if (days > 0) durationParts.push(days + ' gün');
+                                if (hours > 0) durationParts.push(hours + ' saat');
+                                if (mins > 0) durationParts.push(mins + ' dk');
+                                if (durationParts.length > 0) {
+                                    infoLines.push('  Süre: ~' + durationParts.join(' '));
+                                }
+                            } else if (!resumeRaw) {
+                                infoLines.push('  Süre: Henüz geri gelmedi');
+                            }
+
+                            return infoLines.join('\n');
+                        },
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const isGap = avgData[idx] === null || avgData[idx] === undefined;
+
+                            if (isGap) {
+                                // Sadece ilk dataset'te kesinti bilgisini göster, diğerlerini gizle
+                                if (context.datasetIndex !== 0) return null;
+                                return '⏻ Cihaz çevrimdışı — Veri yok';
+                            }
+
+                            let label = context.dataset.label || '';
+                            if (label) label += ': ';
+                            if (context.parsed.y !== null && context.parsed.y !== undefined) {
                                 label += context.parsed.y.toFixed(2) + '%';
                             }
                             return label;
+                        },
+                        labelColor: function(context) {
+                            const idx = context.dataIndex;
+                            const isGap = avgData[idx] === null || avgData[idx] === undefined;
+                            if (isGap) {
+                                return {
+                                    borderColor: 'rgba(239, 68, 68, 0.8)',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+                                    borderWidth: 2,
+                                    borderRadius: 2
+                                };
+                            }
+
+                            // Gap'den önceki son geçerli noktaysa farklı renk göster
+                            const nextIdx = idx + 1;
+                            const isBeforeGap = nextIdx < avgData.length && (avgData[nextIdx] === null || avgData[nextIdx] === undefined);
+                            if (isBeforeGap && context.datasetIndex === 2) {
+                                return {
+                                    borderColor: 'rgba(251, 191, 36, 0.9)',
+                                    backgroundColor: 'rgba(251, 191, 36, 0.4)',
+                                    borderWidth: 2,
+                                    borderRadius: 2
+                                };
+                            }
+
+                            return {
+                                borderColor: context.dataset.borderColor || 'transparent',
+                                backgroundColor: context.dataset.borderColor || context.dataset.backgroundColor || 'transparent'
+                            };
                         }
                     }
                 }
@@ -909,8 +1129,16 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
         return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR');
     };
 
-    let maxItem = dataList[0];
-    let minItem = dataList[0];
+    // GAP INJECTION: null değerli (boşluk) noktaları istatistik hesaplamalarından dışla
+    const validDataList = dataList.filter(item => item[valueKey] != null);
+    if (validDataList.length === 0) {
+        container.innerHTML = '<div class="text-center small fst-italic py-3" style="color: var(--text-muted);"><i class="bi bi-info-circle"></i> Bu aralıkta geçerli veri noktası bulunamadı.</div>';
+        container.style.display = 'block';
+        return;
+    }
+
+    let maxItem = validDataList[0];
+    let minItem = validDataList[0];
     let maxItemValue = -1;
     let minItemValue = 999999;
     let sum = 0;
@@ -920,13 +1148,13 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
     const minKey = valueKey.replace('Avg', 'Min');
     const maxKey = valueKey.replace('Avg', 'Max');
 
-    dataList.forEach(item => {
+    validDataList.forEach(item => {
         let val = item[valueKey];
         sum += val;
 
         // Mutlak maksimum/minimum bulma (Band verisi varsa ona bak, yoksa Avg'ye bak)
-        let itemMax = (item[maxKey] !== undefined) ? item[maxKey] : val;
-        let itemMin = (item[minKey] !== undefined) ? item[minKey] : val;
+        let itemMax = (item[maxKey] != null) ? item[maxKey] : val;
+        let itemMin = (item[minKey] != null) ? item[minKey] : val;
 
         if (itemMax > maxItemValue) {
             maxItemValue = itemMax;
@@ -942,9 +1170,9 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
     const displayMax = maxItemValue;
     const displayMin = minItemValue;
 
-    let avg = sum / dataList.length;
+    let avg = sum / validDataList.length;
 
-    let aboveAvgList = dataList.filter(item => item[valueKey] > avg && item.createdAt !== maxItem.createdAt);
+    let aboveAvgList = validDataList.filter(item => item[valueKey] > avg && item.createdAt !== maxItem.createdAt);
     aboveAvgList.sort((a, b) => b[valueKey] - a[valueKey]);
 
     // Zirve Noktaları Filtreleme (En az 5 dk aralıklı top 8)
@@ -1036,12 +1264,12 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
             </div>
         `;
     }
-    else if (dataList.length >= 5) {
-        // Tüm veriler ile Doğrusal Regresyon (En Küçük Kareler - OLS)
-        let n = dataList.length;
+    else if (validDataList.length >= 5) {
+        // Tüm veriler ile Doğrusal Regresyon (En Küçük Kareler - OLS) - null noktalar hariç
+        let n = validDataList.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
 
-        let sortedData = [...dataList].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        let sortedData = [...validDataList].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         let startTime = new Date(sortedData[0].createdAt).getTime();
 
         sortedData.forEach(p => {
@@ -1468,15 +1696,17 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
 
             bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
 
+            // Gap injection: null değerleri istatistiklerden dışla
+            const validValues = values.filter(v => v != null);
             let sum = 0;
             let maxVal = -1;
             
-            values.forEach(v => {
+            validValues.forEach(v => {
                 sum += v;
                 if (v > maxVal) maxVal = v;
             });
 
-            const avg = sum / values.length;
+            const avg = validValues.length > 0 ? sum / validValues.length : 0;
 
             summaryContainer.innerHTML = `
                 <div class="col-md-4">
