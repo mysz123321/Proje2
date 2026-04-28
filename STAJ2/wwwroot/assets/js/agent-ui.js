@@ -1083,6 +1083,7 @@ function createCandleChart(canvasId, labelText, candleData, diskName = null, isD
                     callbacks: {
                         label: function(context) {
                             const p = context.raw;
+                            if (!p || p.o == null) return 'Veri yok';
                             return [
                                 `Açılış: ${p.o.toFixed(1)}%`,
                                 `En Yüksek: ${p.h.toFixed(1)}%`,
@@ -1632,7 +1633,7 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
             // Candlestick modu: OHLC verilerini hazırla
             let candleData;
             if (diskName) {
-                candleData = detailData.map(d => ({
+                candleData = detailData.filter(d => d.usedOpen != null).map(d => ({
                     x: new Date(d.createdAt).getTime(),
                     o: d.usedOpen,
                     h: d.usedMax,
@@ -1641,13 +1642,18 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
                 }));
             } else {
                 const prefix = labelText.includes('CPU') ? 'cpu' : 'ram';
-                candleData = detailData.map(m => ({
+                candleData = detailData.filter(m => m[prefix + 'Open'] != null).map(m => ({
                     x: new Date(m.createdAt).getTime(),
                     o: m[prefix + 'Open'],
                     h: m[prefix + 'Max'],
                     l: m[prefix + 'Min'],
                     c: m[prefix + 'Close']
                 }));
+            }
+
+            if (candleData.length === 0) {
+                summaryContainer.innerHTML = '<div class="alert alert-warning w-100">Bu aralıkta geçerli detaylı veri bulunamadı.</div>';
+                return;
             }
 
             bucketDetailChart = createCandleChart('bucketDetailChart', labelText, candleData, diskName, true);
