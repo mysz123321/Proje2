@@ -7,6 +7,7 @@ namespace Staj2.Services.Models;
 public class DiskBucketDto
 {
     public DateTime CreatedAt { get; set; }
+    public DateTime? MaxCreatedAt { get; set; }
     public double? UsedAvg { get; set; }
     public double? UsedMin { get; set; }
     public double? UsedMax { get; set; }

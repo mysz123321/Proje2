@@ -480,8 +480,8 @@ function renderBaseCharts(cpuRamData) {
         const cpuDataObj = prepareCandleData(cpuRamData, 'cpu');
         const ramDataObj = prepareCandleData(cpuRamData, 'ram');
 
-        historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuDataObj.candles, cpuDataObj.labels, null, false, rangeStart, rangeEnd);
-        historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramDataObj.candles, ramDataObj.labels, null, false, rangeStart, rangeEnd);
+        historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuDataObj.candles, cpuDataObj.labels, null, false, rangeStart, rangeEnd, cpuDataObj.threshold);
+        historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramDataObj.candles, ramDataObj.labels, null, false, rangeStart, rangeEnd, ramDataObj.threshold);
     } else {
         // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
         const cpuAvg = cpuRamData.map(m => m.cpuAvg != null ? m.cpuAvg : null);
@@ -492,8 +492,9 @@ function renderBaseCharts(cpuRamData) {
         const ramMin = cpuRamData.map(m => m.ramMin != null ? m.ramMin : null);
         const ramMax = cpuRamData.map(m => m.ramMax != null ? m.ramMax : null);
 
-        historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null);
-        historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null);
+        const tEndData = cpuRamData.map(m => getBucketEndTime(m));
+        historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null, false, tEndData);
+        historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null, false, tEndData);
     }
 
     // MİNİ RAPOR TETİKLEYİCİLERİ
@@ -582,8 +583,8 @@ function toggleDiskChart(isVisible, diskName, chartId) {
         const rangeEnd = endVal ? new Date(endVal).getTime() : null;
 
         if (currentHistoryMode === 'candle') {
-            const diskCandles = prepareCandleData(diskData, 'used');
-            historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles.candles, diskCandles.labels, diskName, false, rangeStart, rangeEnd);
+            const diskCandles = prepareCandleData(diskData, 'disk');
+            historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles.candles, diskCandles.labels, diskName, false, rangeStart, rangeEnd, diskCandles.threshold);
         } else {
             // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
             const usedAvg = diskData.map(d => d.usedAvg != null ? d.usedAvg : null);
@@ -600,7 +601,23 @@ function toggleDiskChart(isVisible, diskName, chartId) {
     }
 }
 
-function createBandChart(canvasId, labelText, labels, avgData, minData, maxData, colorHex, diskName = null, isDrillDown = false) {
+// --- YARDIMCI FONKSİYON: Bucket son zamanını bulur ---
+function getBucketEndTime(m) {
+    if (!m) return 0;
+    if (m.maxCreatedAt) return new Date(m.maxCreatedAt).getTime();
+    
+    // Mum nesnesinin altındaki/içindeki veri dizisini tarar (Issue 1)
+    for (const key in m) {
+        const arr = m[key];
+        if (Array.isArray(arr) && arr.length > 0 && (arr[0].createdAt || arr[0].ts || arr[0].t)) {
+            const times = arr.map(p => new Date(p.createdAt || p.ts || p.t).getTime()).filter(t => !isNaN(t));
+            if (times.length > 0) return Math.max(...times);
+        }
+    }
+    return new Date(m.createdAt || m.t || 0).getTime();
+}
+
+function createBandChart(canvasId, labelText, labels, avgData, minData, maxData, colorHex, diskName = null, isDrillDown = false, tEndData = null) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
@@ -655,8 +672,9 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
 
                 if (!prevPoint || !nextPoint) return;
 
-                const x1 = prevPoint.x;
-                const x2 = nextPoint.x;
+                // Issue 4: Kesinti başlangıcını son geçerli verinin zamanına göre hesapla (p1.x bucket merkezi ise, biraz sağa kaydır)
+                const x1 = prevPoint.x + 0.4; 
+                const x2 = nextPoint.x - 0.4;
                 const yTop = yScale.top;
                 const yBottom = yScale.bottom;
                 const width = x2 - x1;
@@ -727,7 +745,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
             datasets: [
                 {
                     label: 'Maksimum',
-                    data: maxData,
+                    data: isDrillDown ? maxData.map((v, i) => ({ x: i, y: v })) : maxData,
                     borderColor: 'transparent',
                     backgroundColor: 'transparent',
                     pointRadius: 0,
@@ -737,7 +755,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                 },
                 {
                     label: 'Minimum',
-                    data: minData,
+                    data: isDrillDown ? minData.map((v, i) => ({ x: i, y: v })) : minData,
                     borderColor: 'transparent',
                     backgroundColor: colorHex + '33',
                     pointRadius: 0,
@@ -747,7 +765,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                 },
                 {
                     label: labelText + ' (Ortalama)',
-                    data: avgData,
+                    data: isDrillDown ? avgData.map((v, i) => ({ x: i, y: v })) : avgData,
                     borderColor: colorHex,
                     backgroundColor: 'transparent',
                     borderWidth: 2,
@@ -983,7 +1001,23 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
             },
             locale: 'tr-TR',
             scales: {
-                x: { ticks: { color: textColor, maxTicksLimit: 10 }, grid: { color: gridColor } },
+                x: { 
+                    type: isDrillDown ? 'linear' : undefined, // Issue 3: Overlap önlemek için linear scale kullan
+                    offset: false,
+                    min: isDrillDown ? -0.5 : undefined,
+                    max: isDrillDown ? labels.length - 0.5 : undefined,
+                    ticks: { 
+                        color: textColor, 
+                        maxTicksLimit: 10,
+                        callback: function(value) {
+                            if (!isDrillDown) return this.getLabelForValue(value);
+                            const idx = Math.round(value);
+                            if (idx >= 0 && idx < labels.length) return labels[idx];
+                            return '';
+                        }
+                    }, 
+                    grid: { color: gridColor, offset: false } 
+                },
                 y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
             }
         }
@@ -995,62 +1029,68 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
  * mum gövdesi oluşmasını sağlar (çizgi görünümünü engeller).
  */
 function prepareCandleData(rawData, prefix) {
-    if (!rawData || rawData.length === 0) return { candles: [], labels: [] };
+    if (!rawData || rawData.length === 0) return { candles: [], labels: [], threshold: 5 * 60 * 1000 };
 
-    // --- Tüm null (çevrimdışı) noktaları temizliyoruz ---
-    const validData = rawData.filter(m => (m[prefix + 'Avg'] != null || m.usedAvg != null));
+    const mappedRawData = rawData.map((m, idx) => ({ ...m, rawIndex: idx }));
+    const validData = mappedRawData.filter(m => (m[prefix + 'Avg'] != null || m.usedAvg != null));
 
-    const threshold = 300; 
-    const shouldGroup = validData.length > 0 && validData.length < threshold;
+    let minInterval = Infinity;
+    for (let i = 0; i < validData.length - 1; i++) {
+        const diff = new Date(validData[i+1].createdAt).getTime() - new Date(validData[i].createdAt).getTime();
+        if (diff > 0 && diff < minInterval) minInterval = diff;
+    }
+    const dynamicThreshold = minInterval !== Infinity ? minInterval * 1.5 : 5 * 60 * 1000;
+
+    const thresholdLimit = 300; 
+    const shouldGroup = validData.length > 0 && validData.length < thresholdLimit;
 
     let candles = [];
-    let labels = [];
+    let labels = rawData.map(m => formatChartDate(m.createdAt));
 
     if (shouldGroup) {
-        let index = 0;
         for (let i = 0; i < validData.length; i += 2) {
             const d1 = validData[i];
             const d2 = (i + 1 < validData.length) ? validData[i + 1] : null;
 
             if (d2) {
                 candles.push({
-                    x: index++, // İndis bazlı X (Eşit dağılım için kritik)
-                    t: new Date(d1.createdAt).getTime(), // Gerçek zaman
+                    x: (d1.rawIndex + d2.rawIndex) / 2, // Tam aralarına yerleştir
+                    t: new Date(d1.createdAt).getTime(),
+                    tEnd: getBucketEndTime(d2),
                     o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
                     h: Math.max(d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg, d2[prefix + 'Max'] ?? d2[prefix + 'Avg'] ?? d2.usedMax ?? d2.usedAvg),
                     l: Math.min(d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg, d2[prefix + 'Min'] ?? d2[prefix + 'Avg'] ?? d2.usedMin ?? d2.usedAvg),
                     c: d2[prefix + 'Close'] ?? d2[prefix + 'Avg'] ?? d2.usedClose ?? d2.usedAvg
                 });
-                labels.push(formatChartDate(d1.createdAt));
             } else {
                 candles.push({
-                    x: index++,
+                    x: d1.rawIndex,
                     t: new Date(d1.createdAt).getTime(),
+                    tEnd: getBucketEndTime(d1),
                     o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
                     h: d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg,
                     l: d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg,
                     c: d1[prefix + 'Close'] ?? d1[prefix + 'Avg'] ?? d1.usedClose ?? d1.usedAvg
                 });
-                labels.push(formatChartDate(d1.createdAt));
             }
         }
     } else {
-        validData.forEach((m, idx) => {
+        validData.forEach((m) => {
             candles.push({
-                x: idx,
+                x: m.rawIndex,
                 t: new Date(m.createdAt).getTime(),
+                tEnd: getBucketEndTime(m),
                 o: m[prefix + 'Open'] ?? m.usedOpen ?? m[prefix + 'Avg'] ?? m.usedAvg,
                 h: m[prefix + 'Max'] ?? m.usedMax ?? m[prefix + 'Avg'] ?? m.usedAvg,
                 l: m[prefix + 'Min'] ?? m.usedMin ?? m[prefix + 'Avg'] ?? m.usedAvg,
                 c: m[prefix + 'Close'] ?? m.usedClose ?? m[prefix + 'Avg'] ?? m.usedAvg
             });
-            labels.push(formatChartDate(m.createdAt));
         });
     }
-    return { candles, labels };
+    return { candles, labels, threshold: dynamicThreshold };
 }
 
-function createCandleChart(canvasId, labelText, candleData, labels, diskName = null, isDrillDown = false, rangeStart = null, rangeEnd = null) {
+function createCandleChart(canvasId, labelText, candleData, labels, diskName = null, isDrillDown = false, rangeStart = null, rangeEnd = null, gapThreshold = 300000) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     if (typeof Chart !== 'undefined' && Chart.FinancialController) {
@@ -1072,7 +1112,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
             const yScale = chart.scales.y;
             const xScale = chart.scales.x;
             const data = chart.data.datasets[0].data;
-            const threshold = 5 * 60 * 1000;
+            const threshold = gapThreshold;
             const yTop = yScale.top;
             const yBottom = yScale.bottom;
             const yHeight = yBottom - yTop;
@@ -1131,23 +1171,30 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
 
             // 1. Başlangıçtaki boşluk (Taralı Alan)
             if (rangeStart && data[0].t - rangeStart > threshold) {
-                const firstCandleX = meta.data[0].x;
-                drawHatchedArea(xScale.left, firstCandleX);
+                const firstCandle = meta.data[0];
+                const width = firstCandle.width || 10;
+                drawHatchedArea(xScale.left, firstCandle.x - width / 2 - 2);
             }
 
             // 2. Aralardaki boşluklar (İnce Çizgi)
             for (let i = 0; i < data.length - 1; i++) {
-                if (data[i+1].t - data[i].t > threshold) {
+                const currentEndT = data[i].tEnd || data[i].t; // Issue 1 Fix
+                if (data[i+1].t - currentEndT > threshold) {
                     const p1 = meta.data[i];
-                    const p2 = meta.data[i+1];
-                    if (p1 && p2) drawGapLine((p1.x + p2.x) / 2);
+                    if (p1) {
+                        const width = p1.width || 10;
+                        drawGapLine(p1.x + width / 2 + 5); 
+                    }
                 }
             }
 
             // 3. Sondaki boşluk (Taralı Alan)
-            if (rangeEnd && rangeEnd - data[data.length - 1].t > threshold) {
-                const lastCandleX = meta.data[data.length - 1].x;
-                drawHatchedArea(lastCandleX, xScale.right);
+            const lastData = data[data.length - 1];
+            const lastEndT = lastData.tEnd || lastData.t;
+            if (rangeEnd && rangeEnd - lastEndT > threshold) {
+                const lastCandle = meta.data[data.length - 1];
+                const width = lastCandle.width || 10;
+                drawHatchedArea(lastCandle.x + width / 2 + 2, xScale.right);
             }
 
             chartCtx.restore();
@@ -1182,6 +1229,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 backgroundColor: 'rgba(99, 102, 241, 0.1)',
                 barPercentage: 0.95,
                 categoryPercentage: 0.95,
+                maxBarThickness: 15, // Issue Fix: Az veri olduğunda mumların aşırı genişlemesini engelle
                 color: {
                     up: '#10b981',
                     down: '#ef4444',
@@ -1207,7 +1255,9 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 if (index >= 0 && index < candleData.length) {
                     const candle = candleData[index];
                     const startTime = new Date(candle.t).toISOString();
-                    let endTime = (index < candleData.length - 1) ? new Date(candleData[index + 1].t).toISOString() : new Date(candle.t + 60000).toISOString();
+                    // Issue Fix: Son veri tıklandığında yeterli aralığı sağlamak için tEnd veya gapThreshold kullan
+                    let endTimeMs = (index < candleData.length - 1) ? candleData[index + 1].t : (candle.tEnd && candle.tEnd > candle.t ? candle.tEnd : candle.t + Math.max(gapThreshold, 3600000));
+                    const endTime = new Date(endTimeMs).toISOString();
                     window.openBucketDetail(startTime, endTime, labelText, diskName);
                 }
             },
@@ -1216,9 +1266,9 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
             scales: {
                 x: {
                     type: 'linear',
-                    offset: true,
+                    offset: false, // Issue 2: Kenar boşluklarını kaldır
                     min: -0.5,
-                    max: candleData.length - 0.5,
+                    max: labels.length - 0.5,
                     ticks: {
                         color: textColor,
                         maxTicksLimit: 10,
@@ -1228,7 +1278,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             return '';
                         }
                     },
-                    grid: { color: gridColor }
+                    grid: { color: gridColor, offset: false }
                 },
                 y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
             },
@@ -1237,8 +1287,8 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 zoom: isDrillDown ? {
                     limits: {
                         x: {
-                            min: candleData.length > 0 ? candleData[0].x - 0.5 : undefined,
-                            max: candleData.length > 0 ? candleData[candleData.length - 1].x + 0.5 : undefined,
+                            min: -0.5,
+                            max: labels.length > 0 ? labels.length - 0.5 : undefined,
                             minRange: 1
                         }
                     },
@@ -1269,7 +1319,8 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${p.l.toFixed(1)}%`;
                             if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${p.h.toFixed(1)}%`;
 
-                            return labels[idx];
+                            const labelIdx = Math.round(p.x);
+                            return labels[labelIdx] || labels[idx] || '';
                         },
                         afterTitle: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
@@ -1277,20 +1328,34 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             if (chart._highlightType) return '';
 
                             const idx = tooltipItems[0].dataIndex;
-                            if (idx + 1 >= candleData.length) return '';
+                            const t1End = candleData[idx].tEnd || candleData[idx].t;
+                            const formatDetailedDate = (ms) => new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-                            const t1 = candleData[idx].t;
+                            if (idx + 1 >= candleData.length) {
+                                if (rangeEnd && (rangeEnd - t1End) > gapThreshold) {
+                                    const diffMs = rangeEnd - t1End;
+                                    const totalMin = Math.floor(diffMs / 60000);
+                                    return [
+                                        '─────────────────────',
+                                        '⏻ Sonrasında Kesinti Tespit Edildi:',
+                                        '  Kesilme: ' + formatDetailedDate(t1End),
+                                        '  Geri gelme: (Seçili Dönem Sonu)',
+                                        '  Süre: ~' + totalMin + ' dk'
+                                    ].join('\n');
+                                }
+                                return '';
+                            }
+
                             const t2 = candleData[idx + 1].t;
-                            const diffMs = t2 - t1;
+                            const diffMs = t2 - t1End; // Issue Fix: t yerine tEnd kullanarak gruplanmış verilerde sahte kesintiyi engelle
 
-                            if (diffMs > 5 * 60 * 1000) {
-                                const formatDetailedDate = (ms) => new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            if (diffMs > gapThreshold) {
                                 const totalMin = Math.floor(diffMs / 60000);
                                 
                                 return [
                                     '─────────────────────',
                                     '⏻ Sonraki Kesinti Tespit Edildi:',
-                                    '  Kesilme: ' + formatDetailedDate(t1),
+                                    '  Kesilme: ' + formatDetailedDate(t1End),
                                     '  Geri gelme: ' + formatDetailedDate(t2),
                                     '  Süre: ~' + totalMin + ' dk'
                                 ].join('\n');
@@ -1901,7 +1966,7 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
 
         // Mevcut grafik moduna göre detay grafiği oluştur
         if (currentHistoryMode === 'candle') {
-            const prefix = diskName ? 'used' : (valueKey === 'cpuAvg' ? 'cpu' : 'ram');
+            const prefix = diskName ? 'disk' : (valueKey === 'cpuAvg' ? 'cpu' : 'ram');
             const dataObj = prepareCandleData(detailData, prefix);
 
             if (dataObj.candles.length === 0) {
@@ -1997,7 +2062,8 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
             // Grafik çizimini küçük bir gecikmeyle yap
             setTimeout(() => {
                 if (bucketDetailChart) bucketDetailChart.destroy();
-                bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
+                const tEndData = detailData.map(m => getBucketEndTime(m));
+                bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true, tEndData);
                 bucketDetailChart.resize();
                 bucketDetailChart.update();
             }, 50);

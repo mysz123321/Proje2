@@ -7,6 +7,7 @@ namespace Staj2.Services.Models;
 public class CpuRamBucketDto
 {
     public DateTime CreatedAt { get; set; }
+    public DateTime? MaxCreatedAt { get; set; }
     public double? CpuAvg { get; set; }
     public double? CpuMin { get; set; }
     public double? CpuMax { get; set; }

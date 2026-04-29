@@ -250,6 +250,7 @@ public class ComputerService : BaseService, IComputerService
                 cpuRamWithGaps.Add(new CpuRamBucketDto
                 {
                     CreatedAt = current.CreatedAt,
+                    MaxCreatedAt = current.CreatedAt,
                     CpuAvg = (double)current.CpuUsage,
                     CpuMin = (double)current.CpuUsage,
                     CpuMax = (double)current.CpuUsage,
@@ -328,6 +329,7 @@ public class ComputerService : BaseService, IComputerService
                     disksWithGaps.Add(new DiskBucketDto
                     {
                         CreatedAt = current.CreatedAt,
+                        MaxCreatedAt = current.CreatedAt,
                         UsedAvg = (double)current.UsedPercent,
                         UsedMin = (double)current.UsedPercent,
                         UsedMax = (double)current.UsedPercent,
@@ -387,23 +389,24 @@ public class ComputerService : BaseService, IComputerService
 
             // CPU/RAM: Veriyi kovalara dağıt
             var cpuRamLookup = rawCpuRam
-                .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
+                .GroupBy(m => (m.CreatedAt.Ticks - startTime.Ticks) / bucketTicks)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
             // Filtre aralığının tamamını kapsayan zaman gridi oluştur
             var gridCpuRam = new List<CpuRamBucketDto>();
-            long firstBucket = startTime.Ticks / bucketTicks;
-            long lastBucket = endTime.Ticks / bucketTicks;
+            long firstBucket = 0;
+            long lastBucket = totalTicks > 0 ? (totalTicks - 1) / bucketTicks : 0;
 
             for (long b = firstBucket; b <= lastBucket; b++)
             {
-                var bucketTime = new DateTime(b * bucketTicks);
+                var bucketTime = new DateTime(startTime.Ticks + (b * bucketTicks));
                 if (cpuRamLookup.TryGetValue(b, out var items))
                 {
                     var sorted = items.OrderBy(x => x.CreatedAt).ToList();
                     gridCpuRam.Add(new CpuRamBucketDto
                     {
                         CreatedAt = bucketTime,
+                        MaxCreatedAt = items.Max(m => m.CreatedAt),
                         CpuAvg = Math.Round(items.Average(m => m.CpuUsage), 2),
                         CpuMin = Math.Round(items.Min(m => m.CpuUsage), 2),
                         CpuMax = Math.Round(items.Max(m => m.CpuUsage), 2),
@@ -438,19 +441,20 @@ public class ComputerService : BaseService, IComputerService
             {
                 var diskDataForName = rawDisks.Where(d => d.diskName == dn).ToList();
                 var diskLookup = diskDataForName
-                    .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
+                    .GroupBy(m => (m.CreatedAt.Ticks - startTime.Ticks) / bucketTicks)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
                 // Filtre aralığının tamamını kapsa (disk bazında da startTime-endTime)
                 for (long b = firstBucket; b <= lastBucket; b++)
                 {
-                    var bucketTime = new DateTime(b * bucketTicks);
+                    var bucketTime = new DateTime(startTime.Ticks + (b * bucketTicks));
                     if (diskLookup.TryGetValue(b, out var items))
                     {
                         var sorted = items.OrderBy(x => x.CreatedAt).ToList();
                         gridDisks.Add(new DiskBucketDto
                         {
                             CreatedAt = bucketTime,
+                            MaxCreatedAt = items.Max(m => m.CreatedAt),
                             UsedAvg = Math.Round(items.Average(m => m.UsedPercent), 2),
                             UsedMin = Math.Round(items.Min(m => m.UsedPercent), 2),
                             UsedMax = Math.Round(items.Max(m => m.UsedPercent), 2),
@@ -787,13 +791,14 @@ public class ComputerService : BaseService, IComputerService
                 long totalTicks = (maxDate - minDate).Ticks;
                 long bucketTicks = totalTicks / maxPointsForRegression;
 
-                // Aynı milisaniyede gelme ihtimaline karşı güvenlik
                 if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
+                long lastBucketTrend = totalTicks > 0 ? (totalTicks - 1) / bucketTicks : 0;
                 var groupedData = rawData
-                    .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
+                    .GroupBy(m => (m.CreatedAt.Ticks - minDate.Ticks) / bucketTicks)
+                    .Where(g => g.Key <= lastBucketTrend)
                     .Select(g => new {
-                        createdAt = new DateTime(g.Key * bucketTicks),
+                        createdAt = new DateTime(minDate.Ticks + (g.Key * bucketTicks)),
                         value = Math.Round(g.Average(m => m.value), 2)
                     })
                     .OrderBy(m => m.createdAt)
@@ -836,10 +841,12 @@ public class ComputerService : BaseService, IComputerService
 
                 if (bucketTicks <= 0) bucketTicks = TimeSpan.FromSeconds(1).Ticks;
 
+                long lastBucketTrend = totalTicks > 0 ? (totalTicks - 1) / bucketTicks : 0;
                 var groupedData = rawData
-                    .GroupBy(m => m.CreatedAt.Ticks / bucketTicks)
+                    .GroupBy(m => (m.CreatedAt.Ticks - minDate.Ticks) / bucketTicks)
+                    .Where(g => g.Key <= lastBucketTrend)
                     .Select(g => new {
-                        createdAt = new DateTime(g.Key * bucketTicks),
+                        createdAt = new DateTime(minDate.Ticks + (g.Key * bucketTicks)),
                         value = Math.Round(g.Average(m => m.value), 2)
                     })
                     .OrderBy(m => m.createdAt)
