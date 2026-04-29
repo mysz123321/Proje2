@@ -2267,19 +2267,19 @@
                     </div>
                     
                     <div class="d-flex justify-content-end mt-4 gap-4 flex-wrap" style="font-size:12px; color:var(--text-main); font-weight: 500;">
-                        <div id="legend-normal" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('normal')">
+                        <div class="heatmap-legend legend-normal d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('normal')">
                             <div style="width:14px; height:14px; background:#22c55e; border: 1px solid #16a34a; margin-right:6px; border-radius:3px;"></div> %0 - %50 (Normal)
                         </div>
-                        <div id="legend-yogun" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yogun')">
+                        <div class="heatmap-legend legend-yogun d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yogun')">
                             <div style="width:14px; height:14px; background:#eab308; border: 1px solid #ca8a04; margin-right:6px; border-radius:3px;"></div> %50 - %75 (Yoğun)
                         </div>
-                        <div id="legend-agir" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('agir')">
+                        <div class="heatmap-legend legend-agir d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('agir')">
                             <div style="width:14px; height:14px; background:#f97316; border: 1px solid #ea580c; margin-right:6px; border-radius:3px;"></div> %75 - %90 (Ağır)
                         </div>
-                        <div id="legend-kritik" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('kritik')">
+                        <div class="heatmap-legend legend-kritik d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('kritik')">
                             <div style="width:14px; height:14px; background:#ef4444; border: 1px solid #dc2626; margin-right:6px; border-radius:3px;"></div> %90+ (Kritik)
                         </div>
-                        <div id="legend-yok" class="d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yok')">
+                        <div class="heatmap-legend legend-yok d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yok')">
                             <div style="width:14px; height:14px; background:rgba(128, 128, 128, 0.15); border: 1px solid rgba(128, 128, 128, 0.2); margin-right:6px; border-radius:3px;"></div> Veri Yok
                         </div>
                     </div>
@@ -2593,8 +2593,8 @@
             const allCategories = ['normal', 'yogun', 'agir', 'kritik', 'yok'];
 
             allCategories.forEach(c => {
-                const legendEl = document.getElementById(`legend-${c}`);
-                if (legendEl) {
+                const legendEls = document.querySelectorAll(`.legend-${c}`);
+                legendEls.forEach(legendEl => {
                     if (window.activeHeatmapFilters.length === 0) {
                         // HİÇBİRİ SEÇİLİ DEĞİLSE: Hepsi varsayılan tam görünür
                         legendEl.style.opacity = '1';
@@ -2608,7 +2608,7 @@
                         legendEl.style.opacity = '0.3';
                         legendEl.style.filter = 'grayscale(80%)';
                     }
-                }
+                });
             });
         }
         

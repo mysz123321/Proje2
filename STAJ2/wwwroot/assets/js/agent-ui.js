@@ -116,7 +116,7 @@ function renderTable() {
     const paginatedAgents = liveAndFilteredAgents.slice(startIndex, startIndex + itemsPerPage);
 
     container.innerHTML = paginatedAgents.map(a => {
-        const ts = a.ts ? new Date(a.ts).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-";
+        const ts = a.ts ? new Date(a.ts).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : "-";
         const tags = (a.tags || []).map(t => `<span class="badge" style="background:var(--bg-hover); color:var(--text-main); border: 1px solid var(--border-color); margin-right:3px;">${t}</span>`).join("");
         const statusClass = 'bg-success';
 
@@ -471,25 +471,17 @@ function renderBaseCharts(cpuRamData) {
     historyCharts.cpu = null;
     historyCharts.ram = null;
 
-    if (currentHistoryMode === 'candle') {
-        // Candlestick: null OHLC değerli (gap) noktaları filtrele
-        const cpuCandles = cpuRamData.filter(m => m.cpuOpen != null).map(m => ({
-            x: new Date(m.createdAt).getTime(),
-            o: m.cpuOpen,
-            h: m.cpuMax,
-            l: m.cpuMin,
-            c: m.cpuClose
-        }));
-        const ramCandles = cpuRamData.filter(m => m.ramOpen != null).map(m => ({
-            x: new Date(m.createdAt).getTime(),
-            o: m.ramOpen,
-            h: m.ramMax,
-            l: m.ramMin,
-            c: m.ramClose
-        }));
+    const startVal = document.getElementById("historyStart")?.value;
+    const endVal = document.getElementById("historyEnd")?.value;
+    const rangeStart = startVal ? new Date(startVal).getTime() : null;
+    const rangeEnd = endVal ? new Date(endVal).getTime() : null;
 
-        historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuCandles, null);
-        historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramCandles, null);
+    if (currentHistoryMode === 'candle') {
+        const cpuDataObj = prepareCandleData(cpuRamData, 'cpu');
+        const ramDataObj = prepareCandleData(cpuRamData, 'ram');
+
+        historyCharts.cpu = createCandleChart('cpuChart', 'CPU Kullanımı (%)', cpuDataObj.candles, cpuDataObj.labels, null, false, rangeStart, rangeEnd);
+        historyCharts.ram = createCandleChart('ramChart', 'RAM Kullanımı (%)', ramDataObj.candles, ramDataObj.labels, null, false, rangeStart, rangeEnd);
     } else {
         // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
         const cpuAvg = cpuRamData.map(m => m.cpuAvg != null ? m.cpuAvg : null);
@@ -515,7 +507,8 @@ function formatChartDate(dateString) {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: false
     });
 }
 
@@ -583,16 +576,14 @@ function toggleDiskChart(isVisible, diskName, chartId) {
         const diskData = currentHistoryData.disks.filter(d => d.diskName === diskName);
         const labels = diskData.map(d => formatChartDate(d.createdAt));
 
+        const startVal = document.getElementById("historyStart")?.value;
+        const endVal = document.getElementById("historyEnd")?.value;
+        const rangeStart = startVal ? new Date(startVal).getTime() : null;
+        const rangeEnd = endVal ? new Date(endVal).getTime() : null;
+
         if (currentHistoryMode === 'candle') {
-            // Candlestick: null OHLC değerli (gap) noktaları filtrele
-            const diskCandles = diskData.filter(d => d.usedOpen != null).map(d => ({
-                x: new Date(d.createdAt).getTime(),
-                o: d.usedOpen,
-                h: d.usedMax,
-                l: d.usedMin,
-                c: d.usedClose
-            }));
-            historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles, diskName);
+            const diskCandles = prepareCandleData(diskData, 'used');
+            historyCharts.disks[diskName] = createCandleChart(chartId, `${diskName} Doluluk Oranı (%)`, diskCandles.candles, diskCandles.labels, diskName, false, rangeStart, rangeEnd);
         } else {
             // Band: null değerler olduğu gibi korunur (Chart.js spanGaps:false ile gap gösterecek)
             const usedAvg = diskData.map(d => d.usedAvg != null ? d.usedAvg : null);
@@ -818,12 +809,25 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                             if (isGap) {
                                 return '⚠ Çevrimdışı Bölge';
                             }
+                            
+                            const chart = tooltipItems[0].chart;
+                            const val = tooltipItems[0].parsed.y !== undefined ? tooltipItems[0].parsed.y.toFixed(2) + '%' : '';
+                            
+                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${val}`;
+                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${val}`;
+                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${val}`;
+
                             const timeLabel = labels[idx] || '';
                             return timeLabel;
                         },
                         afterTitle: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
                             const idx = tooltipItems[0].dataIndex;
+                            const chart = tooltipItems[0].chart;
+
+                            // Eğer butonla vurgulama yapılmışsa alt bilgileri (çevrimdışı bölge vb) gösterme
+                            if (chart._highlightType) return '';
+
                             const currentIsValid = avgData[idx] !== null && avgData[idx] !== undefined;
                             if (!currentIsValid) return '';
 
@@ -843,7 +847,8 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                                 const d = new Date(dateStr);
                                 return d.toLocaleDateString('tr-TR', {
                                     day: 'numeric', month: 'short', year: 'numeric',
-                                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                    hour12: false
                                 });
                             };
 
@@ -898,6 +903,10 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                                 return '⏻ Cihaz çevrimdışı — Veri yok';
                             }
 
+                            const chart = context.chart;
+                            // Eğer butonlarla (Max/Min/Zirve) tetiklenmişse başlıkta zaten değer ve açıklama yazdığı için etiket basmaya gerek yok
+                            if (chart._highlightType) return null;
+
                             let label = context.dataset.label || '';
                             if (label) label += ': ';
                             if (context.parsed.y !== null && context.parsed.y !== undefined) {
@@ -937,6 +946,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     }
                 }
             },
+            locale: 'tr-TR',
             scales: {
                 x: { ticks: { color: textColor, maxTicksLimit: 10 }, grid: { color: gridColor } },
                 y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
@@ -945,11 +955,69 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
     });
 }
 
-function createCandleChart(canvasId, labelText, candleData, diskName = null, isDrillDown = false) {
+/**
+ * Mum grafiği verisini hazırlar. Eğer veri sayısı azsa ikili gruplama yaparak 
+ * mum gövdesi oluşmasını sağlar (çizgi görünümünü engeller).
+ */
+function prepareCandleData(rawData, prefix) {
+    if (!rawData || rawData.length === 0) return { candles: [], labels: [] };
+
+    // --- Tüm null (çevrimdışı) noktaları temizliyoruz ---
+    const validData = rawData.filter(m => (m[prefix + 'Avg'] != null || m.usedAvg != null));
+
+    const threshold = 300; 
+    const shouldGroup = validData.length > 0 && validData.length < threshold;
+
+    let candles = [];
+    let labels = [];
+
+    if (shouldGroup) {
+        let index = 0;
+        for (let i = 0; i < validData.length; i += 2) {
+            const d1 = validData[i];
+            const d2 = (i + 1 < validData.length) ? validData[i + 1] : null;
+
+            if (d2) {
+                candles.push({
+                    x: index++, // İndis bazlı X (Eşit dağılım için kritik)
+                    t: new Date(d1.createdAt).getTime(), // Gerçek zaman
+                    o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
+                    h: Math.max(d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg, d2[prefix + 'Max'] ?? d2[prefix + 'Avg'] ?? d2.usedMax ?? d2.usedAvg),
+                    l: Math.min(d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg, d2[prefix + 'Min'] ?? d2[prefix + 'Avg'] ?? d2.usedMin ?? d2.usedAvg),
+                    c: d2[prefix + 'Close'] ?? d2[prefix + 'Avg'] ?? d2.usedClose ?? d2.usedAvg
+                });
+                labels.push(formatChartDate(d1.createdAt));
+            } else {
+                candles.push({
+                    x: index++,
+                    t: new Date(d1.createdAt).getTime(),
+                    o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
+                    h: d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg,
+                    l: d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg,
+                    c: d1[prefix + 'Close'] ?? d1[prefix + 'Avg'] ?? d1.usedClose ?? d1.usedAvg
+                });
+                labels.push(formatChartDate(d1.createdAt));
+            }
+        }
+    } else {
+        validData.forEach((m, idx) => {
+            candles.push({
+                x: idx,
+                t: new Date(m.createdAt).getTime(),
+                o: m[prefix + 'Open'] ?? m.usedOpen ?? m[prefix + 'Avg'] ?? m.usedAvg,
+                h: m[prefix + 'Max'] ?? m.usedMax ?? m[prefix + 'Avg'] ?? m.usedAvg,
+                l: m[prefix + 'Min'] ?? m.usedMin ?? m[prefix + 'Avg'] ?? m.usedAvg,
+                c: m[prefix + 'Close'] ?? m.usedClose ?? m[prefix + 'Avg'] ?? m.usedAvg
+            });
+            labels.push(formatChartDate(m.createdAt));
+        });
+    }
+    return { candles, labels };
+}
+
+function createCandleChart(canvasId, labelText, candleData, labels, diskName = null, isDrillDown = false, rangeStart = null, rangeEnd = null) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
-    // Chart.js 4+ için finansal grafiklerin otomatik register olup olmadığını kontrol et
-    // Eğer değilse manuel register denenebilir (CDN versiyonuna göre değişir)
     if (typeof Chart !== 'undefined' && Chart.FinancialController) {
          Chart.register(Chart.FinancialController, Chart.CandlestickElement);
     }
@@ -958,107 +1026,160 @@ function createCandleChart(canvasId, labelText, candleData, diskName = null, isD
     const textColor = isLight ? '#334155' : '#e2e8f0';
     const gridColor = isLight ? '#cbd5e1' : '#334155';
 
+    // --- CUSTOM PLUGIN: Zaman atlamalarını (Kesintileri) ince çizgilerle gösterir ---
+    const gapHighlightPlugin = {
+        id: 'gapHighlight_' + canvasId,
+        beforeDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data || meta.data.length === 0) return;
+
+            const chartCtx = chart.ctx;
+            const yScale = chart.scales.y;
+            const xScale = chart.scales.x;
+            const data = chart.data.datasets[0].data;
+            const threshold = 5 * 60 * 1000;
+            const yTop = yScale.top;
+            const yBottom = yScale.bottom;
+            const yHeight = yBottom - yTop;
+
+            chartCtx.save();
+
+            const drawHatchedArea = (xStart, xEnd) => {
+                const width = xEnd - xStart;
+                if (width <= 0) return;
+
+                // Hafif kırmızı zemin
+                chartCtx.fillStyle = 'rgba(239, 68, 68, 0.1)';
+                chartCtx.fillRect(xStart, yTop, width, yHeight);
+
+                // Taralı (Diagonal) çizgiler
+                chartCtx.save();
+                chartCtx.beginPath();
+                chartCtx.rect(xStart, yTop, width, yHeight);
+                chartCtx.clip();
+                
+                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+                chartCtx.lineWidth = 1;
+                for (let x = xStart - yHeight; x < xEnd + yHeight; x += 10) {
+                    chartCtx.moveTo(x, yTop);
+                    chartCtx.lineTo(x + yHeight, yBottom);
+                }
+                chartCtx.stroke();
+                chartCtx.restore();
+
+                // Kenar çizgisi (Opsiyonel)
+                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+                chartCtx.setLineDash([4, 4]);
+                chartCtx.beginPath();
+                chartCtx.moveTo(xEnd === xScale.right ? xStart : xEnd, yTop);
+                chartCtx.lineTo(xEnd === xScale.right ? xStart : xEnd, yBottom);
+                chartCtx.stroke();
+                chartCtx.setLineDash([]);
+            };
+
+            const drawGapLine = (x) => {
+                chartCtx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+                chartCtx.fillRect(x - 2, yTop, 4, yHeight);
+                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                chartCtx.lineWidth = 1;
+                chartCtx.setLineDash([4, 4]);
+                chartCtx.beginPath();
+                chartCtx.moveTo(x, yTop);
+                chartCtx.lineTo(x, yBottom);
+                chartCtx.stroke();
+                chartCtx.setLineDash([]);
+                chartCtx.font = 'bold 10px Inter, sans-serif';
+                chartCtx.fillStyle = isLight ? '#ef4444' : '#fca5a5';
+                chartCtx.textAlign = 'center';
+                chartCtx.fillText('⏻', x, yTop + 15);
+            };
+
+            // 1. Başlangıçtaki boşluk (Taralı Alan)
+            if (rangeStart && data[0].t - rangeStart > threshold) {
+                const firstCandleX = meta.data[0].x;
+                drawHatchedArea(xScale.left, firstCandleX);
+            }
+
+            // 2. Aralardaki boşluklar (İnce Çizgi)
+            for (let i = 0; i < data.length - 1; i++) {
+                if (data[i+1].t - data[i].t > threshold) {
+                    const p1 = meta.data[i];
+                    const p2 = meta.data[i+1];
+                    if (p1 && p2) drawGapLine((p1.x + p2.x) / 2);
+                }
+            }
+
+            // 3. Sondaki boşluk (Taralı Alan)
+            if (rangeEnd && rangeEnd - data[data.length - 1].t > threshold) {
+                const lastCandleX = meta.data[data.length - 1].x;
+                drawHatchedArea(lastCandleX, xScale.right);
+            }
+
+            chartCtx.restore();
+        }
+    };
+
     return new Chart(ctx, {
         type: 'candlestick',
         data: {
             datasets: [{
                 label: labelText,
                 data: candleData,
-                // Blokların (mumların) genişliğini sabitlemek için eklenen özellikler
-                barThickness: 'flex',
-                categoryPercentage: 0.9,
-                barPercentage: 0.9,
-                borderColor: {
-                    up: '#22c55e',
-                    down: '#ef4444',
-                    unchanged: '#94a3b8'
-                },
-                backgroundColor: {
-                    up: '#22c55e', // Mum içi doluluğu için opak renkler
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                barPercentage: 0.95,
+                categoryPercentage: 0.95,
+                color: {
+                    up: '#10b981',
                     down: '#ef4444',
                     unchanged: '#94a3b8'
                 }
             }]
         },
+        plugins: [gapHighlightPlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,
             onClick: (event, elements, chart) => {
                 if (isDrillDown) return;
-
                 let index = -1;
-
-                // 1. Standart yol: elements dizisinde eleman varsa kullan
                 if (elements.length > 0) {
                     index = elements[0].index;
                 } else {
-                    // 2. Finansal eklenti için alternatif: getElementsAtEventForMode dene
                     const nativeEvent = event.native || event;
                     const activeEls = chart.getElementsAtEventForMode(nativeEvent, 'nearest', { intersect: false }, true);
-                    if (activeEls.length > 0) {
-                        index = activeEls[0].index;
-                    } else {
-                        // 3. Son çare: X pozisyonuna göre en yakın mumu bul
-                        const rect = chart.canvas.getBoundingClientRect();
-                        const xPixel = (nativeEvent.clientX || nativeEvent.x) - rect.left;
-                        const xScale = chart.scales.x;
-                        const clickedTime = xScale.getValueForPixel(xPixel);
-
-                        if (clickedTime && candleData.length > 0) {
-                            let closestDist = Infinity;
-                            candleData.forEach((c, i) => {
-                                const dist = Math.abs(c.x - clickedTime);
-                                if (dist < closestDist) {
-                                    closestDist = dist;
-                                    index = i;
-                                }
-                            });
-                        }
-                    }
+                    if (activeEls.length > 0) index = activeEls[0].index;
                 }
 
                 if (index >= 0 && index < candleData.length) {
                     const candle = candleData[index];
-                    const startTime = new Date(candle.x).toISOString();
-                    
-                    let endTime;
-                    if (index < candleData.length - 1) {
-                        endTime = new Date(candleData[index + 1].x).toISOString();
-                    } else {
-                        endTime = new Date(candle.x + 60000).toISOString();
-                    }
-
+                    const startTime = new Date(candle.t).toISOString();
+                    let endTime = (index < candleData.length - 1) ? new Date(candleData[index + 1].t).toISOString() : new Date(candle.t + 60000).toISOString();
                     window.openBucketDetail(startTime, endTime, labelText, diskName);
                 }
             },
-            parsing: false, // Performans ve doğru eşleşme için parsing kapatılabilir
+            layout: { padding: { bottom: 20 } },
+            parsing: false,
             scales: {
                 x: {
-                    type: 'time',
-                    time: {
-                        // Birim zorlamasını kaldırdık, Chart.js aralığa göre (Gün/Ay/Yıl) otomatik seçecek
-                        displayFormats: {
-                            minute: 'HH:mm',
-                            hour: 'HH:mm',
-                            day: 'dd MMM',
-                            month: 'MMM yyyy'
-                        },
-                        tooltipFormat: 'dd MMM yyyy HH:mm'
-                    },
-                    ticks: { 
-                        color: textColor, 
+                    type: 'linear',
+                    offset: true,
+                    min: -0.5,
+                    max: candleData.length - 0.5,
+                    ticks: {
+                        color: textColor,
                         maxTicksLimit: 10,
-                        autoSkip: true
+                        callback: function(value) {
+                            const idx = Math.round(value);
+                            if (idx >= 0 && idx < labels.length) return labels[idx];
+                            return '';
+                        }
                     },
                     grid: { color: gridColor }
                 },
-                y: {
-                    min: 0,
-                    max: 100,
-                    ticks: { color: textColor },
-                    grid: { color: gridColor }
-                }
+                y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
             },
+            locale: 'tr-TR',
             plugins: {
                 zoom: isDrillDown ? {
                     limits: {
@@ -1067,29 +1188,51 @@ function createCandleChart(canvasId, labelText, candleData, diskName = null, isD
                             max: candleData.length > 0 ? candleData[candleData.length - 1].x : undefined
                         }
                     },
-                    zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
-                        mode: 'x',
-                    },
-                    pan: {
-                        enabled: true,
-                        mode: 'x',
-                        threshold: 5,
-                    }
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                    pan: { enabled: true, mode: 'x', threshold: 5 }
                 } : {},
                 legend: { labels: { color: textColor, font: { weight: 'bold' } } },
                 tooltip: {
                     callbacks: {
+                        title: function(tooltipItems) {
+                            if (!tooltipItems || tooltipItems.length === 0) return '';
+                            const idx = tooltipItems[0].dataIndex;
+                            return labels[idx];
+                        },
+                        afterTitle: function(tooltipItems) {
+                            if (!tooltipItems || tooltipItems.length === 0) return '';
+                            const idx = tooltipItems[0].dataIndex;
+                            if (idx + 1 >= candleData.length) return '';
+
+                            const t1 = candleData[idx].t;
+                            const t2 = candleData[idx + 1].t;
+                            const diffMs = t2 - t1;
+
+                            if (diffMs > 5 * 60 * 1000) {
+                                const formatDetailedDate = (ms) => new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                const totalMin = Math.floor(diffMs / 60000);
+                                
+                                return [
+                                    '─────────────────────',
+                                    '⏻ Sonraki Kesinti Tespit Edildi:',
+                                    '  Kesilme: ' + formatDetailedDate(t1),
+                                    '  Geri gelme: ' + formatDetailedDate(t2),
+                                    '  Süre: ~' + totalMin + ' dk'
+                                ].join('\n');
+                            }
+                            return '';
+                        },
                         label: function(context) {
                             const p = context.raw;
-                            if (!p || p.o == null) return 'Veri yok';
                             return [
                                 `Açılış: ${p.o.toFixed(1)}%`,
                                 `En Yüksek: ${p.h.toFixed(1)}%`,
                                 `En Düşük: ${p.l.toFixed(1)}%`,
                                 `Kapanış: ${p.c.toFixed(1)}%`
                             ];
+                        },
+                        labelColor: function(context) {
+                            return { borderColor: '#6366f1', backgroundColor: '#6366f1' };
                         }
                     }
                 }
@@ -1127,7 +1270,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
 
     const formatDate = (dateString) => {
         const d = new Date(dateString);
-        return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR');
+        return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour12: false });
     };
 
     // GAP INJECTION: null değerli (boşluk) noktaları istatistik hesaplamalarından dışla
@@ -1195,7 +1338,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
 
     let html = `
         <div class="row g-2 text-center text-md-start small">
-            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem.createdAt}')" title="Grafikte göster">
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem.createdAt}', 'min')" title="Grafikte göster">
                 <div class="p-2 border rounded border-success h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-success fw-bold"><i class="bi bi-arrow-down-circle-fill"></i> Minimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMin.toFixed(1)}${unit}</span><br>
@@ -1211,7 +1354,7 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
                 </div>
             </div>
 
-            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem.createdAt}')" title="Grafikte göster">
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem.createdAt}', 'max')" title="Grafikte göster">
                 <div class="p-2 border rounded border-danger h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-danger fw-bold"><i class="bi bi-arrow-up-circle-fill"></i> Maksimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMax.toFixed(1)}${unit}</span><br>
@@ -1230,11 +1373,10 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     ${top8.map(t => {
-            const timeStr = new Date(t.createdAt).toISOString();
             return `
                         <div class="border border-warning rounded p-2 d-flex flex-column align-items-center justify-content-center shadow-sm flex-grow-1" 
                              style="background: rgba(255, 193, 7, 0.05); min-width: 120px; cursor: pointer; transition: background 0.2s;"
-                             onclick="window.highlightChartPoint('${canvasId}', '${timeStr}')"
+                             onclick="window.highlightChartPoint('${canvasId}', '${t.createdAt}', 'peak')"
                              onmouseover="this.style.background='rgba(255, 193, 7, 0.2)'"
                              onmouseout="this.style.background='rgba(255, 193, 7, 0.05)'"
                              title="Grafikte göster">
@@ -1398,7 +1540,7 @@ window.renderAllComputersTable = () => {
     const paginatedComputers = filtered.slice(startIndex, startIndex + itemsPerPage);
 
     tbody.innerHTML = paginatedComputers.map(c => {
-        const lastSeen = new Date(c.lastSeen).toLocaleString();
+        const lastSeen = new Date(c.lastSeen).toLocaleString('tr-TR', { hour12: false });
         const tags = (c.tags || []).map(t => `<span class="pill" style="font-size:0.65rem; margin-right:3px;">${t}</span>`).join("");
 
         let statusBadge = "";
@@ -1507,39 +1649,69 @@ function renderPaginationControls(containerId, currentPage, totalPages, changeFn
     html += '</ul>';
     container.innerHTML = html;
 }
-window.highlightChartPoint = function (canvasId, timeStr) {
-    if (!canvasId) return;
+window.highlightChartPoint = function (canvasId, timeStr, highlightType = null) {
+    if (!canvasId || !timeStr) return;
 
     let chartInstance = null;
+    let diskName = null;
     if (canvasId === 'cpuChart') chartInstance = historyCharts.cpu;
     else if (canvasId === 'ramChart') chartInstance = historyCharts.ram;
     else {
-        const diskName = Object.keys(historyCharts.disks).find(key => `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}` === canvasId);
+        diskName = Object.keys(historyCharts.disks).find(key => `diskChart_${key.replace(/[^a-zA-Z0-9]/g, '')}` === canvasId);
         if (diskName) chartInstance = historyCharts.disks[diskName];
     }
 
     if (chartInstance) {
-        const targetTime = currentHistoryMode === 'candle' ? new Date(timeStr).getTime() : formatChartDate(timeStr);
-        const dataIndex = chartInstance.data.labels 
-            ? chartInstance.data.labels.findIndex(label => label === targetTime)
-            : chartInstance.data.datasets[0].data.findIndex(d => d.x === targetTime);
+        // Tip bilgisini sakla (Özel tooltip başlıkları için)
+        chartInstance._highlightType = highlightType;
+
+        let dataIndex = -1;
+        const targetMs = new Date(timeStr).getTime();
+
+        if (currentHistoryMode === 'candle') {
+            dataIndex = chartInstance.data.datasets[0].data.findIndex(d => Math.abs(d.x - targetMs) < 1000);
+        } else {
+            const rawDataSource = diskName 
+                ? (currentHistoryData.disks || []).filter(d => d.diskName === diskName)
+                : (currentHistoryData.cpuRam || []);
+            
+            dataIndex = rawDataSource.findIndex(m => Math.abs(new Date(m.createdAt).getTime() - targetMs) < 1000);
+        }
 
         if (dataIndex !== -1) {
-            // Candlestick modunda 0. dataset, Band modunda 2. dataset (Avg) hedef alınır
-            const targetDsIndex = currentHistoryMode === 'candle' ? 0 : 2;
+            // Eğer manuel olarak mouse ile üzerine gelinirse tipi temizle (Normal tooltip'e dönmesi için)
+            if (!chartInstance._hasHoverListener) {
+                const originalOnHover = chartInstance.options.onHover;
+                chartInstance.options.onHover = (event, elements) => {
+                    if (event.type === 'mousemove') {
+                        chartInstance._highlightType = null;
+                    }
+                    if (typeof originalOnHover === 'function') originalOnHover(event, elements);
+                };
+                chartInstance._hasHoverListener = true;
+            }
+
+            const targetDsIndex = currentHistoryMode === 'candle' 
+                ? 0 
+                : (highlightType === 'max' ? 0 : (highlightType === 'min' ? 1 : 2));
+
             const meta = chartInstance.getDatasetMeta(targetDsIndex);
-            const point = meta.data[dataIndex];
+            
+            if (meta && meta.data && meta.data[dataIndex]) {
+                const point = meta.data[dataIndex];
 
-            chartInstance.tooltip.setActiveElements([
-                { datasetIndex: targetDsIndex, index: dataIndex }
-            ], { x: point.x, y: point.y });
+                chartInstance.tooltip.setActiveElements([
+                    { datasetIndex: targetDsIndex, index: dataIndex }
+                ], { x: point.x, y: point.y });
 
-            chartInstance.setActiveElements([
-                { datasetIndex: targetDsIndex, index: dataIndex }
-            ]);
+                chartInstance.setActiveElements([
+                    { datasetIndex: targetDsIndex, index: dataIndex }
+                ]);
 
-            chartInstance.update();
-            document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                chartInstance.update();
+                const el = document.getElementById(canvasId);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
     }
 };
@@ -1595,6 +1767,16 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
         return;
     }
 
+    if (bucketDetailChart) {
+        bucketDetailChart.destroy();
+        bucketDetailChart = null;
+    }
+    const canvas = document.getElementById('bucketDetailChart');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
     // Modal nesnesini al veya oluştur
     const modalEl = document.getElementById('bucketDetailModal');
     let modal = bootstrap.Modal.getInstance(modalEl);
@@ -1606,8 +1788,6 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
     
     const summaryContainer = document.getElementById('bucketDetailSummary');
     summaryContainer.innerHTML = '<div class="text-center w-100 py-3"><div class="spinner-border text-info" role="status"></div><p class="mt-2 small text-muted">Detaylı veriler getiriliyor...</p></div>';
-
-    if (bucketDetailChart) bucketDetailChart.destroy();
 
     try {
         const response = await api.get(`/api/Computer/${computerId}/metrics-history?start=${startTime}&end=${endTime}&maxPoints=${chartSettings.detailMaxPoints}`);
@@ -1630,42 +1810,23 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
 
         // Mevcut grafik moduna göre detay grafiği oluştur
         if (currentHistoryMode === 'candle') {
-            // Candlestick modu: OHLC verilerini hazırla
-            let candleData;
-            if (diskName) {
-                candleData = detailData.filter(d => d.usedOpen != null).map(d => ({
-                    x: new Date(d.createdAt).getTime(),
-                    o: d.usedOpen,
-                    h: d.usedMax,
-                    l: d.usedMin,
-                    c: d.usedClose
-                }));
-            } else {
-                const prefix = labelText.includes('CPU') ? 'cpu' : 'ram';
-                candleData = detailData.filter(m => m[prefix + 'Open'] != null).map(m => ({
-                    x: new Date(m.createdAt).getTime(),
-                    o: m[prefix + 'Open'],
-                    h: m[prefix + 'Max'],
-                    l: m[prefix + 'Min'],
-                    c: m[prefix + 'Close']
-                }));
-            }
+            const prefix = diskName ? 'used' : (valueKey === 'cpuAvg' ? 'cpu' : 'ram');
+            const dataObj = prepareCandleData(detailData, prefix);
 
-            if (candleData.length === 0) {
+            if (dataObj.candles.length === 0) {
                 summaryContainer.innerHTML = '<div class="alert alert-warning w-100">Bu aralıkta geçerli detaylı veri bulunamadı.</div>';
                 return;
             }
 
-            bucketDetailChart = createCandleChart('bucketDetailChart', labelText, candleData, diskName, true);
-
-            // OHLC özet istatistiklerini hesapla
+            // OHLC özet istatistiklerini hesapla (Sadece geçerli veri noktalarını dahil et)
+            const validCandles = dataObj.candles.filter(c => c.o !== null);
             let sumClose = 0, peakHigh = -1, lowestLow = 999;
-            candleData.forEach(c => {
-                sumClose += c.c;
+            validCandles.forEach(c => {
+                sumClose += (c.c || 0);
                 if (c.h > peakHigh) peakHigh = c.h;
                 if (c.l < lowestLow) lowestLow = c.l;
             });
-            const avgClose = sumClose / candleData.length;
+            const avgClose = validCandles.length > 0 ? sumClose / validCandles.length : 0;
 
             summaryContainer.innerHTML = `
                 <div class="col-md-3">
@@ -1677,30 +1838,37 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
                 <div class="col-md-3">
                     <div class="p-3 border rounded border-danger text-center" style="background: rgba(255,255,255,0.05);">
                         <div class="text-danger small fw-bold mb-1">EN YÜKSEK (HIGH)</div>
-                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${peakHigh.toFixed(2)}%</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${validCandles.length > 0 ? peakHigh.toFixed(2) : '0.00'}%</div>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 border rounded border-success text-center" style="background: rgba(255,255,255,0.05);">
                         <div class="text-success small fw-bold mb-1">EN DÜŞÜK (LOW)</div>
-                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${lowestLow.toFixed(2)}%</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${validCandles.length > 0 ? lowestLow.toFixed(2) : '0.00'}%</div>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 border rounded border-warning text-center" style="background: rgba(255,255,255,0.05);">
                         <div class="text-warning small fw-bold mb-1">MUM SAYISI</div>
-                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${candleData.length} Adet</div>
+                        <div class="fs-4 fw-bold" style="color: var(--text-main);">${validCandles.length} / ${dataObj.candles.length}</div>
                     </div>
                 </div>
             `;
+
+            // Grafik çizimini küçük bir gecikmeyle yap (Modal animasyonu/yerleşimi tamamlanması için)
+            setTimeout(() => {
+                if (bucketDetailChart) bucketDetailChart.destroy();
+                bucketDetailChart = createCandleChart('bucketDetailChart', labelText, dataObj.candles, dataObj.labels, diskName, true, new Date(startTime).getTime(), new Date(endTime).getTime());
+                bucketDetailChart.resize();
+                bucketDetailChart.update();
+            }, 50);
+
         } else {
             // Band (Area) modu: Mevcut davranış
             const labels = detailData.map(m => formatChartDate(m.createdAt));
             const values = detailData.map(m => m[valueKey]);
             const mins = detailData.map(m => m[valueKey.replace('Avg', 'Min')]);
             const maxs = detailData.map(m => m[valueKey.replace('Avg', 'Max')]);
-
-            bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
 
             // Gap injection: null değerleri istatistiklerden dışla
             const validValues = values.filter(v => v != null);
@@ -1734,6 +1902,15 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
                     </div>
                 </div>
             `;
+
+            // Grafik çizimini küçük bir gecikmeyle yap
+            setTimeout(() => {
+                if (bucketDetailChart) bucketDetailChart.destroy();
+                bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true);
+                bucketDetailChart.resize();
+                bucketDetailChart.update();
+            }, 50);
+
         }
 
     } catch (e) {
