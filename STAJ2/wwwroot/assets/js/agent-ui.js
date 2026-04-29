@@ -699,6 +699,24 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
             });
 
             chartCtx.restore();
+        },
+        afterDraw(chart) {
+            if (chart._averageLineValue !== undefined) {
+                const yValue = chart._averageLineValue;
+                const yScale = chart.scales.y;
+                const yPos = yScale.getPixelForValue(yValue);
+                const ctx = chart.ctx;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash([10, 5]);
+                ctx.strokeStyle = '#0dcaf0';
+                ctx.lineWidth = 2;
+                ctx.moveTo(chart.chartArea.left, yPos);
+                ctx.lineTo(chart.chartArea.right, yPos);
+                ctx.stroke();
+                ctx.restore();
+            }
         }
     };
 
@@ -776,7 +794,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
             plugins: {
                 zoom: isDrillDown ? {
                     limits: {
-                        x: { min: 0, max: labels.length - 1 }
+                        x: { min: -0.5, max: labels.length - 0.5, minRange: 1 }
                     },
                     zoom: {
                         wheel: { enabled: true },
@@ -790,6 +808,20 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     }
                 } : {},
                 legend: {
+                    onClick: function(e, legendItem, legend) {
+                        const chart = legend.chart;
+                        const isVisible = chart.isDatasetVisible(legendItem.datasetIndex);
+                        if (isVisible) {
+                            chart.setDatasetVisibility(0, false);
+                            chart.setDatasetVisibility(1, false);
+                            chart.setDatasetVisibility(2, false);
+                        } else {
+                            chart.setDatasetVisibility(0, true);
+                            chart.setDatasetVisibility(1, true);
+                            chart.setDatasetVisibility(2, true);
+                        }
+                        chart.update('none');
+                    },
                     labels: {
                         color: textColor,
                         font: { weight: 'bold' },
@@ -799,6 +831,9 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     }
                 },
                 tooltip: {
+                    filter: function(tooltipItem) {
+                        return tooltipItem.chart.isDatasetVisible(tooltipItem.datasetIndex);
+                    },
                     mode: 'index',
                     intersect: false,
                     callbacks: {
@@ -1116,6 +1151,24 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
             }
 
             chartCtx.restore();
+        },
+        afterDraw(chart) {
+            if (chart._averageLineValue !== undefined) {
+                const yValue = chart._averageLineValue;
+                const yScale = chart.scales.y;
+                const yPos = yScale.getPixelForValue(yValue);
+                const ctx = chart.ctx;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash([10, 5]);
+                ctx.strokeStyle = '#0dcaf0';
+                ctx.lineWidth = 2;
+                ctx.moveTo(chart.chartArea.left, yPos);
+                ctx.lineTo(chart.chartArea.right, yPos);
+                ctx.stroke();
+                ctx.restore();
+            }
         }
     };
 
@@ -1184,23 +1237,45 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 zoom: isDrillDown ? {
                     limits: {
                         x: {
-                            min: candleData.length > 0 ? candleData[0].x : undefined,
-                            max: candleData.length > 0 ? candleData[candleData.length - 1].x : undefined
+                            min: candleData.length > 0 ? candleData[0].x - 0.5 : undefined,
+                            max: candleData.length > 0 ? candleData[candleData.length - 1].x + 0.5 : undefined,
+                            minRange: 1
                         }
                     },
                     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
                     pan: { enabled: true, mode: 'x', threshold: 5 }
                 } : {},
-                legend: { labels: { color: textColor, font: { weight: 'bold' } } },
+                legend: {
+                    onClick: function(e, legendItem, legend) {
+                        const chart = legend.chart;
+                        const index = legendItem.datasetIndex;
+                        chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
+                        chart.update('none');
+                    },
+                    labels: { color: textColor, font: { weight: 'bold' } }
+                },
                 tooltip: {
+                    filter: function(tooltipItem) {
+                        return tooltipItem.chart.isDatasetVisible(tooltipItem.datasetIndex);
+                    },
                     callbacks: {
                         title: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
                             const idx = tooltipItems[0].dataIndex;
+                            const chart = tooltipItems[0].chart;
+                            const p = chart.data.datasets[0].data[idx];
+                            
+                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${p.h.toFixed(1)}%`;
+                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${p.l.toFixed(1)}%`;
+                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${p.h.toFixed(1)}%`;
+
                             return labels[idx];
                         },
                         afterTitle: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
+                            const chart = tooltipItems[0].chart;
+                            if (chart._highlightType) return '';
+
                             const idx = tooltipItems[0].dataIndex;
                             if (idx + 1 >= candleData.length) return '';
 
@@ -1223,6 +1298,9 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             return '';
                         },
                         label: function(context) {
+                            const chart = context.chart;
+                            if (chart._highlightType) return null;
+
                             const p = context.raw;
                             return [
                                 `Açılış: ${p.o.toFixed(1)}%`,
@@ -1669,7 +1747,22 @@ window.highlightChartPoint = function (canvasId, timeStr, highlightType = null) 
         const targetMs = new Date(timeStr).getTime();
 
         if (currentHistoryMode === 'candle') {
-            dataIndex = chartInstance.data.datasets[0].data.findIndex(d => Math.abs(d.x - targetMs) < 1000);
+            // Mumlar zaman aralığı kapsayabileceği için targetMs'e en yakın veya onu kapsayan mumu bul
+            dataIndex = chartInstance.data.datasets[0].data.findIndex((d, i, arr) => {
+                const nextT = arr[i + 1] ? arr[i + 1].t : Infinity;
+                return targetMs >= d.t && targetMs < nextT;
+            });
+            // Eğer hala bulunamadıysa (targetMs başlangıçtan önceyse vb.) en yakın olanı al
+            if (dataIndex === -1) {
+                let minDiff = Infinity;
+                chartInstance.data.datasets[0].data.forEach((d, i) => {
+                    const diff = Math.abs(d.t - targetMs);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        dataIndex = i;
+                    }
+                });
+            }
         } else {
             const rawDataSource = diskName 
                 ? (currentHistoryData.disks || []).filter(d => d.diskName === diskName)
@@ -1727,24 +1820,21 @@ window.toggleAverageLine = function (canvasId, avgValue) {
 
     if (!chartInstance) return;
 
+    // Eğer zaten bu değer varsa veya herhangi bir ortalama çizgisi varsa kaldır
     const avgDatasetIndex = chartInstance.data.datasets.findIndex(ds => ds.label === 'Ortalama Değer');
 
     if (avgDatasetIndex > -1) {
         chartInstance.data.datasets.splice(avgDatasetIndex, 1);
+        delete chartInstance._averageLineValue;
     } else {
-        const labelsCount = chartInstance.data.labels ? chartInstance.data.labels.length : chartInstance.data.datasets[0].data.length;
-        let avgLineData;
-        
-        if (currentHistoryMode === 'candle') {
-            // Candlestick modunda X ekseni zaman (time) olduğu için her noktaya karşılık gelen zamanı almalıyız
-            avgLineData = chartInstance.data.datasets[0].data.map(p => ({ x: p.x, y: avgValue }));
-        } else {
-            avgLineData = Array(labelsCount).fill(avgValue);
-        }
+        // Değeri plugin kullanımı için sakla
+        chartInstance._averageLineValue = avgValue;
 
+        // Legend'da görünmesi için içi boş ama ayarları yapılmış bir dataset ekliyoruz
         chartInstance.data.datasets.push({
+            type: 'line',
             label: 'Ortalama Değer',
-            data: avgLineData,
+            data: [], // Veri yok, plugin çizecek (baştan sona gitmesi için)
             borderColor: '#0dcaf0',
             borderWidth: 2,
             borderDash: [10, 5],
@@ -1753,6 +1843,7 @@ window.toggleAverageLine = function (canvasId, avgValue) {
             order: 0
         });
     }
+
     chartInstance.update();
     document.getElementById(canvasId).scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
