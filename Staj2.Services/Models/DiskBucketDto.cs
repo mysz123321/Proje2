@@ -10,7 +10,9 @@ public class DiskBucketDto
     public DateTime? MaxCreatedAt { get; set; }
     public double? UsedAvg { get; set; }
     public double? UsedMin { get; set; }
+    public DateTime? UsedMinTime { get; set; }
     public double? UsedMax { get; set; }
+    public DateTime? UsedMaxTime { get; set; }
     public double? UsedOpen { get; set; }
     public double? UsedClose { get; set; }
     public string DiskName { get; set; } = string.Empty;

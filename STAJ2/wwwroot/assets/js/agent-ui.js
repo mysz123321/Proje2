@@ -493,8 +493,14 @@ function renderBaseCharts(cpuRamData) {
         const ramMax = cpuRamData.map(m => m.ramMax != null ? m.ramMax : null);
 
         const tEndData = cpuRamData.map(m => getBucketEndTime(m));
-        historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null, false, tEndData);
-        historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null, false, tEndData);
+        const rawTimes = cpuRamData.map(m => m.createdAt ? new Date(m.createdAt).getTime() : null);
+        const cpuMinTimes = cpuRamData.map(m => m.cpuMinTime ? new Date(m.cpuMinTime).getTime() : null);
+        const cpuMaxTimes = cpuRamData.map(m => m.cpuMaxTime ? new Date(m.cpuMaxTime).getTime() : null);
+        const ramMinTimes = cpuRamData.map(m => m.ramMinTime ? new Date(m.ramMinTime).getTime() : null);
+        const ramMaxTimes = cpuRamData.map(m => m.ramMaxTime ? new Date(m.ramMaxTime).getTime() : null);
+
+        historyCharts.cpu = createBandChart('cpuChart', 'CPU Kullanımı (%)', labels, cpuAvg, cpuMin, cpuMax, '#38bdf8', null, false, tEndData, rawTimes, cpuMinTimes, cpuMaxTimes);
+        historyCharts.ram = createBandChart('ramChart', 'RAM Kullanımı (%)', labels, ramAvg, ramMin, ramMax, '#facc15', null, false, tEndData, rawTimes, ramMinTimes, ramMaxTimes);
     }
 
     // MİNİ RAPOR TETİKLEYİCİLERİ
@@ -590,7 +596,12 @@ function toggleDiskChart(isVisible, diskName, chartId) {
             const usedAvg = diskData.map(d => d.usedAvg != null ? d.usedAvg : null);
             const usedMin = diskData.map(d => d.usedMin != null ? d.usedMin : null);
             const usedMax = diskData.map(d => d.usedMax != null ? d.usedMax : null);
-            historyCharts.disks[diskName] = createBandChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, usedAvg, usedMin, usedMax, '#10b981', diskName);
+            const tEndData = diskData.map(m => getBucketEndTime(m));
+            const rawTimes = diskData.map(m => m.createdAt ? new Date(m.createdAt).getTime() : null);
+            const usedMinTimes = diskData.map(m => m.usedMinTime ? new Date(m.usedMinTime).getTime() : null);
+            const usedMaxTimes = diskData.map(m => m.usedMaxTime ? new Date(m.usedMaxTime).getTime() : null);
+
+            historyCharts.disks[diskName] = createBandChart(chartId, `${diskName} Doluluk Oranı (%)`, labels, usedAvg, usedMin, usedMax, '#10b981', diskName, false, tEndData, rawTimes, usedMinTimes, usedMaxTimes);
         }
 
         generateMiniReport(diskData, 'usedAvg', `report_${chartId}`, '%', chartId);
@@ -617,7 +628,7 @@ function getBucketEndTime(m) {
     return new Date(m.createdAt || m.t || 0).getTime();
 }
 
-function createBandChart(canvasId, labelText, labels, avgData, minData, maxData, colorHex, diskName = null, isDrillDown = false, tEndData = null) {
+function createBandChart(canvasId, labelText, labels, avgData, minData, maxData, colorHex, diskName = null, isDrillDown = false, tEndData = null, rawTimes = null, minTimeData = null, maxTimeData = null) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
@@ -782,14 +793,16 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
             responsive: true,
             maintainAspectRatio: false,
             onClick: (event, elements) => {
-                // Detay grafiği ise tekrar drill-down yapma
-                if (isDrillDown) return;
-
                 if (elements.length > 0) {
                     const index = elements[0].index;
                     let startTime, endTime;
 
-                    if (diskName) {
+                    if (isDrillDown && rawTimes) {
+                        if (avgData[index] == null) return;
+                        startTime = new Date(rawTimes[index]).toISOString();
+                        endTime = (index < rawTimes.length - 1) ? new Date(rawTimes[index + 1]).toISOString() : new Date(new Date(rawTimes[index]).getTime() + 60000).toISOString();
+                        if (new Date(endTime).getTime() - new Date(startTime).getTime() <= 60000) return;
+                    } else if (diskName) {
                         const dData = currentHistoryData.disks.filter(d => d.diskName === diskName);
                         // Gap noktasına (null değerli) tıklanmışsa drill-down açma
                         if (dData[index] && dData[index].usedAvg == null) return;
@@ -865,13 +878,20 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                             
                             const chart = tooltipItems[0].chart;
                             const val = tooltipItems[0].parsed.y !== undefined ? tooltipItems[0].parsed.y.toFixed(2) + '%' : '';
+                            const formatDetailedDate = (ms) => ms ? new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
                             
-                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${val}`;
-                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${val}`;
-                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${val}`;
+                            const highlightTime = chart._highlightTime;
+                            
+                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${val} - ${formatDetailedDate(highlightTime || (maxTimeData ? maxTimeData[idx] : (rawTimes ? rawTimes[idx] : null)))}`;
+                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${val} - ${formatDetailedDate(highlightTime || (minTimeData ? minTimeData[idx] : (rawTimes ? rawTimes[idx] : null)))}`;
+                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${val} - ${formatDetailedDate(highlightTime || (maxTimeData ? maxTimeData[idx] : (rawTimes ? rawTimes[idx] : null)))}`;
 
-                            const timeLabel = labels[idx] || '';
-                            return timeLabel;
+                            const tStartStr = formatDetailedDate(rawTimes ? rawTimes[idx] : null) || labels[idx];
+                            const tEndMs = tEndData && tEndData[idx] ? tEndData[idx] : null;
+                            const rTimeMs = rawTimes ? rawTimes[idx] : null;
+                            const tEndStr = (tEndMs && rTimeMs && tEndMs > rTimeMs && tEndMs - rTimeMs > 60000) ? formatDetailedDate(tEndMs) : tStartStr;
+
+                            return tStartStr === tEndStr ? tStartStr : tStartStr + ' ile ' + tEndStr + ' arası';
                         },
                         afterTitle: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
@@ -957,15 +977,20 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                             }
 
                             const chart = context.chart;
-                            // Eğer butonlarla (Max/Min/Zirve) tetiklenmişse başlıkta zaten değer ve açıklama yazdığı için etiket basmaya gerek yok
                             if (chart._highlightType) return null;
 
-                            let label = context.dataset.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed.y !== null && context.parsed.y !== undefined) {
-                                label += context.parsed.y.toFixed(2) + '%';
+                            const val = context.parsed.y !== null && context.parsed.y !== undefined ? context.parsed.y.toFixed(2) + '%' : '';
+                            const formatDetailedDate = (ms) => ms ? new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+
+                            if (context.datasetIndex === 0) {
+                                const tStr = formatDetailedDate(maxTimeData ? maxTimeData[idx] : (rawTimes ? rawTimes[idx] : null)) || 'Bilinmiyor';
+                                return `En Yüksek: ${val} - ${tStr}`;
+                            } else if (context.datasetIndex === 1) {
+                                const tStr = formatDetailedDate(minTimeData ? minTimeData[idx] : (rawTimes ? rawTimes[idx] : null)) || 'Bilinmiyor';
+                                return `En Düşük: ${val} - ${tStr}`;
+                            } else {
+                                return `Ortalama: ${val}`;
                             }
-                            return label;
                         },
                         labelColor: function(context) {
                             const idx = context.dataIndex;
@@ -1053,13 +1078,26 @@ function prepareCandleData(rawData, prefix) {
             const d2 = (i + 1 < validData.length) ? validData[i + 1] : null;
 
             if (d2) {
+                const d1Max = d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg;
+                const d2Max = d2[prefix + 'Max'] ?? d2[prefix + 'Avg'] ?? d2.usedMax ?? d2.usedAvg;
+                const d1Min = d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg;
+                const d2Min = d2[prefix + 'Min'] ?? d2[prefix + 'Avg'] ?? d2.usedMin ?? d2.usedAvg;
+                
+                const hVal = Math.max(d1Max, d2Max);
+                const lVal = Math.min(d1Min, d2Min);
+                
+                const hTimeStr = (hVal === d1Max) ? (d1[prefix + 'MaxTime'] || d1.usedMaxTime || d1.createdAt) : (d2[prefix + 'MaxTime'] || d2.usedMaxTime || d2.createdAt);
+                const lTimeStr = (lVal === d1Min) ? (d1[prefix + 'MinTime'] || d1.usedMinTime || d1.createdAt) : (d2[prefix + 'MinTime'] || d2.usedMinTime || d2.createdAt);
+
                 candles.push({
                     x: (d1.rawIndex + d2.rawIndex) / 2, // Tam aralarına yerleştir
                     t: new Date(d1.createdAt).getTime(),
                     tEnd: getBucketEndTime(d2),
                     o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
-                    h: Math.max(d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg, d2[prefix + 'Max'] ?? d2[prefix + 'Avg'] ?? d2.usedMax ?? d2.usedAvg),
-                    l: Math.min(d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg, d2[prefix + 'Min'] ?? d2[prefix + 'Avg'] ?? d2.usedMin ?? d2.usedAvg),
+                    h: hVal,
+                    hTime: new Date(hTimeStr).getTime(),
+                    l: lVal,
+                    lTime: new Date(lTimeStr).getTime(),
                     c: d2[prefix + 'Close'] ?? d2[prefix + 'Avg'] ?? d2.usedClose ?? d2.usedAvg
                 });
             } else {
@@ -1069,7 +1107,9 @@ function prepareCandleData(rawData, prefix) {
                     tEnd: getBucketEndTime(d1),
                     o: d1[prefix + 'Open'] ?? d1[prefix + 'Avg'] ?? d1.usedOpen ?? d1.usedAvg,
                     h: d1[prefix + 'Max'] ?? d1[prefix + 'Avg'] ?? d1.usedMax ?? d1.usedAvg,
+                    hTime: new Date(d1[prefix + 'MaxTime'] || d1.usedMaxTime || d1.createdAt).getTime(),
                     l: d1[prefix + 'Min'] ?? d1[prefix + 'Avg'] ?? d1.usedMin ?? d1.usedAvg,
+                    lTime: new Date(d1[prefix + 'MinTime'] || d1.usedMinTime || d1.createdAt).getTime(),
                     c: d1[prefix + 'Close'] ?? d1[prefix + 'Avg'] ?? d1.usedClose ?? d1.usedAvg
                 });
             }
@@ -1082,7 +1122,9 @@ function prepareCandleData(rawData, prefix) {
                 tEnd: getBucketEndTime(m),
                 o: m[prefix + 'Open'] ?? m.usedOpen ?? m[prefix + 'Avg'] ?? m.usedAvg,
                 h: m[prefix + 'Max'] ?? m.usedMax ?? m[prefix + 'Avg'] ?? m.usedAvg,
+                hTime: new Date(m[prefix + 'MaxTime'] || m.usedMaxTime || m.createdAt).getTime(),
                 l: m[prefix + 'Min'] ?? m.usedMin ?? m[prefix + 'Avg'] ?? m.usedAvg,
+                lTime: new Date(m[prefix + 'MinTime'] || m.usedMinTime || m.createdAt).getTime(),
                 c: m[prefix + 'Close'] ?? m.usedClose ?? m[prefix + 'Avg'] ?? m.usedAvg
             });
         });
@@ -1242,7 +1284,6 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
             responsive: true,
             maintainAspectRatio: false,
             onClick: (event, elements, chart) => {
-                if (isDrillDown) return;
                 let index = -1;
                 if (elements.length > 0) {
                     index = elements[0].index;
@@ -1254,11 +1295,14 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
 
                 if (index >= 0 && index < candleData.length) {
                     const candle = candleData[index];
-                    const startTime = new Date(candle.t).toISOString();
-                    // Issue Fix: Son veri tıklandığında yeterli aralığı sağlamak için tEnd veya gapThreshold kullan
+                    const startTimeMs = candle.t;
                     let endTimeMs = (index < candleData.length - 1) ? candleData[index + 1].t : (candle.tEnd && candle.tEnd > candle.t ? candle.tEnd : candle.t + Math.max(gapThreshold, 3600000));
-                    const endTime = new Date(endTimeMs).toISOString();
-                    window.openBucketDetail(startTime, endTime, labelText, diskName);
+                    
+                    if (isDrillDown) {
+                        if (endTimeMs - startTimeMs <= 60000) return; 
+                    }
+
+                    window.openBucketDetail(new Date(startTimeMs).toISOString(), new Date(endTimeMs).toISOString(), labelText, diskName);
                 }
             },
             layout: { padding: { bottom: 20 } },
@@ -1315,12 +1359,21 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             const chart = tooltipItems[0].chart;
                             const p = chart.data.datasets[0].data[idx];
                             
-                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${p.h.toFixed(1)}%`;
-                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${p.l.toFixed(1)}%`;
-                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${p.h.toFixed(1)}%`;
+                            const formatDetailedDate = (ms) => new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            let timeStr = formatDetailedDate(p.t);
+                            if (p.tEnd && p.tEnd > p.t && p.tEnd - p.t > 60000) {
+                                timeStr += ' - ' + formatDetailedDate(p.tEnd);
+                            }
 
-                            const labelIdx = Math.round(p.x);
-                            return labels[labelIdx] || labels[idx] || '';
+                            const highlightTime = chart._highlightTime;
+                            const hTimeStr = formatDetailedDate(highlightTime || p.hTime || p.t);
+                            const lTimeStr = formatDetailedDate(highlightTime || p.lTime || p.t);
+
+                            if (chart._highlightType === 'max') return `🚩 Maksimum Noktası: ${p.h.toFixed(1)}% - ${hTimeStr}`;
+                            if (chart._highlightType === 'min') return `⬇ Minimum Noktası: ${p.l.toFixed(1)}% - ${lTimeStr}`;
+                            if (chart._highlightType === 'peak') return `⚠ Zirve Noktası: ${p.h.toFixed(1)}% - ${hTimeStr}`;
+
+                            return timeStr;
                         },
                         afterTitle: function(tooltipItems) {
                             if (!tooltipItems || tooltipItems.length === 0) return '';
@@ -1367,11 +1420,18 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                             if (chart._highlightType) return null;
 
                             const p = context.raw;
+                            const formatDetailedDate = (ms) => ms ? new Date(ms).toLocaleString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+                            let timeStr = formatDetailedDate(p.t);
+                            let timeEndStr = (p.tEnd && p.tEnd > p.t && p.tEnd - p.t > 60000) ? formatDetailedDate(p.tEnd) : timeStr;
+
+                            let maxTimeStr = p.hTime ? formatDetailedDate(p.hTime) : (timeStr === timeEndStr ? timeStr : timeStr + ' ile ' + timeEndStr + ' arası');
+                            let minTimeStr = p.lTime ? formatDetailedDate(p.lTime) : (timeStr === timeEndStr ? timeStr : timeStr + ' ile ' + timeEndStr + ' arası');
+
                             return [
-                                `Açılış: ${p.o.toFixed(1)}%`,
-                                `En Yüksek: ${p.h.toFixed(1)}%`,
-                                `En Düşük: ${p.l.toFixed(1)}%`,
-                                `Kapanış: ${p.c.toFixed(1)}%`
+                                `Açılış: ${p.o.toFixed(1)}% - ${timeStr}`,
+                                `En Yüksek: ${p.h.toFixed(1)}% - ${maxTimeStr}`,
+                                `En Düşük: ${p.l.toFixed(1)}% - ${minTimeStr}`,
+                                `Kapanış: ${p.c.toFixed(1)}% - ${timeEndStr}`
                             ];
                         },
                         labelColor: function(context) {
@@ -1459,8 +1519,15 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
 
     let avg = sum / validDataList.length;
 
-    let aboveAvgList = validDataList.filter(item => item[valueKey] > avg && item.createdAt !== maxItem.createdAt);
-    aboveAvgList.sort((a, b) => b[valueKey] - a[valueKey]);
+    let aboveAvgList = validDataList.filter(item => {
+        let itemMax = (item[maxKey] != null) ? item[maxKey] : item[valueKey];
+        return itemMax > avg && item.createdAt !== maxItem.createdAt;
+    });
+    aboveAvgList.sort((a, b) => {
+        let aMax = (a[maxKey] != null) ? a[maxKey] : a[valueKey];
+        let bMax = (b[maxKey] != null) ? b[maxKey] : b[valueKey];
+        return bMax - aMax;
+    });
 
     // Zirve Noktaları Filtreleme (En az 5 dk aralıklı top 8)
     let top8 = [];
@@ -1481,11 +1548,11 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
 
     let html = `
         <div class="row g-2 text-center text-md-start small">
-            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem.createdAt}', 'min')" title="Grafikte göster">
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${minItem[minKey + 'Time'] || minItem.createdAt}', 'min')" title="Grafikte göster">
                 <div class="p-2 border rounded border-success h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-success fw-bold"><i class="bi bi-arrow-down-circle-fill"></i> Minimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMin.toFixed(1)}${unit}</span><br>
-                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(minItem.createdAt)}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(minItem[minKey + 'Time'] || minItem.createdAt)}</span>
                 </div>
             </div>
 
@@ -1497,11 +1564,11 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
                 </div>
             </div>
 
-            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem.createdAt}', 'max')" title="Grafikte göster">
+            <div class="col-md-4" style="cursor: pointer;" onclick="window.highlightChartPoint('${canvasId}', '${maxItem[maxKey + 'Time'] || maxItem.createdAt}', 'max')" title="Grafikte göster">
                 <div class="p-2 border rounded border-danger h-100 transition-all" style="background: rgba(255, 255, 255, 0.05);">
                     <div class="text-danger fw-bold"><i class="bi bi-arrow-up-circle-fill"></i> Maksimum</div>
                     <span class="fs-5 fw-bold" style="color: var(--text-main);">${displayMax.toFixed(1)}${unit}</span><br>
-                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(maxItem.createdAt)}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.9;">${formatDate(maxItem[maxKey + 'Time'] || maxItem.createdAt)}</span>
                 </div>
             </div>
         </div>
@@ -1519,12 +1586,12 @@ function generateMiniReport(dataList, valueKey, containerId, unit = '%', canvasI
             return `
                         <div class="border border-warning rounded p-2 d-flex flex-column align-items-center justify-content-center shadow-sm flex-grow-1" 
                              style="background: rgba(255, 193, 7, 0.05); min-width: 120px; cursor: pointer; transition: background 0.2s;"
-                             onclick="window.highlightChartPoint('${canvasId}', '${t.createdAt}', 'peak')"
+                             onclick="window.highlightChartPoint('${canvasId}', '${t[maxKey + 'Time'] || t.createdAt}', 'peak')"
                              onmouseover="this.style.background='rgba(255, 193, 7, 0.2)'"
                              onmouseout="this.style.background='rgba(255, 193, 7, 0.05)'"
                              title="Grafikte göster">
-                            <span class="fw-bold text-warning" style="font-size: 1rem;">${t[valueKey].toFixed(1)}${unit}</span>
-                            <span style="font-size: 0.75rem; margin-top: 2px; color: var(--text-muted); text-align: center;">${formatDate(t.createdAt)}</span>
+                            <span class="fw-bold text-warning" style="font-size: 1rem;">${(t[maxKey] != null ? t[maxKey] : t[valueKey]).toFixed(1)}${unit}</span>
+                            <span style="font-size: 0.75rem; margin-top: 2px; color: var(--text-muted); text-align: center;">${formatDate(t[maxKey + 'Time'] || t.createdAt)}</span>
                         </div>
                         `;
         }).join('')}
@@ -1805,8 +1872,9 @@ window.highlightChartPoint = function (canvasId, timeStr, highlightType = null) 
     }
 
     if (chartInstance) {
-        // Tip bilgisini sakla (Özel tooltip başlıkları için)
+        // Tip ve zaman bilgisini sakla (Özel tooltip başlıkları için)
         chartInstance._highlightType = highlightType;
+        chartInstance._highlightTime = new Date(timeStr).getTime();
 
         let dataIndex = -1;
         const targetMs = new Date(timeStr).getTime();
@@ -1843,6 +1911,7 @@ window.highlightChartPoint = function (canvasId, timeStr, highlightType = null) 
                 chartInstance.options.onHover = (event, elements) => {
                     if (event.type === 'mousemove') {
                         chartInstance._highlightType = null;
+                        chartInstance._highlightTime = null;
                     }
                     if (typeof originalOnHover === 'function') originalOnHover(event, elements);
                 };
@@ -1857,6 +1926,11 @@ window.highlightChartPoint = function (canvasId, timeStr, highlightType = null) 
             
             if (meta && meta.data && meta.data[dataIndex]) {
                 const point = meta.data[dataIndex];
+
+                // Önce mevcut seçimi temizle ki aynı index olsa bile tooltip güncellensin
+                chartInstance.setActiveElements([]);
+                chartInstance.tooltip.setActiveElements([], { x: 0, y: 0 });
+                chartInstance.update('none');
 
                 chartInstance.tooltip.setActiveElements([
                     { datasetIndex: targetDsIndex, index: dataIndex }
@@ -1914,8 +1988,28 @@ window.toggleAverageLine = function (canvasId, avgValue) {
 };
 // --- BAŞLATMA ---
 let bucketDetailChart = null;
+let bucketDetailHistory = [];
 
-window.openBucketDetail = async function(startTime, endTime, labelText, diskName = null) {
+window.goBackBucketDetail = function() {
+    if (bucketDetailHistory.length > 0) {
+        const prevState = bucketDetailHistory.pop();
+        window.openBucketDetail(prevState.startTime, prevState.endTime, prevState.labelText, prevState.diskName, true);
+    }
+};
+
+window.openBucketDetail = async function(startTime, endTime, labelText, diskName = null, isBack = false) {
+    if (!isBack && bucketDetailChart) {
+        const modalEl = document.getElementById('bucketDetailModal');
+        bucketDetailHistory.push({
+            startTime: modalEl.dataset.startTime,
+            endTime: modalEl.dataset.endTime,
+            labelText: labelText,
+            diskName: diskName
+        });
+    } else if (!isBack) {
+        bucketDetailHistory = [];
+    }
+
     // ID düzeltildi: historyPageComputerSelect
     const computerId = document.getElementById('historyPageComputerSelect')?.value;
     if (!computerId) {
@@ -1938,6 +2032,12 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
     let modal = bootstrap.Modal.getInstance(modalEl);
     if (!modal) modal = new bootstrap.Modal(modalEl);
     modal.show();
+
+    modalEl.dataset.startTime = startTime;
+    modalEl.dataset.endTime = endTime;
+
+    const backBtn = document.getElementById('btnBucketDetailBack');
+    if (backBtn) backBtn.style.display = bucketDetailHistory.length > 0 ? 'block' : 'none';
 
     const rangeText = `${formatChartDate(startTime)} - ${formatChartDate(endTime)}`;
     document.getElementById('bucketDetailTimeRange').innerText = `${labelText} için Detaylı Görünüm: ${rangeText}`;
@@ -2014,7 +2114,7 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
             // Grafik çizimini küçük bir gecikmeyle yap (Modal animasyonu/yerleşimi tamamlanması için)
             setTimeout(() => {
                 if (bucketDetailChart) bucketDetailChart.destroy();
-                bucketDetailChart = createCandleChart('bucketDetailChart', labelText, dataObj.candles, dataObj.labels, diskName, true, new Date(startTime).getTime(), new Date(endTime).getTime());
+                bucketDetailChart = createCandleChart('bucketDetailChart', labelText, dataObj.candles, dataObj.labels, diskName, true, new Date(startTime).getTime(), new Date(endTime).getTime(), dataObj.threshold);
                 bucketDetailChart.resize();
                 bucketDetailChart.update();
             }, 50);
@@ -2063,7 +2163,13 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
             setTimeout(() => {
                 if (bucketDetailChart) bucketDetailChart.destroy();
                 const tEndData = detailData.map(m => getBucketEndTime(m));
-                bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true, tEndData);
+                const rawTimes = detailData.map(m => m.createdAt ? new Date(m.createdAt).getTime() : null);
+                
+                const prefix = labelText.includes('CPU') ? 'cpu' : (labelText.includes('RAM') ? 'ram' : 'used');
+                const minTimes = detailData.map(m => m[prefix + 'MinTime'] ? new Date(m[prefix + 'MinTime']).getTime() : null);
+                const maxTimes = detailData.map(m => m[prefix + 'MaxTime'] ? new Date(m[prefix + 'MaxTime']).getTime() : null);
+
+                bucketDetailChart = createBandChart('bucketDetailChart', labelText, labels, values, mins, maxs, labelText.includes('CPU') ? '#38bdf8' : (labelText.includes('RAM') ? '#facc15' : '#10b981'), diskName, true, tEndData, rawTimes, minTimes, maxTimes);
                 bucketDetailChart.resize();
                 bucketDetailChart.update();
             }, 50);
@@ -2076,6 +2182,17 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
 };
 
 $(document).ready(function () {
+    const modalEl = document.getElementById('bucketDetailModal');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            bucketDetailHistory = [];
+            if (bucketDetailChart) {
+                bucketDetailChart.destroy();
+                bucketDetailChart = null;
+            }
+        });
+    }
+
     $('#modalTagSelect').select2({
         dropdownParent: $('#tagsModal'),
         tags: false,

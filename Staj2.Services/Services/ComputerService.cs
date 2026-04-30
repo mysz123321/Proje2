@@ -253,12 +253,16 @@ public class ComputerService : BaseService, IComputerService
                     MaxCreatedAt = current.CreatedAt,
                     CpuAvg = (double)current.CpuUsage,
                     CpuMin = (double)current.CpuUsage,
+                    CpuMinTime = current.CreatedAt,
                     CpuMax = (double)current.CpuUsage,
+                    CpuMaxTime = current.CreatedAt,
                     CpuOpen = (double)current.CpuUsage,
                     CpuClose = (double)current.CpuUsage,
                     RamAvg = (double)current.RamUsage,
                     RamMin = (double)current.RamUsage,
+                    RamMinTime = current.CreatedAt,
                     RamMax = (double)current.RamUsage,
+                    RamMaxTime = current.CreatedAt,
                     RamOpen = (double)current.RamUsage,
                     RamClose = (double)current.RamUsage
                 });
@@ -332,7 +336,9 @@ public class ComputerService : BaseService, IComputerService
                         MaxCreatedAt = current.CreatedAt,
                         UsedAvg = (double)current.UsedPercent,
                         UsedMin = (double)current.UsedPercent,
+                        UsedMinTime = current.CreatedAt,
                         UsedMax = (double)current.UsedPercent,
+                        UsedMaxTime = current.CreatedAt,
                         UsedOpen = (double)current.UsedPercent,
                         UsedClose = (double)current.UsedPercent,
                         DiskName = dn
@@ -409,12 +415,16 @@ public class ComputerService : BaseService, IComputerService
                         MaxCreatedAt = items.Max(m => m.CreatedAt),
                         CpuAvg = Math.Round(items.Average(m => m.CpuUsage), 2),
                         CpuMin = Math.Round(items.Min(m => m.CpuUsage), 2),
+                        CpuMinTime = items.OrderBy(m => m.CpuUsage).First().CreatedAt,
                         CpuMax = Math.Round(items.Max(m => m.CpuUsage), 2),
+                        CpuMaxTime = items.OrderByDescending(m => m.CpuUsage).First().CreatedAt,
                         CpuOpen = Math.Round(sorted.First().CpuUsage, 2),
                         CpuClose = Math.Round(sorted.Last().CpuUsage, 2),
                         RamAvg = Math.Round(items.Average(m => m.RamUsage), 2),
                         RamMin = Math.Round(items.Min(m => m.RamUsage), 2),
+                        RamMinTime = items.OrderBy(m => m.RamUsage).First().CreatedAt,
                         RamMax = Math.Round(items.Max(m => m.RamUsage), 2),
+                        RamMaxTime = items.OrderByDescending(m => m.RamUsage).First().CreatedAt,
                         RamOpen = Math.Round(sorted.First().RamUsage, 2),
                         RamClose = Math.Round(sorted.Last().RamUsage, 2)
                     });
@@ -457,7 +467,9 @@ public class ComputerService : BaseService, IComputerService
                             MaxCreatedAt = items.Max(m => m.CreatedAt),
                             UsedAvg = Math.Round(items.Average(m => m.UsedPercent), 2),
                             UsedMin = Math.Round(items.Min(m => m.UsedPercent), 2),
+                            UsedMinTime = items.OrderBy(m => m.UsedPercent).First().CreatedAt,
                             UsedMax = Math.Round(items.Max(m => m.UsedPercent), 2),
+                            UsedMaxTime = items.OrderByDescending(m => m.UsedPercent).First().CreatedAt,
                             UsedOpen = Math.Round(sorted.First().UsedPercent, 2),
                             UsedClose = Math.Round(sorted.Last().UsedPercent, 2),
                             DiskName = dn

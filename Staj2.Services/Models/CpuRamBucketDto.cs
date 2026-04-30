@@ -10,12 +10,16 @@ public class CpuRamBucketDto
     public DateTime? MaxCreatedAt { get; set; }
     public double? CpuAvg { get; set; }
     public double? CpuMin { get; set; }
+    public DateTime? CpuMinTime { get; set; }
     public double? CpuMax { get; set; }
+    public DateTime? CpuMaxTime { get; set; }
     public double? CpuOpen { get; set; }
     public double? CpuClose { get; set; }
     public double? RamAvg { get; set; }
     public double? RamMin { get; set; }
+    public DateTime? RamMinTime { get; set; }
     public double? RamMax { get; set; }
+    public DateTime? RamMaxTime { get; set; }
     public double? RamOpen { get; set; }
     public double? RamClose { get; set; }
 }
