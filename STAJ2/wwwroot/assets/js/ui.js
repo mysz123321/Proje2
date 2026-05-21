@@ -102,6 +102,9 @@
                 setTimeout(() => icon.classList.remove('icon-spin-in'), 400);
             }, 200);
         }
+
+        // Tema değiştiğinde diğer bileşenleri (grafikler vb.) bilgilendir
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
     }
 
     // --- Sidebar ---
@@ -168,7 +171,13 @@
         const originalContent = btn.innerHTML;
         const originalWidth = btn.offsetWidth;
         
+        // Aynı gruptaki (parent içindeki) diğer butonları da devre dışı bırak
+        const parent = btn.parentElement;
+        const siblings = parent ? Array.from(parent.children).filter(c => c !== btn && c.tagName === 'BUTTON') : [];
+        
         btn.disabled = true;
+        siblings.forEach(s => s.disabled = true);
+
         // Genişlik kaymasını önlemek için sabitliyoruz
         btn.style.width = (originalWidth + 2) + 'px'; // +2 for border/padding safety
         btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`;
@@ -177,6 +186,7 @@
             await action();
         } finally {
             btn.disabled = false;
+            siblings.forEach(s => s.disabled = false);
             btn.innerHTML = originalContent;
             btn.style.width = '';
         }
@@ -561,7 +571,7 @@
                     <div class="col-lg-9">
                         <div class="card border-0 mb-4 shadow-sm" style="background:var(--bg-card);">
                             <div class="card-header border-bottom border-secondary bg-transparent py-2">
-                                <h6 class="mb-0 small fw-bold text-muted"><i class="bi bi-bar-chart-steps me-1"></i> Log Dağılımı (Zaman Çizelgesi)</h6>
+                                <h6 class="mb-0 small fw-bold text-info"><i class="bi bi-bar-chart-steps me-1"></i> Log Dağılımı (Zaman Çizelgesi)</h6>
                             </div>
                             <div class="card-body p-2" style="height: 180px;">
                                 <canvas id="logHistogramCanvas"></canvas>
@@ -570,7 +580,7 @@
                         <div class="card border-0 shadow-sm" style="background:var(--bg-card);">
                             <div class="card-header border-bottom border-secondary bg-transparent py-3 d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center gap-3">
-                                    <h5 class="mb-0 small"><i class="bi bi-list-task"></i> Log Akışı</h5>
+                                    <h5 class="mb-0 small text-info"><i class="bi bi-list-task"></i> Log Akışı</h5>
                                     <div id="activeLogTimeFilter" style="display: none;"></div>
                                 </div>
                                 <span id="logCountBadge" class="badge bg-secondary">0 Olay</span>
@@ -578,13 +588,16 @@
                             <div class="card-body p-0">
                                 <div class="p-3 border-bottom border-secondary bg-transparent">
                                     <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-transparent border-secondary text-muted"><i class="bi bi-search"></i></span>
-                                        <input type="text" id="logSearchInput" class="form-control bg-transparent border-secondary text-white" placeholder="Mesajlarda veya metriklerde ara..." onkeyup="ui.debounceFilter()">
+                                        <span class="input-group-text border-secondary text-muted" style="background: var(--bg-input);"><i class="bi bi-search"></i></span>
+                                        <input type="text" id="logSearchInput" class="form-control bg-transparent border-secondary" style="color: var(--text-main) !important;" placeholder="Mesajlarda veya metriklerde ara..." onkeydown="if(event.key === 'Enter') ui.changeFilter()">
+                                        <button class="btn btn-primary" type="button" onclick="ui.changeFilter()">
+                                            <i class="bi bi-search me-1"></i> Filtrele
+                                        </button>
                                     </div>
                                 </div>
                                 <div id="logTableContainer" class="table-responsive" style="max-height: 500px; overflow-y: auto;" onscroll="ui.handleLogScroll()">
-                                    <table class="table table-dark table-hover mb-0 small">
-                                        <thead class="sticky-top" style="background: #1e293b; z-index: 1;">
+                                    <table class="table table-hover mb-0 small">
+                                        <thead class="sticky-top" style="background: var(--bg-card); z-index: 1;">
                                             <tr style="color:var(--text-muted); border-bottom: 1px solid var(--border-color);">
                                                 <th style="width: 150px;">Zaman Damgası</th>
                                                 <th style="width: 100px;">Seviye</th>
@@ -658,7 +671,7 @@
                         <div class="col-xl-3 col-lg-6 col-md-6">
                             <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #198754 !important;">
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
-                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi CPU <span class="fw-normal opacity-75" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
                                 </div>
                                 <div class="card-body p-0 d-flex flex-column justify-content-between">
                                     <div class="table-responsive">
@@ -676,7 +689,7 @@
                         <div class="col-xl-3 col-lg-6 col-md-6">
                             <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #dc3545 !important;">
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
-                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü CPU <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü CPU <span class="fw-normal opacity-75" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
                                 </div>
                                 <div class="card-body p-0 d-flex flex-column justify-content-between">
                                     <div class="table-responsive">
@@ -694,7 +707,7 @@
                         <div class="col-xl-3 col-lg-6 col-md-6">
                             <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #198754 !important;">
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
-                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>En İyi RAM <span class="fw-normal opacity-75" style="font-size: 0.7rem;">(Ort. Altı)</span></h6>
                                 </div>
                                 <div class="card-body p-0 d-flex flex-column justify-content-between">
                                     <div class="table-responsive">
@@ -712,7 +725,7 @@
                         <div class="col-xl-3 col-lg-6 col-md-6">
                             <div class="card border-0 shadow-sm h-100" style="background:var(--bg-card); border-top: 4px solid #dc3545 !important;">
                                 <div class="card-header border-bottom border-secondary p-2" style="background:transparent; color:var(--text-title);">
-                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü RAM <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
+                                    <h6 class="mb-0 fw-bold" style="font-size: 0.85rem;"><i class="bi bi-x-circle-fill text-danger me-1"></i>En Kötü RAM <span class="fw-normal opacity-75" style="font-size: 0.7rem;">(Ort. Üstü)</span></h6>
                                 </div>
                                 <div class="card-body p-0 d-flex flex-column justify-content-between">
                                     <div class="table-responsive">
@@ -841,8 +854,8 @@
                             <input type="date" id="warning-end" class="form-control form-control-sm" style="background:var(--bg-input); color:var(--text-main); border-color:var(--border-input);">
                         </div>
                         <div class="d-flex gap-1">
-                            <button class="btn btn-primary btn-sm fw-bold shadow-sm" onclick="ui.withLoading(this, () => window.fetchTopWarnings(true))"><i class="bi bi-filter"></i> Filtrele</button>
-                            <button class="btn btn-secondary btn-sm fw-bold shadow-sm" onclick="ui.withLoading(this, window.clearWarningFilters)"><i class="bi bi-eraser"></i> Temizle</button>
+                            <button id="btnFilterWarnings" class="btn btn-primary btn-sm fw-bold shadow-sm" onclick="ui.withLoading(this, () => window.fetchTopWarnings(true))"><i class="bi bi-filter"></i> Filtrele</button>
+                            <button id="btnClearWarnings" class="btn btn-secondary btn-sm fw-bold shadow-sm" onclick="ui.withLoading(this, window.clearWarningFilters)"><i class="bi bi-eraser"></i> Temizle</button>
                         </div>
                     </div>
                 </div>
@@ -1200,7 +1213,7 @@
             container.innerHTML = `
             <div class="d-flex flex-column align-items-center justify-content-center p-5 text-center" style="min-height: 400px; color:var(--text-muted);">
                 <i class="bi bi-shield-lock-fill text-danger mb-3" style="font-size: 3rem;"></i>
-                <h4 class="text-white">Yetkisiz Erişim veya Bağlantı Hatası</h4>
+                <h4 style="color: var(--text-main);">Yetkisiz Erişim veya Bağlantı Hatası</h4>
                 <p>${e.message || 'Bu veriyi görüntüleme yetkiniz bulunmamaktadır.'}</p>
             </div>`;
         }
@@ -1274,6 +1287,12 @@
         renderSidebar, switchView, toggleTheme, withLoading,
 
         approveRequest: async (id) => {
+            const roleId = document.getElementById(`reqRole_${id}`).value;
+            if (!roleId) {
+                Swal.fire({ title: 'Uyarı', text: 'Lütfen kullanıcıyı onaylamadan önce bir rol seçiniz.', icon: 'warning' });
+                return;
+            }
+
             const result = await Swal.fire({
                 title: 'Onaylıyor musunuz?',
                 text: "Bu kullanıcıyı onaylamak istiyor musunuz?",
@@ -1384,7 +1403,8 @@
                     <td class="fw-bold">${r.username}</td>
                     <td>
                         <select id="reqRole_${r.id}" class="form-select form-select-sm small-select" style="max-width: 150px; background:var(--bg-input); color:var(--text-input); border-color:var(--border-input);">
-                            ${state.roles.map(x => `<option value="${x.id}" ${x.name === 'Görüntüleyici' ? 'selected' : ''}>${x.name}</option>`).join("")}
+                            <option value="" disabled selected>Rol Seçiniz...</option>
+                            ${state.roles.map(x => `<option value="${x.id}">${x.name}</option>`).join("")}
                         </select>
                     </td>
                     <td>
@@ -2256,12 +2276,12 @@
                         report.globalDiskAverages.forEach(gd => {
                             globalDisksHtml += `
                             <div class="col-12 col-sm-6 col-lg mb-3">
-                                <div class="card h-100 shadow-sm" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
+                                <div class="card h-100 shadow-sm" style="background-color: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-color) !important;">
                                     <div class="card-body d-flex flex-column justify-content-center align-items-center py-4">
-                                        <div class="fw-bold mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.9rem; letter-spacing: 1px; color: var(--text-muted, #94a3b8);">
+                                        <div class="fw-bold mb-2 text-uppercase d-flex align-items-center" style="font-size: 0.9rem; letter-spacing: 1px; color: var(--text-muted);">
                                             <i class="bi bi-hdd-fill me-2 fs-5" style="color: #38bdf8;"></i>${gd.diskName} GENEL ORT.
                                         </div>
-                                        <h2 class="fw-bolder mb-0" style="color: var(--text-main, #e2e8f0); font-family: monospace; font-size: 2rem;">
+                                        <h2 class="fw-bolder mb-0" style="color: var(--text-main); font-family: monospace; font-size: 2rem;">
                                             %${gd.averageUsedPercent}
                                         </h2>
                                     </div>
@@ -2278,11 +2298,11 @@
 
                         let cardHtml = `
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card, #1e293b); border-radius: 10px; border: 1px solid var(--border-color, #334155) !important;">
-                                <div class="card-header fw-bold" style="background-color: transparent; border-bottom: 1px solid var(--border-color, #334155); color: var(--text-main, #e2e8f0);">
+                            <div class="card h-100 shadow-sm border-0" style="background-color: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-color) !important;">
+                                <div class="card-header fw-bold" style="background-color: transparent; border-bottom: 1px solid var(--border-color); color: var(--text-main);">
                                     <i class="bi bi-hdd-network me-2" style="color: #38bdf8;"></i> ${device.computerName}
                                 </div>
-                                <div class="card-body" style="color: var(--text-main, #e2e8f0);">
+                                <div class="card-body" style="color: var(--text-main);">
                         `;
 
                         device.disks.forEach(disk => {
@@ -2304,14 +2324,14 @@
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1" style="font-size: 0.9rem;">
                                     <div>
-                                        <span>Disk ${disk.diskName} <small style="color: var(--text-muted, #94a3b8);">(${disk.diskStatus})</small></span>
+                                        <span>Disk ${disk.diskName} <small style="color: var(--text-muted);">(${disk.diskStatus})</small></span>
                                         <button class="btn btn-sm btn-link text-info p-0 ms-1" onclick="window.ui.showReportDetails(${targetId}, '${device.computerName}', 'Disk ${safeDiskName}', '${safeDiskName}')" title="Metrik Analizini Gör">
                                             <i class="bi bi-info-circle-fill"></i>
                                         </button>
                                     </div>
                                     <span class="${textClass}">%${disk.averageUsedPercent}</span>
                                 </div>
-                                <div class="progress" style="height: 8px; background-color: var(--border-color, #334155);">
+                                <div class="progress" style="height: 8px; background-color: var(--border-color);">
                                     <div class="progress-bar ${colorClass}" role="progressbar" style="width: ${disk.averageUsedPercent}%"></div>
                                 </div>
                             </div>
@@ -2332,7 +2352,7 @@
                     }
 
                     diskSection.innerHTML = `
-                    <h5 class="fw-bold mb-3" style="color: var(--text-main, #e2e8f0);">
+                    <h5 class="fw-bold mb-3" style="color: var(--text-main);">
                         <i class="bi bi-device-hdd me-2" style="color: #38bdf8;"></i> Cihaz Disk Durumları
                     </h5>
                     ${globalDisksHtml}
@@ -2402,7 +2422,7 @@
             const metricsBody = document.getElementById('ta-metrics-body');
 
             container.style.display = 'block';
-            metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-muted">Performanslı veritabanı analizi yapılıyor, lütfen bekleyin...</div></div>';
+            metricsBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info"></div><div class="mt-2 text-info fw-bold">Lütfen bekleyiniz...</div></div>';
 
             try {
                 const requestPayload = { StartDate: startDate, EndDate: endDate };
@@ -2484,17 +2504,17 @@
                 <div class="row text-center mb-3 mt-3">
                     <div class="col-4 border-end border-secondary">
                         <h5 class="text-info mb-0">${resultObj.totalCount}</h5>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">Toplam Ölçüm</small>
+                        <small class="opacity-75 d-block" style="font-size:0.75rem;">Toplam Ölçüm</small>
                         <small class="text-info fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.totalCount)})</small>
                     </div>
                     <div class="col-4 border-end border-secondary">
                         <h5 class="text-danger mb-0">${resultObj.warningCount}</h5>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">Uyarı (Aşılan)</small>
+                        <small class="opacity-75 d-block" style="font-size:0.75rem;">Uyarı (Aşılan)</small>
                         <small class="text-danger fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.warningCount)})</small>
                     </div>
                     <div class="col-4">
                         <h5 class="text-success mb-0">${resultObj.belowThresholdCount}</h5>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">Sorunsuz</small>
+                        <small class="opacity-75 d-block" style="font-size:0.75rem;">Sorunsuz</small>
                         <small class="text-success fw-bold" style="font-size:0.70rem;">(${formatTimeFromCount(resultObj.belowThresholdCount)})</small>
                     </div>
                 </div>
@@ -2659,12 +2679,13 @@
                 for (let c = 0; c < 24; c++) {
                     let val = grid[r][c];
 
-                    let bgColor = 'rgba(128, 128, 128, 0.15)';
-                    let borderColor = 'rgba(128, 128, 128, 0.2)';
+                    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                    let bgColor = isLight ? '#e2e8f0' : 'rgba(128, 128, 128, 0.15)';
+                    let borderColor = isLight ? '#cbd5e1' : 'rgba(128, 128, 128, 0.2)';
                     let tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin} | Veri Yok`;
                     let cat = 'yok'; // YENİ: Kategori tutucu
 
-                    if (val !== null) {
+                    if (val !== null && val > 0) {
                         tooltip = `Saat: ${c.toString().padStart(2, '0')}:${startMin} - ${c.toString().padStart(2, '0')}:${endMin}\nOrtalama Yoğunluk: %${val.toFixed(1)}`;
 
                         if (val < 50) { bgColor = '#22c55e'; borderColor = '#16a34a'; cat = 'normal'; }
@@ -2699,7 +2720,7 @@
                             <div style="width:14px; height:14px; background:#ef4444; border: 1px solid #dc2626; margin-right:6px; border-radius:3px;"></div> %90+ (Kritik)
                         </div>
                         <div class="heatmap-legend legend-yok d-flex align-items-center" style="cursor:pointer; transition: opacity 0.2s;" onclick="ui.filterHeatmap('yok')">
-                            <div style="width:14px; height:14px; background:rgba(128, 128, 128, 0.15); border: 1px solid rgba(128, 128, 128, 0.2); margin-right:6px; border-radius:3px;"></div> Veri Yok
+                            <div style="width:14px; height:14px; background:var(--bg-disk-row); border: 1px solid var(--border-color); margin-right:6px; border-radius:3px;"></div> Veri Yok
                         </div>
                     </div>
                 </div>
@@ -2727,7 +2748,7 @@
             if (!compId) { container.innerHTML = '<small class="text-muted">Cihaz Seçiniz</small>'; return; }
             try {
                 const disks = await api.get(`/api/Computer/${compId}/disks`);
-                container.innerHTML = '<small class="text-muted d-block mb-2">Aktif Diskler</small>';
+                container.innerHTML = '<small class="text-info d-block mb-2 fw-bold">Aktif Diskler</small>';
                 disks.forEach(d => {
                     container.innerHTML += `
                     <div class="form-check mb-1">
@@ -2911,7 +2932,7 @@
                             label: `${label} (Ortalama)`,
                             data: dataArray,
                             borderColor: color,
-                            backgroundColor: color + '22',
+                            backgroundColor: isDarkMode ? color + '22' : color + '44',
                             pointRadius: (ctx) => {
                                 const i = ctx.dataIndex;
                                 const data = ctx.dataset.data;
@@ -3296,8 +3317,9 @@
             // Gradyan oluşturma fonksiyonu
             const createGradient = (color) => {
                 const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-                gradient.addColorStop(0, color + '55'); // Üstte %33 opaklık
-                gradient.addColorStop(1, color + '00'); // Altta tam şeffaf
+                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+                gradient.addColorStop(0, color + (isDarkMode ? '55' : '88')); // Üstte daha koyu
+                gradient.addColorStop(1, color + (isDarkMode ? '00' : '22')); // Altta daha şeffaf
                 return gradient;
             };
 
@@ -3457,10 +3479,10 @@
                                     
                                     if (offlineStart === 0) startX = left;
                                     
-                                    ctx.fillStyle = isDarkMode ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.05)';
+                                    ctx.fillStyle = isDarkMode ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.15)';
                                     ctx.fillRect(startX, top, endX - startX, bottom - top);
                                     
-                                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
+                                    ctx.strokeStyle = isDarkMode ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.45)';
                                     ctx.lineWidth = 1;
                                     ctx.setLineDash([5, 5]);
                                     ctx.beginPath();
@@ -3469,7 +3491,7 @@
                                     ctx.stroke();
                                     
                                     if (endX - startX > 60) {
-                                        ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+                                        ctx.fillStyle = isDarkMode ? 'rgba(248, 113, 113, 0.8)' : 'rgba(220, 38, 38, 0.8)';
                                         ctx.font = '500 11px Outfit';
                                         ctx.textAlign = 'center';
                                         ctx.fillText('BAĞLANTI YOK', startX + (endX - startX) / 2, top + 20);
@@ -3485,10 +3507,10 @@
                             if (offlineStart === 0) startX = left;
                             let endX = right;
                             
-                            ctx.fillStyle = isDarkMode ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.05)';
+                            ctx.fillStyle = isDarkMode ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.15)';
                             ctx.fillRect(startX, top, endX - startX, bottom - top);
                             
-                            ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
+                            ctx.strokeStyle = isDarkMode ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.45)';
                             ctx.lineWidth = 1;
                             ctx.setLineDash([5, 5]);
                             ctx.beginPath();
@@ -3496,7 +3518,7 @@
                             ctx.stroke();
                             
                             if (endX - startX > 60) {
-                                ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+                                ctx.fillStyle = isDarkMode ? 'rgba(248, 113, 113, 0.8)' : 'rgba(220, 38, 38, 0.8)';
                                 ctx.font = '500 11px Outfit';
                                 ctx.textAlign = 'center';
                                 ctx.fillText('BAĞLANTI YOK', startX + (endX - startX) / 2, top + 20);
@@ -3680,7 +3702,7 @@
                 
                 if (d.dataPointCount === 0) {
                     card.innerHTML = `
-                        <div class="card h-100 border-secondary opacity-75" style="background: rgba(30, 41, 59, 0.5);">
+                        <div class="card h-100 border-secondary opacity-75" style="background: var(--bg-card-muted);">
                             <div class="card-body">
                                 <h6 class="fw-bold text-info mb-3 text-truncate">${d.computerName}</h6>
                                 <div class="text-center py-4 text-muted small">
@@ -3780,7 +3802,12 @@
             const backBtn = document.getElementById('btnBucketDetailBack');
 
             if (timeRangeEl) timeRangeEl.innerHTML = `<span class="${colorClass}">${d.computerName}</span> - ${title} Değer (%${val}) Zamanları`;
-            if (backBtn) backBtn.style.display = 'inline-block';
+            if (backBtn) {
+                backBtn.style.display = 'inline-block';
+                backBtn.onclick = function() {
+                    window.ui.goBackBucketDetail();
+                };
+            }
 
             container.innerHTML = `
                 <div class="col-12">
@@ -3788,13 +3815,13 @@
                         <div class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
                             <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2"></i> Zaman Listesi (${times.length} Kayıt)</h6>
                             <div class="input-group input-group-sm" style="width: 250px;">
-                                <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" id="occurrenceSearch" class="form-control bg-dark border-secondary text-white" placeholder="Tarih/Saat ara..." onkeyup="window.ui.filterOccurrences()">
+                                <span class="input-group-text border-secondary text-muted" style="background: var(--bg-input);"><i class="bi bi-search"></i></span>
+                                <input type="text" id="occurrenceSearch" class="form-control border-secondary" style="background: var(--bg-input); color: var(--text-main);" placeholder="Tarih/Saat ara..." onkeyup="window.ui.filterOccurrences()">
                             </div>
                         </div>
                         <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
-                            <table class="table table-dark table-hover mb-0 small" id="occurrenceTable">
-                                <thead class="sticky-top bg-dark">
+                            <table class="table table-hover mb-0 small" id="occurrenceTable">
+                                <thead class="sticky-top" style="background: var(--bg-card);">
                                     <tr>
                                         <th class="ps-4">#</th>
                                         <th>Tarih ve Saat</th>
@@ -4572,7 +4599,7 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { labels: { color: textColor } } },
                 scales: {
-                    x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                    x: { ticks: { color: textColor, maxTicksLimit: 12 }, grid: { color: gridColor } },
                     y: { min: 0, max: 100, ticks: { color: textColor }, grid: { color: gridColor } }
                 }
             }
@@ -4652,5 +4679,34 @@
         const savedTheme = localStorage.getItem('theme') || 'dark';
         document.documentElement.setAttribute('data-theme', savedTheme);
     })();
+
+    // Tema değiştiğinde grafikleri yeniden çiz (Yükleniyor animasyonu ile)
+    document.addEventListener('themeChanged', async () => {
+        const needsRedraw = window.myCorrelationChart || window.myComparisonChart || window.logHistogramChart || 
+            (document.getElementById('heatmap-results-container') && document.getElementById('heatmap-results-container').style.display !== 'none');
+
+        if (needsRedraw) {
+            Swal.fire({
+                title: 'Tema Uygulanıyor...',
+                text: 'Grafikler yeni temaya göre güncelleniyor, lütfen bekleyin.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                if (window.myCorrelationChart && typeof ui.generateCorrelationAnalysis === 'function') await ui.generateCorrelationAnalysis();
+                if (window.myComparisonChart && typeof ui.generateDeviceComparison === 'function') await ui.generateDeviceComparison();
+                if (window.logHistogramChart && typeof ui.fetchLogManagementData === 'function') await ui.fetchLogManagementData();
+                
+                const hmResult = document.getElementById('heatmap-results-container');
+                if (hmResult && hmResult.style.display !== 'none' && typeof ui.generateHeatmap === 'function') await ui.generateHeatmap();
+                
+                Swal.close();
+            } catch (err) {
+                console.error("Tema güncellenirken hata:", err);
+                Swal.close();
+            }
+        }
+    });
 
 })();

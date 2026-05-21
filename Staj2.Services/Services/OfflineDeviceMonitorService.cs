@@ -107,7 +107,7 @@ public class OfflineDeviceMonitorService : BackgroundService
 
             foreach (var email in finalRecipients)
             {
-                // YENİ: Mail gönderimini try-catch içine aldık ki SMTP patlarsa DB güncellemesi iptal olmasın!
+                // YENİ: Mail gönderimini try-catch içine aldık ki SMTP patlarsa DB güncellemesi iptal olmasın! 
                 try
                 {
                     await mailSender.SendAsync(email, subject, body);

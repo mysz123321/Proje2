@@ -18,11 +18,11 @@ public interface IComputerService
 
     // 4. Etiket Atama
     // Eskiden: Task<(bool isNotFound, string message)>
-    Task<ServiceResult> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request);
+    Task<ServiceResult> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request, int userId, bool isAdmin);
 
     // 5. İsim Değiştirme
     // Eskiden: Task<(bool isSuccess, bool isNotFound, string message)>
-    Task<ServiceResult> UpdateDisplayNameAsync(UpdateComputerNameRequest request);
+    Task<ServiceResult> UpdateDisplayNameAsync(UpdateComputerNameRequest request, int userId, bool isAdmin);
 
     // 6. Metrik Geçmişi
     // Eskiden: Task<(bool isBadRequest, string? errorMessage, object? data)>
@@ -36,7 +36,7 @@ public interface IComputerService
 
     // 8. Cihaz Silme
     // Eskiden: Task<(bool isNotFound, bool isBadRequest, string message)>
-    Task<ServiceResult> DeleteComputerAsync(int id);
+    Task<ServiceResult> DeleteComputerAsync(int id, int userId, bool isAdmin);
 
     // 9. Kullanıcının Etiketlerini Getir
     // Eskiden: Task<object>
@@ -48,9 +48,9 @@ public interface IComputerService
 
     // 11. Metrik Özeti
     // Eskiden: Task<MetricSummaryDto>
-    Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName);
-    Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName);
-    Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request);
+    Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName, int userId, bool isAdmin);
+    Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName, int userId, bool isAdmin);
+    Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request, int userId, bool isAdmin);
     Task<ServiceResult<object>> GetLogManagementDataAsync(int computerId, string start, string end, int userId, bool isAdmin);
     Task<ServiceResult<object>> GetLogHistogramDataAsync(int computerId, string start, string end, int userId, bool isAdmin, string? levels = null, string? metrics = null, string? search = null);
     Task<ServiceResult<object>> GetPaginatedLogsAsync(int computerId, string start, string end, int offset, int limit, int userId, bool isAdmin, string? levels = null, string? metrics = null, string? search = null);

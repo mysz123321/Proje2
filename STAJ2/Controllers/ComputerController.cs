@@ -88,10 +88,11 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.Computer_AssignTag)]
     public async Task<IActionResult> UpdateComputerTags(int id, [FromBody] UpdateComputerTagsRequest request)
     {
-        var result = await _computerService.UpdateComputerTagsAsync(id, request);
+        var result = await _computerService.UpdateComputerTagsAsync(id, request, GetUserId(), IsAdmin());
 
         if (!result.IsSuccess)
         {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
             return BadRequest(new { message = result.Message });
         }
@@ -104,10 +105,11 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.Computer_Rename)]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateComputerNameRequest request)
     {
-        var result = await _computerService.UpdateDisplayNameAsync(request);
+        var result = await _computerService.UpdateDisplayNameAsync(request, GetUserId(), IsAdmin());
 
         if (!result.IsSuccess)
         {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
             return BadRequest(new { message = result.Message });
         }
@@ -126,7 +128,10 @@ public class ComputerController : ControllerBase
         var result = await _computerService.GetMetricsHistoryAsync(id, start, end, maxPoints);
 
         if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             return BadRequest(new { message = result.Message, title = "Uyarı" });
+        }
 
         return Ok(result.Data);
     }
@@ -143,7 +148,10 @@ public class ComputerController : ControllerBase
         var result = await _computerService.GetMetricsHistoryBatchAsync(idList, start, end, metric, maxPoints);
 
         if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             return BadRequest(new { message = result.Message, title = "Uyarı" });
+        }
 
         return Ok(result.Data);
     }
@@ -157,7 +165,10 @@ public class ComputerController : ControllerBase
         var result = await _computerService.GetMetricBucketDetailBatchAsync(idList, start, end, metric);
 
         if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             return BadRequest(new { message = result.Message });
+        }
 
         return Ok(result.Data);
     }
@@ -176,10 +187,11 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.Computer_Delete)]
     public async Task<IActionResult> DeleteComputer(int id)
     {
-        var result = await _computerService.DeleteComputerAsync(id);
+        var result = await _computerService.DeleteComputerAsync(id, GetUserId(), IsAdmin());
 
         if (!result.IsSuccess)
         {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             if (result.Message != null && result.Message.Contains("bulunamadı")) return NotFound(new { message = result.Message });
             return BadRequest(new { message = result.Message });
         }
@@ -210,7 +222,7 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.Computer_Access)]
     public async Task<IActionResult> GetMetricsSummary(int id, [FromQuery] string metricType, [FromQuery] string? diskName = null)
     {
-        var result = await _computerService.GetMetricsSummaryAsync(id, metricType, diskName);
+        var result = await _computerService.GetMetricsSummaryAsync(id, metricType, diskName, GetUserId(), IsAdmin());
         return Ok(result.Data);
     }
     // 12. Rapor Detayları İçin Trend Verisi
@@ -218,7 +230,7 @@ public class ComputerController : ControllerBase
     [HasPermission(AppPermissions.Computer_Access)]
     public async Task<IActionResult> GetMetricsTrendData(int id, [FromQuery] string metricType, [FromQuery] string? diskName = null)
     {
-        var result = await _computerService.GetMetricsTrendDataAsync(id, metricType, diskName);
+        var result = await _computerService.GetMetricsTrendDataAsync(id, metricType, diskName, GetUserId(), IsAdmin());
         return Ok(result.Data);
     }
 
@@ -228,10 +240,13 @@ public class ComputerController : ControllerBase
     public async Task<IActionResult> GetThresholdAnalysis(int id, [FromBody] ThresholdReportRequestDto request)
     {
         // Artık tüm nesneyi tek seferde gönderiyoruz
-        var result = await _computerService.GetThresholdAnalysisAsync(id, request);
+        var result = await _computerService.GetThresholdAnalysisAsync(id, request, GetUserId(), IsAdmin());
 
         if (!result.IsSuccess)
+        {
+            if (result.Message != null && result.Message.Contains("yetkiniz")) return Forbid();
             return BadRequest(new { message = result.Message });
+        }
 
         return Ok(result.Data);
     }

@@ -1,8 +1,9 @@
-﻿// STAJ2/Authorization/DynamicPermissionFilter.cs
+// STAJ2/Authorization/DynamicPermissionFilter.cs
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Staj2.Infrastructure.Data;
 using System.Linq;
 using System.Security.Claims;
@@ -13,10 +14,12 @@ namespace STAJ2.Authorization;
 public class DynamicPermissionFilter : IAsyncAuthorizationFilter
 {
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
 
-    public DynamicPermissionFilter(AppDbContext db)
+    public DynamicPermissionFilter(AppDbContext db, IConfiguration config)
     {
         _db = db;
+        _config = config;
     }
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
@@ -67,6 +70,19 @@ public class DynamicPermissionFilter : IAsyncAuthorizationFilter
             {
                 StatusCode = StatusCodes.Status401Unauthorized
             };
+            return;
+        }
+
+        // YENİ: Yönetici rolüne sahip kullanıcılara doğrudan izin ver (bypass)
+        var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+        bool isAdmin = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId && !u.IsDeleted)
+            .SelectMany(u => u.Roles)
+            .AnyAsync(r => r.Name == adminRoleName);
+
+        if (isAdmin)
+        {
             return;
         }
 

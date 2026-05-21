@@ -8,7 +8,6 @@ namespace Staj2.Domain.Entities
 
         // Rol adı için maks 20 karakter sınırını AppDbContext'te belirtmiştik.
         public string Name { get; set; } = null!;
-        public string? Description { get; set; }
 
         // ICreatableEntity (int? olarak düzeltildi)
         public DateTime CreatedAt { get; set; }

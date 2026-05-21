@@ -13,131 +13,131 @@ using System.Text;
 namespace Staj2.Services.Services;
 
 // YENİ: BaseService'den miras alıyoruz
-public class AuthService : BaseService, IAuthService
-{
-    private readonly IConfiguration _config;
-
-    // YENİ: AppDbContext'i base (BaseService) sınıfa gönderiyoruz
-    public AuthService(AppDbContext db, IConfiguration config) : base(db)
+    public class AuthService : BaseService, IAuthService
     {
-        _config = config;
-    }
+        private readonly IConfiguration _config;
 
-    // YAZMA İŞLEMİ (Refresh Token ekleniyor) - Sarmalandı
-    public Task<ServiceResult<object>> LoginAsync(LoginRequest request)
-    {
-        return ExecuteWithDbHandlingAsync<object>(async () =>
+        // YENİ: AppDbContext'i base (BaseService) sınıfa gönderiyoruz
+        public AuthService(AppDbContext db, IConfiguration config) : base(db)
+        {
+            _config = config;
+        }
+
+        // YAZMA İŞLEMİ (Refresh Token ekleniyor) - Sarmalandı
+        public Task<ServiceResult<object>> LoginAsync(LoginRequest request)
+        {
+            return ExecuteWithDbHandlingAsync<object>(async () =>
+            {
+                var user = await _db.Users
+                    .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
+                    .FirstOrDefaultAsync(x => x.Email == request.Email);
+
+                if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+                    return ServiceResult<object>.Failure("Giriş bilgileri hatalı");
+
+                var accessToken = CreateJwtToken(user);
+
+                // Refresh Token gün sayısını config'den çekiyoruz
+                int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
+                var refreshToken = new RefreshToken
+                {
+                    Token = Guid.NewGuid().ToString("N"),
+                    ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
+                    UserId = user.Id
+                };
+
+                _db.RefreshTokens.Add(refreshToken);
+                await _db.SaveChangesAsync();
+
+                var data = new
+                {
+                    token = accessToken,
+                    refreshToken = refreshToken.Token,
+                    user.Username,
+                    permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
+                };
+
+                return ServiceResult<object>.Success(data, "Giriş başarılı.");
+            }, "Oturum (Refresh Token)", DbOperation.Create);
+        }
+
+        // YAZMA İŞLEMİ (Yeni Kullanıcı Ekleniyor) - Sarmalandı
+        public Task<ServiceResult> SetPasswordAsync(SetPasswordRequest req)
+        {
+            return ExecuteWithDbHandlingAsync(async () =>
+            {
+                var tokenHash = Sha256(req.Token);
+
+                var tokenRow = await _db.PasswordSetupTokens
+                    .Include(x => x.RegistrationRequest)
+                    .FirstOrDefaultAsync(x =>
+                        x.TokenHash == tokenHash &&
+                        !x.IsUsed &&
+                        x.ExpiresAt > DateTime.Now);
+
+                if (tokenRow == null)
+                    return ServiceResult.Failure("Token geçersiz veya süresi dolmuş.");
+
+                var rr = tokenRow.RegistrationRequest;
+
+                if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
+                {
+                    return ServiceResult.Failure("Email veya kullanıcı adı eşleşmiyor.");
+                }
+
+                var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
+                if (exists)
+                    return ServiceResult.Failure("Kullanıcı zaten oluşturulmuş.");
+
+                var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+
+                var newUser = new User
+                {
+                    Username = rr.Username,
+                    Email = rr.Email,
+                    PasswordHash = hash,
+                    IsApproved = true
+                };
+
+                var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
+                if (requestedRole != null)
+                {
+                    newUser.Roles.Add(requestedRole);
+                }
+
+                _db.Users.Add(newUser);
+
+                tokenRow.IsUsed = true;
+                tokenRow.UsedAt = DateTime.Now;
+
+                await _db.SaveChangesAsync();
+
+                return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
+            }, "Kullanıcı", DbOperation.Create);
+        }
+
+        // SADECE OKUMA İŞLEMİ - Sarmalanmadı
+        public async Task<ServiceResult<List<string>>> GetMyPermissionsAsync(int userId)
         {
             var user = await _db.Users
-                .Include(x => x.Roles).ThenInclude(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
-                .FirstOrDefaultAsync(x => x.Email == request.Email);
+                .AsNoTracking()
+                .Include(x => x.Roles)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
+                .FirstOrDefaultAsync(x => x.Id == userId);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                return ServiceResult<object>.Failure("Giriş bilgileri hatalı");
+            if (user == null)
+                return ServiceResult<List<string>>.Failure("Kullanıcı bulunamadı.");
 
-            var accessToken = CreateJwtToken(user);
+            var currentPermissions = user.Roles
+                .SelectMany(r => r.RolePermissions)
+                .Select(rp => rp.Permission.Name)
+                .Distinct()
+                .ToList();
 
-            // Refresh Token gün sayısını config'den çekiyoruz
-            int refreshTokenDays = _config.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
-            var refreshToken = new RefreshToken
-            {
-                Token = Guid.NewGuid().ToString("N"),
-                ExpiresAt = DateTime.Now.AddDays(refreshTokenDays),
-                UserId = user.Id
-            };
-
-            _db.RefreshTokens.Add(refreshToken);
-            await _db.SaveChangesAsync();
-
-            var data = new
-            {
-                token = accessToken,
-                refreshToken = refreshToken.Token,
-                user.Username,
-                permissions = user.Roles.SelectMany(r => r.RolePermissions).Select(rp => rp.Permission.Name).Distinct().ToList()
-            };
-
-            return ServiceResult<object>.Success(data, "Giriş başarılı.");
-        }, "Oturum (Refresh Token)", DbOperation.Create);
-    }
-
-    // YAZMA İŞLEMİ (Yeni Kullanıcı Ekleniyor) - Sarmalandı
-    public Task<ServiceResult> SetPasswordAsync(SetPasswordRequest req)
-    {
-        return ExecuteWithDbHandlingAsync(async () =>
-        {
-            var tokenHash = Sha256(req.Token);
-
-            var tokenRow = await _db.PasswordSetupTokens
-                .Include(x => x.RegistrationRequest)
-                .FirstOrDefaultAsync(x =>
-                    x.TokenHash == tokenHash &&
-                    !x.IsUsed &&
-                    x.ExpiresAt > DateTime.Now);
-
-            if (tokenRow == null)
-                return ServiceResult.Failure("Token geçersiz veya süresi dolmuş.");
-
-            var rr = tokenRow.RegistrationRequest;
-
-            if (!string.Equals(rr.Email, req.Email.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(rr.Username, req.Username.Trim(), StringComparison.Ordinal))
-            {
-                return ServiceResult.Failure("Email veya kullanıcı adı eşleşmiyor.");
-            }
-
-            var exists = await _db.Users.AnyAsync(u => u.Email == rr.Email || u.Username == rr.Username);
-            if (exists)
-                return ServiceResult.Failure("Kullanıcı zaten oluşturulmuş.");
-
-            var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
-
-            var newUser = new User
-            {
-                Username = rr.Username,
-                Email = rr.Email,
-                PasswordHash = hash,
-                IsApproved = true
-            };
-
-            var requestedRole = await _db.Roles.FindAsync(rr.RequestedRoleId);
-            if (requestedRole != null)
-            {
-                newUser.Roles.Add(requestedRole);
-            }
-
-            _db.Users.Add(newUser);
-
-            tokenRow.IsUsed = true;
-            tokenRow.UsedAt = DateTime.Now;
-
-            await _db.SaveChangesAsync();
-
-            return ServiceResult.Success("Şifre başarıyla oluşturuldu ve hesabınız aktif edildi.");
-        }, "Kullanıcı", DbOperation.Create);
-    }
-
-    // SADECE OKUMA İŞLEMİ - Sarmalanmadı
-    public async Task<ServiceResult<List<string>>> GetMyPermissionsAsync(int userId)
-    {
-        var user = await _db.Users
-            .AsNoTracking()
-            .Include(x => x.Roles)
-                .ThenInclude(r => r.RolePermissions)
-                    .ThenInclude(rp => rp.Permission)
-            .FirstOrDefaultAsync(x => x.Id == userId);
-
-        if (user == null)
-            return ServiceResult<List<string>>.Failure("Kullanıcı bulunamadı.");
-
-        var currentPermissions = user.Roles
-            .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.Name)
-            .Distinct()
-            .ToList();
-
-        return ServiceResult<List<string>>.Success(currentPermissions);
-    }
+            return ServiceResult<List<string>>.Success(currentPermissions);
+        }
 
     // YAZMA/GÜNCELLEME İŞLEMİ (Token İptal/Yeni Token Ekleniyor) - Sarmalandı
     public Task<ServiceResult<object>> RefreshTokenAsync(string token)

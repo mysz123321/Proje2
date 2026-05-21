@@ -124,10 +124,13 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 4. Etiket Atama (YAZMA İŞLEMİ - SARMALANDI)
-    public Task<ServiceResult> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request)
+    public Task<ServiceResult> UpdateComputerTagsAsync(int id, UpdateComputerTagsRequest request, int userId, bool isAdmin)
     {
         return ExecuteWithDbHandlingAsync(async () =>
         {
+            if (!await CheckComputerAccessAsync(id, userId, isAdmin))
+                return ServiceResult.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
             var computer = await _db.Computers.Include(c => c.Tags).FirstOrDefaultAsync(c => c.Id == id);
             if (computer == null)
                 return ServiceResult.Failure("Bilgisayar bulunamadı.");
@@ -143,10 +146,13 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 5. İsim Değiştirme (YAZMA İŞLEMİ - SARMALANDI)
-    public Task<ServiceResult> UpdateDisplayNameAsync(UpdateComputerNameRequest request)
+    public Task<ServiceResult> UpdateDisplayNameAsync(UpdateComputerNameRequest request, int userId, bool isAdmin)
     {
         return ExecuteWithDbHandlingAsync(async () =>
         {
+            if (!await CheckComputerAccessAsync(request.Id, userId, isAdmin))
+                return ServiceResult.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
             if (string.IsNullOrWhiteSpace(request.NewDisplayName))
                 return ServiceResult.Failure("İsim alanı boş bırakılamaz.");
 
@@ -174,6 +180,7 @@ public class ComputerService : BaseService, IComputerService
     // GAP INJECTION: Cihazın kapalı olduğu zaman dilimlerini null değerlerle temsil eder
     public async Task<ServiceResult<object>> GetMetricsHistoryAsync(int id, string start, string end, int? maxPoints = null)
     {
+
         if (id <= 0)
             return ServiceResult<object>.Failure("Lütfen analiz yapmak için sol menüden bir cihaz seçiniz.");
 
@@ -187,12 +194,14 @@ public class ComputerService : BaseService, IComputerService
             return ServiceResult<object>.Failure("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
 
         var rawCpuRam = await _db.ComputerMetrics
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
             .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
             .ToListAsync();
 
         var rawDisks = await _db.DiskMetrics
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(m => m.ComputerDisk.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
             .Select(m => new { m.CreatedAt, m.UsedPercent, diskName = m.ComputerDisk.DiskName })
@@ -209,6 +218,7 @@ public class ComputerService : BaseService, IComputerService
     public async Task<ServiceResult<object>> GetMetricsHistoryBatchAsync(List<int> ids, string start, string end, string metric, int? maxPoints = null)
     {
         if (ids == null || !ids.Any()) return ServiceResult<object>.Failure("Lütfen cihaz seçiniz.");
+
         if (string.IsNullOrWhiteSpace(start) || string.IsNullOrWhiteSpace(end)) return ServiceResult<object>.Failure("Lütfen tarih aralığı seçiniz.");
         if (!DateTime.TryParse(start, out DateTime startTime) || !DateTime.TryParse(end, out DateTime endTime)) return ServiceResult<object>.Failure("Geçersiz tarih formatı.");
         if (startTime > endTime) return ServiceResult<object>.Failure("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
@@ -233,6 +243,7 @@ public class ComputerService : BaseService, IComputerService
             if (metric == "CPU" || metric == "RAM")
             {
                 var dbCpuRam = await localDb.ComputerMetrics
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
                     .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
                     .Select(m => new { m.CreatedAt, m.CpuUsage, m.RamUsage })
@@ -243,6 +254,7 @@ public class ComputerService : BaseService, IComputerService
             {
                 string targetDisk = metric.Substring(5);
                 var dbDisks = await localDb.DiskMetrics
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
                     .Where(m => m.ComputerDisk.ComputerId == id && m.ComputerDisk.DiskName == targetDisk && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
                     .Select(m => new { m.CreatedAt, m.UsedPercent, m.ComputerDisk.DiskName })
@@ -266,6 +278,7 @@ public class ComputerService : BaseService, IComputerService
     public async Task<ServiceResult<List<MetricBucketDetailDto>>> GetMetricBucketDetailBatchAsync(List<int> computerIds, string start, string end, string metric)
     {
         if (computerIds == null || !computerIds.Any()) return ServiceResult<List<MetricBucketDetailDto>>.Failure("Lütfen cihaz seçiniz.");
+
         if (!DateTime.TryParse(start, out DateTime startTime) || !DateTime.TryParse(end, out DateTime endTime))
             return ServiceResult<List<MetricBucketDetailDto>>.Failure("Geçersiz tarih formatı.");
 
@@ -285,6 +298,7 @@ public class ComputerService : BaseService, IComputerService
             if (metric == "CPU" || metric == "RAM")
             {
                 var raw = await _db.ComputerMetrics
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
                     .Where(m => m.ComputerId == id && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
                     .Select(m => new { m.CreatedAt, Value = metric == "CPU" ? m.CpuUsage : m.RamUsage })
@@ -314,6 +328,7 @@ public class ComputerService : BaseService, IComputerService
             {
                 string targetDisk = metric.Substring(5);
                 var raw = await _db.DiskMetrics
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
                     .Where(m => m.ComputerDisk.ComputerId == id && m.ComputerDisk.DiskName == targetDisk && m.CreatedAt >= startTime && m.CreatedAt <= endTime)
                     .Select(m => new { m.CreatedAt, Value = m.UsedPercent })
@@ -406,98 +421,7 @@ public class ComputerService : BaseService, IComputerService
         return $"{(int)ts.TotalHours} sa {(int)ts.Minutes} dk";
     }
 
-    // ----- YARDIMCI METOTLAR -----
-    private List<CpuRamBucketDto> FillCpuGapsForBatch(IEnumerable<dynamic> dbData, DateTime start, int bucketSeconds, int maxPoints)
-    {
-        var result = new List<CpuRamBucketDto>(maxPoints);
-        var lookup = dbData.ToDictionary(d => (int)d.BucketIndex);
 
-        for (int i = 0; i <= maxPoints; i++)
-        {
-            var bucketTime = start.AddSeconds(i * bucketSeconds);
-            if (lookup.TryGetValue(i, out var data))
-            {
-                result.Add(new CpuRamBucketDto
-                {
-                    CreatedAt = bucketTime,
-                    MaxCreatedAt = data.MaxCreatedAt,
-                    CpuAvg = data.CpuAvg,
-                    CpuMin = data.CpuMin,
-                    CpuMinTime = data.CpuMinTime,
-                    CpuMax = data.CpuMax,
-                    CpuMaxTime = data.CpuMaxTime,
-                    CpuOpen = data.CpuAvg,
-                    CpuClose = data.CpuAvg,
-                    RamAvg = data.RamAvg,
-                    RamMin = data.RamMin,
-                    RamMinTime = data.RamMinTime,
-                    RamMax = data.RamMax,
-                    RamMaxTime = data.RamMaxTime,
-                    RamOpen = data.RamAvg,
-                    RamClose = data.RamAvg
-                });
-            }
-            else
-            {
-                result.Add(new CpuRamBucketDto
-                {
-                    CreatedAt = bucketTime,
-                    CpuAvg = null,
-                    CpuMin = null,
-                    CpuMax = null,
-                    CpuOpen = null,
-                    CpuClose = null,
-                    RamAvg = null,
-                    RamMin = null,
-                    RamMax = null,
-                    RamOpen = null,
-                    RamClose = null
-                });
-            }
-        }
-        return result;
-    }
-
-    private List<DiskBucketDto> FillDiskGapsForBatch(IEnumerable<dynamic> dbData, string diskName, DateTime start, int bucketSeconds, int maxPoints)
-    {
-        var result = new List<DiskBucketDto>(maxPoints);
-        var lookup = dbData.ToDictionary(d => (int)d.BucketIndex);
-
-        for (int i = 0; i <= maxPoints; i++)
-        {
-            var bucketTime = start.AddSeconds(i * bucketSeconds);
-            if (lookup.TryGetValue(i, out var data))
-            {
-                result.Add(new DiskBucketDto
-                {
-                    CreatedAt = bucketTime,
-                    MaxCreatedAt = data.MaxCreatedAt,
-                    DiskName = diskName,
-                    UsedAvg = data.UsedAvg,
-                    UsedMin = data.UsedMin,
-                    UsedMinTime = data.UsedMinTime,
-                    UsedMax = data.UsedMax,
-                    UsedMaxTime = data.UsedMaxTime,
-                    UsedOpen = data.UsedAvg,
-                    UsedClose = data.UsedAvg
-                });
-            }
-            else
-            {
-                result.Add(new DiskBucketDto
-                {
-                    CreatedAt = bucketTime,
-                    DiskName = diskName,
-                    UsedAvg = null,
-                    UsedMin = null,
-                    UsedMax = null,
-                    UsedOpen = null,
-                    UsedClose = null
-                });
-            }
-        }
-        return result;
-    }
 
     private object ProcessSingleComputerMetrics(List<(DateTime CreatedAt, double CpuUsage, double RamUsage)> rawCpuRam, 
                                               List<(DateTime CreatedAt, double UsedPercent, string diskName)> rawDisks, 
@@ -761,10 +685,13 @@ public class ComputerService : BaseService, IComputerService
     }
 
     // 8. Cihaz Silme (YAZMA İŞLEMİ - SARMALANDI)
-    public Task<ServiceResult> DeleteComputerAsync(int id)
+    public Task<ServiceResult> DeleteComputerAsync(int id, int userId, bool isAdmin)
     {
         return ExecuteWithDbHandlingAsync(async () =>
         {
+            if (!await CheckComputerAccessAsync(id, userId, isAdmin))
+                return ServiceResult.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
             var computer = await _db.Computers.FindAsync(id);
             if (computer == null)
                 return ServiceResult.Failure("Bilgisayar bulunamadı.");
@@ -975,25 +902,28 @@ public class ComputerService : BaseService, IComputerService
         return ServiceResult<PerformanceReportDto>.Success(report);
     }
     // 11. Metrik Özeti (Okuma İşlemi)
-    public async Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName)
+    public async Task<ServiceResult<MetricSummaryDto>> GetMetricsSummaryAsync(int computerId, string metricType, string? diskName, int userId, bool isAdmin)
     {
+        if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
+            return ServiceResult<MetricSummaryDto>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
         var summary = new MetricSummaryDto();
 
         if (metricType == "CPU" || metricType == "RAM")
         {
             var query = _db.ComputerMetrics.AsNoTracking().Where(m => m.ComputerId == computerId);
 
-            // SQL'e sadece ve sadece istenen sütunu yolluyoruz
-            var isCpu = metricType == "CPU";
+            //// SQL'e sadece ve sadece istenen sütunu yolluyoruz
+            //var isCpu = metricType == "CPU";
 
-            var stats = await query
-                .GroupBy(m => m.ComputerId)
-                .Select(g => new
-                {
-                    TotalCount = g.Count(),
-                    MaxVal = isCpu ? g.Max(m => m.CpuUsage) : g.Max(m => m.RamUsage), // EF Core 8/9 bunu bazen optimize edebilir ama garanti yol aşağıdadır
-                })
-                .FirstOrDefaultAsync();
+            //var stats = await query
+            //    .GroupBy(m => m.ComputerId)
+            //    .Select(g => new
+            //    {
+            //        TotalCount = g.Count(),
+            //        MaxVal = isCpu ? g.Max(m => m.CpuUsage) : g.Max(m => m.RamUsage), // EF Core 8/9 bunu bazen optimize edebilir ama garanti yol aşağıdadır
+            //    })
+            //    .FirstOrDefaultAsync();
 
             // GARANTİ VE EN HIZLI YOL (ŞİDDETLE TAVSİYE EDİLİR):
             // C# tarafında sorguyu ikiye ayırmak:
@@ -1089,8 +1019,11 @@ public class ComputerService : BaseService, IComputerService
         return ServiceResult<MetricSummaryDto>.Success(summary);
     }
     // 12. Rapor Detayları İçin Son 5 Veri Gününün Trendi (Yeni Eklendi)
-    public async Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName)
+    public async Task<ServiceResult<object>> GetMetricsTrendDataAsync(int computerId, string metricType, string? diskName, int userId, bool isAdmin)
     {
+        if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
+            return ServiceResult<object>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
         int maxPointsForRegression = _config.GetValue<int>("ChartSettings:RegressionMaxPoints", 1000);
 
         if (metricType == "CPU" || metricType == "RAM")
@@ -1201,8 +1134,11 @@ public class ComputerService : BaseService, IComputerService
 
         return ServiceResult<object>.Success(new List<object>());
     }
-    public async Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request)
+    public async Task<ServiceResult<ThresholdAnalysisReportDto>> GetThresholdAnalysisAsync(int computerId, ThresholdReportRequestDto request, int userId, bool isAdmin)
     {
+        if (!await CheckComputerAccessAsync(computerId, userId, isAdmin))
+            return ServiceResult<ThresholdAnalysisReportDto>.Failure("Bu cihaza erişim yetkiniz bulunmamaktadır.");
+
         var computer = await _db.Computers.Include(c => c.Disks).FirstOrDefaultAsync(c => c.Id == computerId);
         if (computer == null) return ServiceResult<ThresholdAnalysisReportDto>.Failure("Cihaz bulunamadı.");
 
@@ -1214,7 +1150,7 @@ public class ComputerService : BaseService, IComputerService
             return ServiceResult<ThresholdAnalysisReportDto>.Failure("Sistem performansı için lütfen maksimum 31 günlük bir analiz aralığı seçiniz.");
         }
 
-        // --- YEREL YARDIMCI FONKSİYON: 100 Noktaya İndirme (Decimation) ---
+        // --- YEREL YARDIMCI FONKSİYON: 70 Noktaya İndirme (Decimation) ---
         List<ThresholdBreachDetailDto> DecimateBreaches(List<ThresholdBreachDetailDto> rawBreaches, int targetCount)
         {
             if (rawBreaches.Count <= targetCount) return rawBreaches;

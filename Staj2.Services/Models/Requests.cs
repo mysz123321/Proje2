@@ -37,7 +37,7 @@ namespace Staj2.Services.Models
     public class CreateRegistrationRequest
     {
         [Required(ErrorMessage = "Kullanıcı adı zorunludur.")]
-        [StringLength(50, MinimumLength = 3, ErrorMessage = "Kullanıcı adı 3 ile 50 karakter arasında olmalıdır.")]
+        [StringLength(50, MinimumLength = 1, ErrorMessage = "Kullanıcı adı 1 ile 50 karakter arasında olmalıdır.")]
         [RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir.")]
         public string Username { get; set; } = null!;
 

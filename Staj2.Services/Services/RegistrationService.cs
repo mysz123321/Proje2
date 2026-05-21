@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Staj2.Domain.Entities;
 using Staj2.Infrastructure.Data;
@@ -48,14 +48,12 @@ public class RegistrationService : BaseService, IRegistrationService
                 return ServiceResult<(int RequestId, string Email, string Username)>.Failure("Bu hesap için zaten onay bekleyen bir talep var. Lütfen admin onayını bekleyiniz.");
             }
 
-            // 3) Yeni kayıt isteğini oluştur
-            int viewerRoleId = _config.GetValue<int>("DefaultRoles:ViewerRoleId", 3);
-
+            // 3) Yeni kayıt isteğini oluştur (Yöntem 2: Talep esnasında rol atanmıyor, admin onaylarken seçecek)
             var rr = new UserRegistrationRequest
             {
                 Username = username,
                 Email = email,
-                RequestedRoleId = viewerRoleId,
+                RequestedRoleId = null,
                 Status = RegistrationStatus.Pending,
                 CreatedAt = DateTime.Now
             };

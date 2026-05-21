@@ -115,8 +115,8 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-await STAJ2.Seed.DbSeeder.SeedAsync(app);
-app.MapControllers();
+
+
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -126,4 +126,7 @@ using (var scope = app.Services.CreateScope())
     context.Database.Migrate();
 
 }
+
+await STAJ2.Seed.DbSeeder.SeedAsync(app);
+app.MapControllers();
 app.Run();

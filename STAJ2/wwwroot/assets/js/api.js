@@ -126,7 +126,14 @@
 
                 if (res.status === 403 && !path.includes('/login')) {
                     await Swal.fire({ title: errTitle || "Yetkisiz Erişim", text: errMsg || "Bu işlem için yetkiniz bulunmuyor.", icon: 'error' });
-                    throw { title: errTitle, message: errMsg, isHandled: true };
+                    window.location.reload();
+                    return new Promise(() => { }); // Sayfa yenilenirken script execution'ı burada durduruyoruz
+                }
+
+                if (errMsg?.toLowerCase().includes("yetkiniz")) {
+                    await Swal.fire({ title: errTitle || "Yetkisiz Erişim", text: errMsg, icon: 'error' });
+                    window.location.reload();
+                    return new Promise(() => { });
                 }
 
                 throw { title: errTitle, message: errMsg };

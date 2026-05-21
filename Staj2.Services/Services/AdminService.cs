@@ -100,6 +100,10 @@ public class AdminService : BaseService, IAdminService
             if (role == null)
                 return ServiceResult.Failure("Rol bulunamadı.");
 
+            var adminRoleName = _config["AppDefaults:AdminRoleName"] ?? "Yönetici";
+            if (role.Name == adminRoleName)
+                return ServiceResult.Failure($"Sistem varsayılan '{adminRoleName}' rolünün yetkileri değiştirilemez.");
+
             role.UpdatedAt = DateTime.Now;
             role.UpdatedBy = currentUserId;
             role.RolePermissions.Clear();
@@ -315,8 +319,14 @@ public class AdminService : BaseService, IAdminService
             }
             request.ApprovedByUserId = finalAdminId;
 
-            if (req != null && req.NewRoleId > 0)
-                request.RequestedRoleId = req.NewRoleId;
+            if (req == null || req.NewRoleId <= 0)
+                return ServiceResult.Failure("Kullanıcıyı onaylamak için geçerli bir rol seçmelisiniz.");
+
+            var roleExists = await _db.Roles.AnyAsync(r => r.Id == req.NewRoleId && !r.IsDeleted);
+            if (!roleExists)
+                return ServiceResult.Failure("Seçilen rol sistemde bulunamadı veya silinmiş.");
+
+            request.RequestedRoleId = req.NewRoleId;
 
             var token = Guid.NewGuid().ToString("N");
             string tokenHash;

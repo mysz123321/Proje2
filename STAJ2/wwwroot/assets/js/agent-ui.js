@@ -239,7 +239,9 @@ function renderTable() {
             container.insertAdjacentHTML('beforeend', cardHtml);
             initLiveChart(a.computerId);
         } else {
-            // Mevcut kartı güncelle
+            // Mevcut kartı güncelle ve DOM'daki sırasını (en sona taşıyarak) koru
+            container.appendChild(cardEl);
+            
             cardEl.querySelector('.card-title').textContent = a.displayName || a.machineName;
             cardEl.querySelector('.card-ip').textContent = a.ip || 'IP Yok';
             cardEl.querySelector('.card-tags').innerHTML = tags;
@@ -948,11 +950,11 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
 
                 // Kırmızı yarı-saydam dolgu
                 const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
-                chartCtx.fillStyle = isLightTheme ? 'rgba(239, 68, 68, 0.10)' : 'rgba(239, 68, 68, 0.12)';
+                chartCtx.fillStyle = isLightTheme ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.12)';
                 chartCtx.fillRect(x1, yTop, width, yBottom - yTop);
 
                 // Kesikli kırmızı kenarlık çizgileri
-                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+                chartCtx.strokeStyle = isLightTheme ? 'rgba(239, 68, 68, 0.45)' : 'rgba(239, 68, 68, 0.3)';
                 chartCtx.lineWidth = 1.5;
                 chartCtx.setLineDash([6, 4]);
 
@@ -976,7 +978,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     chartCtx.font = 'bold 10px Inter, sans-serif';
                     chartCtx.textAlign = 'center';
                     chartCtx.textBaseline = 'middle';
-                    chartCtx.fillStyle = isLightTheme ? 'rgba(220, 38, 38, 0.6)' : 'rgba(252, 129, 129, 0.7)';
+                    chartCtx.fillStyle = isLightTheme ? 'rgba(220, 38, 38, 0.8)' : 'rgba(252, 129, 129, 0.8)';
                     chartCtx.fillText('⏻ Çevrimdışı', centerX, centerY);
                 }
             });
@@ -1029,7 +1031,7 @@ function createBandChart(canvasId, labelText, labels, avgData, minData, maxData,
                     label: 'Minimum',
                     data: isDrillDown ? minData.map((v, i) => ({ x: i, y: v })) : minData,
                     borderColor: 'transparent',
-                    backgroundColor: colorHex + '33',
+                    backgroundColor: isLight ? colorHex + '66' : colorHex + '33',
                     pointRadius: (ctx) => {
                         const i = ctx.dataIndex;
                         const data = ctx.dataset.data;
@@ -1483,7 +1485,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 if (width <= 0) return;
 
                 // Hafif kırmızı zemin
-                chartCtx.fillStyle = 'rgba(239, 68, 68, 0.1)';
+                chartCtx.fillStyle = isLight ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.12)';
                 chartCtx.fillRect(xStart, yTop, width, yHeight);
 
                 // Taralı (Diagonal) çizgiler
@@ -1492,7 +1494,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 chartCtx.rect(xStart, yTop, width, yHeight);
                 chartCtx.clip();
                 
-                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+                chartCtx.strokeStyle = isLight ? 'rgba(239, 68, 68, 0.35)' : 'rgba(239, 68, 68, 0.25)';
                 chartCtx.lineWidth = 1;
                 for (let x = xStart - yHeight; x < xEnd + yHeight; x += 10) {
                     chartCtx.moveTo(x, yTop);
@@ -1502,7 +1504,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 chartCtx.restore();
 
                 // Kenar çizgileri (her iki taraf)
-                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+                chartCtx.strokeStyle = isLight ? 'rgba(239, 68, 68, 0.5)' : 'rgba(239, 68, 68, 0.4)';
                 chartCtx.setLineDash([4, 4]);
                 chartCtx.lineWidth = 1;
                 chartCtx.beginPath();
@@ -1522,15 +1524,15 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                     chartCtx.font = 'bold 10px Inter, sans-serif';
                     chartCtx.textAlign = 'center';
                     chartCtx.textBaseline = 'middle';
-                    chartCtx.fillStyle = isLight ? 'rgba(220, 38, 38, 0.6)' : 'rgba(252, 129, 129, 0.7)';
+                    chartCtx.fillStyle = isLight ? 'rgba(220, 38, 38, 0.8)' : 'rgba(252, 129, 129, 0.8)';
                     chartCtx.fillText('⏻ Çevrimdışı', centerX, centerY);
                 }
             };
 
             const drawGapLine = (x) => {
-                chartCtx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+                chartCtx.fillStyle = isLight ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.2)';
                 chartCtx.fillRect(x - 2, yTop, 4, yHeight);
-                chartCtx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                chartCtx.strokeStyle = isLight ? 'rgba(239, 68, 68, 0.9)' : 'rgba(239, 68, 68, 0.8)';
                 chartCtx.lineWidth = 1;
                 chartCtx.setLineDash([4, 4]);
                 chartCtx.beginPath();
@@ -1539,7 +1541,7 @@ function createCandleChart(canvasId, labelText, candleData, labels, diskName = n
                 chartCtx.stroke();
                 chartCtx.setLineDash([]);
                 chartCtx.font = 'bold 10px Inter, sans-serif';
-                chartCtx.fillStyle = isLight ? '#ef4444' : '#fca5a5';
+                chartCtx.fillStyle = isLight ? '#dc2626' : '#fca5a5';
                 chartCtx.textAlign = 'center';
                 chartCtx.fillText('⏻', x, yTop + 15);
             };
@@ -2388,6 +2390,9 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
     if (canvas) {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (canvas.parentElement) {
+            canvas.parentElement.style.display = 'block';
+        }
     }
 
     // Modal nesnesini al veya oluştur
@@ -2400,7 +2405,12 @@ window.openBucketDetail = async function(startTime, endTime, labelText, diskName
     modalEl.dataset.endTime = endTime;
 
     const backBtn = document.getElementById('btnBucketDetailBack');
-    if (backBtn) backBtn.style.display = bucketDetailHistory.length > 0 ? 'block' : 'none';
+    if (backBtn) {
+        backBtn.style.display = bucketDetailHistory.length > 0 ? 'block' : 'none';
+        backBtn.onclick = function() {
+            window.goBackBucketDetail();
+        };
+    }
 
     const rangeText = `${formatChartDate(startTime)} - ${formatChartDate(endTime)}`;
     document.getElementById('bucketDetailTimeRange').innerText = `${labelText} için Detaylı Görünüm: ${rangeText}`;
@@ -2583,9 +2593,6 @@ $(document).ready(function () {
             }
         }, 50);
     });
-    if (window.auth.hasPermission("Computer.Access")) {
-        window.loadFilterTags();
-    }
 
     // Chart ayarlarını çek
     api.get('/api/Ui/chart-settings').then(settings => {
@@ -2594,7 +2601,11 @@ $(document).ready(function () {
 
     // Uygulama ilk açıldığında çalıştır
     if (window.auth.hasPermission("Computer.Access")) {
+        // İlk yüklemede hem etiketleri hem de her iki tabloyu (Canlı ve Tüm Bilgisayarlar) hemen çek
+        if (typeof window.loadFilterTags === "function") window.loadFilterTags();
+        
         loadAgents();
+        if (typeof window.loadAllComputers === "function") window.loadAllComputers();
     }
 
     // 1. Canlı Cihaz Takibi (5 Saniye - Yüksek Öncelikli)
@@ -2626,4 +2637,18 @@ $(document).ready(function () {
             }
         }
     }, 30000);
+
+    document.addEventListener('themeChanged', () => {
+        if (currentHistoryData && currentHistoryData.cpuRam && currentHistoryData.cpuRam.length > 0) {
+            renderBaseCharts(currentHistoryData.cpuRam);
+            
+            if (currentHistoryData.disks && currentHistoryData.disks.length > 0) {
+                const activeDisks = Object.keys(historyCharts.disks);
+                activeDisks.forEach(diskName => {
+                    const chartId = `diskChart_${diskName.replace(/[^a-zA-Z0-9]/g, '')}`;
+                    toggleDiskChart(true, diskName, chartId);
+                });
+            }
+        }
+    });
 });

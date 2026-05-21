@@ -67,7 +67,7 @@ public abstract class BaseService
     protected async Task<ServiceResult> ExecuteWithDbHandlingAsync(
         Func<Task<ServiceResult>> action,
         string entityName = "",
-        DbOperation operation = DbOperation.General) // Parametre eklendi
+        DbOperation operation = DbOperation.General) // Parametre eklendi 
     {
         using var transaction = await _db.Database.BeginTransactionAsync();
         try

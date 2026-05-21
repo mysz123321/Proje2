@@ -23,7 +23,6 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
         _config = config;
     }
 
-    // YAZMA/GÜNCELLEME İŞLEMİ - Sarmalandı (CancellationToken closure içinde sorunsuz çalışır)
     public Task<ServiceResult<List<(string Email, string Subject, string Body)>>> IngestAsync(AgentTelemetryDto dto, string? agentKey, CancellationToken ct)
     {
         // Geri dönüş tipi karmaşık bir Tuple listesi olduğu için Generic sarmalayıcıyı buna göre ayarladık
@@ -133,8 +132,8 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
             dto.CpuThreshold = computer.CpuThreshold;
             dto.RamThreshold = computer.RamThreshold;
             dto.DiskThresholds = computer.Disks
-    .Where(d => d.ThresholdPercent.HasValue)
-    .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
+            .Where(d => d.ThresholdPercent.HasValue)
+            .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
             // 4. Metrik Kaydı
             var metric = new ComputerMetric
             {
@@ -342,8 +341,8 @@ public class AgentTelemetryService : BaseService, IAgentTelemetryService
                 dto.CpuThreshold = comp.CpuThreshold;
                 dto.RamThreshold = comp.RamThreshold;
                 dto.DiskThresholds = comp.Disks
-    .Where(d => d.ThresholdPercent.HasValue)
-    .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
+                .Where(d => d.ThresholdPercent.HasValue)
+                .ToDictionary(d => d.DiskName, d => (int)(d.ThresholdPercent ?? 0));
                 filteredList.Add(dto);
             }
         }
