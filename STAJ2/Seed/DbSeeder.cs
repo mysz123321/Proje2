@@ -123,9 +123,16 @@ public static class DbSeeder
 
         foreach (var item in sidebarItems)
         {
-            if (!await context.SidebarItems.AnyAsync(s => s.TargetView == item.TargetView))
+            var existing = await context.SidebarItems.FirstOrDefaultAsync(s => s.TargetView == item.TargetView);
+            if (existing == null)
             {
                 context.SidebarItems.Add(item);
+            }
+            else
+            {
+                existing.Title = item.Title;
+                existing.Icon = item.Icon;
+                existing.OrderIndex = item.OrderIndex;
             }
         }
         await context.SaveChangesAsync();
@@ -141,25 +148,24 @@ public static class DbSeeder
                 new SidebarItem { Title = "Log Yönetimi", Icon = "bi bi-journal-text", TargetView = "log-management", ParentId = parentMenu.Id, OrderIndex = 3 },
                 new SidebarItem { Title = "Eşik Analiz Raporu", Icon = "bi bi-exclamation-octagon", TargetView = "threshold-analysis", ParentId = parentMenu.Id, OrderIndex = 4 },
                 new SidebarItem { Title = "Uyarı Raporları", Icon = "bi bi-megaphone", TargetView = "warnings", ParentId = parentMenu.Id, OrderIndex = 5 },
-                new SidebarItem { Title = "Heatmap Analizi", Icon = "bi bi-grid-3x3", TargetView = "heatmap", ParentId = parentMenu.Id, OrderIndex = 6 }
+                new SidebarItem { Title = "Heatmap Analizi", Icon = "bi bi-grid-3x3", TargetView = "heatmap", ParentId = parentMenu.Id, OrderIndex = 6 },
+                new SidebarItem { Title = "Korelasyon Analizi", Icon = "bi bi-graph-up text-primary", TargetView = "correlation", ParentId = parentMenu.Id, OrderIndex = 7 },
+                new SidebarItem { Title = "Cihaz Karşılaştırma", Icon = "bi bi-arrow-left-right", TargetView = "device-comparison", ParentId = parentMenu.Id, OrderIndex = 8 }
             };
 
             foreach (var child in childItems)
             {
-                if (!await context.SidebarItems.AnyAsync(s => s.TargetView == child.TargetView))
+                var existing = await context.SidebarItems.FirstOrDefaultAsync(s => s.TargetView == child.TargetView);
+                if (existing == null)
                 {
                     context.SidebarItems.Add(child);
                 }
                 else
                 {
-                    // Varsa ParentId'sini güncelle (Eski verileri yeni yapıya taşımak için)
-                    var existing = await context.SidebarItems.FirstOrDefaultAsync(s => s.TargetView == child.TargetView);
-                    if (existing != null && existing.ParentId != parentMenu.Id)
-                    {
-                        existing.ParentId = parentMenu.Id;
-                        existing.Title = child.Title;
-                        existing.Icon = child.Icon;
-                    }
+                    existing.ParentId = parentMenu.Id;
+                    existing.Title = child.Title;
+                    existing.Icon = child.Icon;
+                    existing.OrderIndex = child.OrderIndex;
                 }
             }
             await context.SaveChangesAsync();
