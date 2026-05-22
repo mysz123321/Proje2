@@ -16,6 +16,35 @@ public static class DbSeeder
 
         await context.Database.MigrateAsync();
 
+        // 0. Metrik Tiplerini Ekle (Dacpac ile boş gelen tabloları doldurmak için)
+        if (!await context.MetricTypes.AnyAsync())
+        {
+            var executionStrategy = context.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await context.Database.BeginTransactionAsync();
+                try
+                {
+                    await context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT MetricTypes ON");
+                    context.MetricTypes.AddRange(new List<MetricType> {
+                        new MetricType { Id = 1, Name = "CPU" },
+                        new MetricType { Id = 2, Name = "RAM" },
+                        new MetricType { Id = 3, Name = "Disk" }
+                    });
+                    await context.SaveChangesAsync();
+                    await context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT MetricTypes OFF");
+                    await transaction.CommitAsync();
+                    Console.WriteLine(">>> Metrik tipleri (CPU, RAM, Disk) başarıyla eklendi.");
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    Console.WriteLine($">>> Metrik tipleri eklenirken hata oluştu: {ex.Message}");
+                    throw;
+                }
+            });
+        }
+
         // 1. Rolleri Ekle
         if (!await context.Roles.AnyAsync())
         {

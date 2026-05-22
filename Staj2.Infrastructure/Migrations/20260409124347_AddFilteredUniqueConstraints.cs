@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -38,9 +38,10 @@ namespace Staj2.Infrastructure.Migrations
                 column: "Name",
                 unique: true,
                 filter: "[IsDeleted] = 0");
-            migrationBuilder.DropIndex(
-        name: "IX_Roles_Name",
-        table: "Roles");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Roles_Name' AND object_id = OBJECT_ID('Roles'))
+                    DROP INDEX [IX_Roles_Name] ON [Roles];
+            ");
             migrationBuilder.CreateIndex(
                 name: "IX_Roles_Name",
                 table: "Roles",
